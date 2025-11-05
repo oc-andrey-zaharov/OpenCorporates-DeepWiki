@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "DeepWiki-Open",
+    "appName": "OpenCorporates DeepWiki",
     "tagline": "AI-powered documentation",
     "generateWiki": "Generate Wiki",
     "processing": "Processing...",
@@ -18,20 +18,20 @@
     "preparingDownload": "Please wait while we prepare your download..."
   },
   "home": {
-    "welcome": "Welcome to DeepWiki-Open",
+    "welcome": "Welcome to OpenCorporates DeepWiki",
     "welcomeTagline": "AI-powered documentation for your code repositories",
-    "description": "Generate comprehensive documentation from GitHub, GitLab, or Bitbucket repositories with just a few clicks.",
+    "description": "Generate comprehensive documentation from GitHub repositories with just a few clicks.",
     "quickStart": "Quick Start",
     "enterRepoUrl": "Enter a repository URL in one of these formats:",
     "advancedVisualization": "Advanced Visualization with Mermaid Diagrams",
-    "diagramDescription": "DeepWiki automatically generates interactive diagrams to help you understand code structure and relationships:",
+    "diagramDescription": "OpenCorporates DeepWiki automatically generates interactive diagrams to help you understand code structure and relationships:",
     "flowDiagram": "Flow Diagram",
     "sequenceDiagram": "Sequence Diagram"
   },
   "form": {
     "repository": "Repository",
     "configureWiki": "Configure Wiki",
-    "repoPlaceholder": "owner/repo or GitHub/GitLab/Bitbucket URL",
+    "repoPlaceholder": "owner/repo or GitHub URL",
     "wikiLanguage": "Wiki Language",
     "modelOptions": "Model Options",
     "modelProvider": "Model Provider",
@@ -93,7 +93,7 @@
     "authorizationRequired": "Authentication is required to generate the wiki."
   },
   "footer": {
-    "copyright": "DeepWiki - AI-powered documentation for code repositories"
+    "copyright": "OpenCorporates DeepWiki - AI-powered documentation for code repositories"
   },
   "ask": {
     "placeholder": "Ask a question about this repository...",
@@ -111,7 +111,7 @@
     "cancel": "Cancel",
     "home": "Home",
     "errorTitle": "Error",
-    "errorMessageDefault": "Please check that your repository exists and is public. Valid formats are \"owner/repo\", \"https://github.com/owner/repo\", \"https://gitlab.com/owner/repo\", \"https://bitbucket.org/owner/repo\", or local folder paths like \"C:\\\\path\\\\to\\\\folder\" or \"/path/to/folder\".",
+    "errorMessageDefault": "Please check that your repository exists and is public. Valid formats are \"owner/repo\", \"https://github.com/owner/repo\", or local folder paths like \"C:\\\\path\\\\to\\\\folder\" or \"/path/to/folder\".",
     "embeddingErrorDefault": "This error is related to the document embedding system used for analyzing your repository. Please verify your embedding model configuration, API keys, and try again. If the issue persists, consider switching to a different embedding provider in the model settings.",
     "backToHome": "Back to Home",
     "exportWiki": "Export Wiki",

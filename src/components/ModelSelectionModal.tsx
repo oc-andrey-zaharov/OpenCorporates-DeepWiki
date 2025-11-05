@@ -1,10 +1,8 @@
 'use client';
 
 import React, {useEffect, useState} from 'react';
-import {useLanguage} from '@/contexts/LanguageContext';
 import UserSelector from './UserSelector';
 import WikiTypeSelector from './WikiTypeSelector';
-import TokenInput from './TokenInput';
 
 interface ModelSelectionModalProps {
   isOpen: boolean;
@@ -17,7 +15,7 @@ interface ModelSelectionModalProps {
   setIsCustomModel: (value: boolean) => void;
   customModel: string;
   setCustomModel: (value: string) => void;
-  onApply: (token?: string) => void;
+  onApply: () => void;
 
   // Wiki type options
   isComprehensiveView: boolean;
@@ -35,14 +33,7 @@ interface ModelSelectionModalProps {
   showFileFilters?: boolean;
   showWikiType: boolean;
   
-  // Token input for refresh
-  showTokenInput?: boolean;
   repositoryType?: 'github';
-  // Authentication
-  authRequired?: boolean;
-  authCode?: string;
-  setAuthCode?: (code: string) => void;
-  isAuthLoading?: boolean;
 }
 
 export default function ModelSelectionModal({
@@ -68,15 +59,9 @@ export default function ModelSelectionModal({
   includedFiles = '',
   setIncludedFiles,
   showFileFilters = false,
-  authRequired = false,
-  authCode = '',
-  setAuthCode,
-  isAuthLoading,
   showWikiType = true,
-  showTokenInput = false,
   repositoryType = 'github',
 }: ModelSelectionModalProps) {
-  const { messages: t } = useLanguage();
 
   // Local state for form values (to only apply changes when the user clicks "Submit")
   const [localProvider, setLocalProvider] = useState(provider);
@@ -89,11 +74,6 @@ export default function ModelSelectionModal({
   const [localIncludedDirs, setLocalIncludedDirs] = useState(includedDirs);
   const [localIncludedFiles, setLocalIncludedFiles] = useState(includedFiles);
   
-  // Token input state
-  const [localAccessToken, setLocalAccessToken] = useState('');
-  const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github'>(repositoryType || 'github');
-  const [showTokenSection, setShowTokenSection] = useState(showTokenInput);
-
   // Reset local state when modal is opened
   useEffect(() => {
     if (isOpen) {
@@ -106,11 +86,8 @@ export default function ModelSelectionModal({
       setLocalExcludedFiles(excludedFiles);
       setLocalIncludedDirs(includedDirs);
       setLocalIncludedFiles(includedFiles);
-      setLocalSelectedPlatform(repositoryType);
-      setLocalAccessToken('');
-      setShowTokenSection(showTokenInput);
     }
-  }, [isOpen, provider, model, isCustomModel, customModel, isComprehensiveView, excludedDirs, excludedFiles, includedDirs, includedFiles, repositoryType, showTokenInput]);
+  }, [isOpen, provider, model, isCustomModel, customModel, isComprehensiveView, excludedDirs, excludedFiles, includedDirs, includedFiles, repositoryType]);
 
   // Handler for applying changes
   const handleApply = () => {
@@ -124,12 +101,7 @@ export default function ModelSelectionModal({
     if (setIncludedDirs) setIncludedDirs(localIncludedDirs);
     if (setIncludedFiles) setIncludedFiles(localIncludedFiles);
     
-    // Pass token to onApply if needed
-    if (showTokenInput) {
-      onApply(localAccessToken);
-    } else {
-      onApply();
-    }
+    onApply();
     onClose();
   };
 
@@ -142,7 +114,7 @@ export default function ModelSelectionModal({
           {/* Modal header with close button */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
             <h3 className="text-lg font-medium text-[var(--accent-primary)]">
-              <span className="text-[var(--accent-primary)]">{t.form?.modelSelection || 'Model Selection'}</span>
+              <span className="text-[var(--accent-primary)]">Model Selection</span>
             </h3>
             <button
               type="button"
@@ -188,51 +160,6 @@ export default function ModelSelectionModal({
               includedFiles={localIncludedFiles}
               setIncludedFiles={showFileFilters ? (value: string) => setLocalIncludedFiles(value) : undefined}
             />
-
-            {/* Token Input Section for refresh */}
-            {showTokenInput && (
-              <>
-                <div className="my-4 border-t border-[var(--border-color)]/30"></div>
-                <TokenInput
-                  selectedPlatform={localSelectedPlatform}
-                  setSelectedPlatform={setLocalSelectedPlatform}
-                  accessToken={localAccessToken}
-                  setAccessToken={setLocalAccessToken}
-                  showTokenSection={showTokenSection}
-                  onToggleTokenSection={() => setShowTokenSection(!showTokenSection)}
-                  allowPlatformChange={false} // Don't allow platform change during refresh
-                />
-              </>
-            )}
-            {/* Authorization Code Input */}
-            {isAuthLoading && (
-                <div className="mb-4 p-3 bg-[var(--background)]/50 rounded-md border border-[var(--border-color)] text-sm text-[var(--muted)]">
-                  Loading authentication status...
-                </div>
-            )}
-            {!isAuthLoading && authRequired && (
-                <div className="mb-4 p-4 bg-[var(--background)]/50 rounded-md border border-[var(--border-color)]">
-                  <label htmlFor="authCode" className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                    {t.form?.authorizationCode || 'Authorization Code'}
-                  </label>
-                  <input
-                      type="password"
-                      id="authCode"
-                      value={authCode || ''}
-                      onChange={(e) => setAuthCode?.(e.target.value)}
-                      className="block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
-                      placeholder="Enter your authorization code"
-                  />
-                  <div className="flex items-center mt-2 text-xs text-[var(--muted)]">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[var(--muted)]"
-                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {t.form?.authorizationRequired || 'Authentication is required to generate the wiki.'}
-                  </div>
-                </div>
-            )}
           </div>
 
           {/* Modal footer */}
@@ -242,14 +169,14 @@ export default function ModelSelectionModal({
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium rounded-md border border-[var(--border-color)]/50 text-[var(--muted)] bg-transparent hover:bg-[var(--background)] hover:text-[var(--foreground)] transition-colors"
             >
-              {t.common?.cancel || 'Cancel'}
+              Cancel
             </button>
             <button
               type="button"
               onClick={handleApply}
               className="px-4 py-2 text-sm font-medium rounded-md border border-transparent bg-[var(--accent-primary)]/90 text-white hover:bg-[var(--accent-primary)] transition-colors"
             >
-              {t.common?.submit || 'Submit'}
+              Submit
             </button>
           </div>
         </div>

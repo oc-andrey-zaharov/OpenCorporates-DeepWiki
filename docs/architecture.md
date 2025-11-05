@@ -7,12 +7,13 @@ This document gives a quick overview of the technologies in use and how the main
 | Layer | Technology | Notes |
 | ----- | ---------- | ----- |
 | Frontend | Next.js 15 (App Router) + React 18 | Turbopack dev server, Tailwind CSS, next-themes for theming |
-| State & Data Fetching | React hooks, custom contexts | Language selection, processed project cache |
+| State & Data Fetching | React hooks, custom contexts | Processed project cache |
 | Visualization | Mermaid via dynamic component | Renders flow and sequence diagrams client-side |
 | Backend | FastAPI (Python 3.12) | Provides REST & streaming endpoints for wiki generation |
 | Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `api/rag.py` |
 | AI Providers | Google Gemini, OpenAI, OpenRouter, Azure OpenAI, Ollama | Configurable via `api/config` and environment variables |
 | Persistence | Local cache (filesystem) | Stores generated wiki artifacts for reuse |
+| Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
 | Tooling | Bun/Node for frontend, Poetry for backend, Docker & Makefile | Simplifies local development and deployment |
 
 ## High-Level Component View
@@ -57,7 +58,8 @@ sequenceDiagram
 ## Deployment & Local Development
 
 - **Local Dev**: `make dev` (or `npm run dev` / `api/main.py`) runs Next.js with Turbopack on port 3000 and FastAPI on port 8001.
-- **Environment**: `.env` controls API keys and backend configuration; frontend reads language config from `/api/lang/config`.
+- **Environment**: `.env` controls API keys and backend configuration; GitHub token is configured via `GITHUB_TOKEN` environment variable.
+- **Authentication**: GitHub authentication uses `GITHUB_TOKEN` from `.env` file. Users can optionally provide tokens in the UI for repo-specific access.
 - **Containerization**: `docker-compose.yml` orchestrates the frontend and backend services; `Dockerfile` and `Dockerfile-ollama-local` target different runtime setups.
 
 For deeper backend details, see `api/README.md`. Frontend components live under `src/app` and `src/components`.

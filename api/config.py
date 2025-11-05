@@ -40,10 +40,8 @@ if AWS_REGION:
 if AWS_ROLE_ARN:
     os.environ["AWS_ROLE_ARN"] = AWS_ROLE_ARN
 
-# Wiki authentication settings
-raw_auth_mode = os.environ.get("DEEPWIKI_AUTH_MODE", "False")
-WIKI_AUTH_MODE = raw_auth_mode.lower() in ["true", "1", "t"]
-WIKI_AUTH_CODE = os.environ.get("DEEPWIKI_AUTH_CODE", "")
+# GitHub token for repository access
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 
 # Embedder settings
 EMBEDDER_TYPE = os.environ.get("DEEPWIKI_EMBEDDER_TYPE", "openai").lower()
@@ -252,26 +250,6 @@ def load_repo_config():
     return load_json_config("repo.json")
 
 
-# Load language configuration
-def load_lang_config():
-    default_config = {"supported_languages": {"en": "English"}, "default": "en"}
-
-    loaded_config = load_json_config(
-        "lang.json"
-    )  # Let load_json_config handle path and loading
-
-    if not loaded_config:
-        return default_config
-
-    if "supported_languages" not in loaded_config or "default" not in loaded_config:
-        logger.warning(
-            "Language configuration file 'lang.json' is malformed. Using default language configuration."
-        )
-        return default_config
-
-    return loaded_config
-
-
 # Default excluded directories and files
 DEFAULT_EXCLUDED_DIRS: List[str] = [
     # Virtual environments and package managers
@@ -433,7 +411,6 @@ configs = {}
 generator_config = load_generator_config()
 embedder_config = load_embedder_config()
 repo_config = load_repo_config()
-lang_config = load_lang_config()
 
 # Update configuration
 if generator_config:
@@ -458,9 +435,8 @@ if repo_config:
         if key in repo_config:
             configs[key] = repo_config[key]
 
-# Update language configuration
-if lang_config:
-    configs["lang_config"] = lang_config
+# Language is hardcoded to English
+configs["lang_config"] = {"supported_languages": {"en": "English"}, "default": "en"}
 
 
 def get_model_config(provider="google", model=None):

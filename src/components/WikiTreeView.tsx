@@ -36,10 +36,6 @@ interface WikiTreeViewProps {
   wikiStructure: WikiStructure;
   currentPageId: string | undefined;
   onPageSelect: (pageId: string) => void;
-  messages?: {
-    pages?: string;
-    [key: string]: string | undefined;
-  };
 }
 
 const WikiTreeView: React.FC<WikiTreeViewProps> = ({

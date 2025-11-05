@@ -19,39 +19,18 @@ interface ProcessedProjectsProps {
   showHeader?: boolean;
   maxItems?: number;
   className?: string;
-  messages?: Record<string, Record<string, string>>; // Translation messages with proper typing
 }
 
 export default function ProcessedProjects({ 
   showHeader = true, 
   maxItems, 
-  className = "",
-  messages 
+  className = ""
 }: ProcessedProjectsProps) {
   const [projects, setProjects] = useState<ProcessedProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
-
-  // Default messages fallback
-  const defaultMessages = {
-    title: 'Processed Wiki Projects',
-    searchPlaceholder: 'Search projects by name, owner, or repository...',
-    noProjects: 'No projects found in the server cache. The cache might be empty or the server encountered an issue.',
-    noSearchResults: 'No projects match your search criteria.',
-    processedOn: 'Processed on:',
-    loadingProjects: 'Loading projects...',
-    errorLoading: 'Error loading projects:',
-    backToHome: 'Back to Home'
-  };
-
-  const t = (key: string) => {
-    if (messages?.projects?.[key]) {
-      return messages.projects[key];
-    }
-    return defaultMessages[key as keyof typeof defaultMessages] || key;
-  };
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -132,9 +111,9 @@ export default function ProcessedProjects({
       {showHeader && (
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold text-[var(--accent-primary)]">{t('title')}</h1>
+            <h1 className="text-3xl font-bold text-[var(--accent-primary)]">Processed Wiki Projects</h1>
             <Link href="/" className="text-[var(--accent-primary)] hover:underline">
-              {t('backToHome')}
+              Back to Home
             </Link>
           </div>
         </header>
@@ -148,7 +127,7 @@ export default function ProcessedProjects({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('searchPlaceholder')}
+            placeholder="Search projects by name, owner, or repository..."
             className="block w-full pl-4 pr-12 py-2.5 border border-[var(--border-color)] rounded-lg bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]"
           />
           {searchQuery && (
@@ -188,8 +167,8 @@ export default function ProcessedProjects({
         </div>
       </div>
 
-      {isLoading && <p className="text-[var(--muted)]">{t('loadingProjects')}</p>}
-      {error && <p className="text-[var(--highlight)]">{t('errorLoading')} {error}</p>}
+      {isLoading && <p className="text-[var(--muted)]">Loading projects...</p>}
+      {error && <p className="text-[var(--highlight)]">Error loading projects: {error}</p>}
 
       {!isLoading && !error && filteredProjects.length > 0 && (
         <div className={viewMode === 'card' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-2'}>
@@ -220,7 +199,7 @@ export default function ProcessedProjects({
                     </span>
                   </div>
                   <p className="text-xs text-[var(--muted)]">
-                    {t('processedOn')} {new Date(project.submittedAt).toLocaleDateString()}
+                    Processed on: {new Date(project.submittedAt).toLocaleDateString()}
                   </p>
                 </Link>
               </div>
@@ -243,7 +222,7 @@ export default function ProcessedProjects({
                       {project.name}
                     </h3>
                     <p className="text-xs text-[var(--muted)] mt-1">
-                      {t('processedOn')} {new Date(project.submittedAt).toLocaleDateString()} • {project.repo_type} • {project.language}
+                      Processed on: {new Date(project.submittedAt).toLocaleDateString()} • {project.repo_type} • {project.language}
                     </p>
                   </div>
                   <div className="flex gap-2 ml-4">
@@ -259,11 +238,11 @@ export default function ProcessedProjects({
       )}
 
       {!isLoading && !error && projects.length > 0 && filteredProjects.length === 0 && searchQuery && (
-        <p className="text-[var(--muted)]">{t('noSearchResults')}</p>
+        <p className="text-[var(--muted)]">No projects match your search criteria.</p>
       )}
 
       {!isLoading && !error && projects.length === 0 && (
-        <p className="text-[var(--muted)]">{t('noProjects')}</p>
+        <p className="text-[var(--muted)]">No projects found in the server cache. The cache might be empty or the server encountered an issue.</p>
       )}
     </div>
   );

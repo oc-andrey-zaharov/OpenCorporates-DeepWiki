@@ -11,8 +11,6 @@ import ProcessedProjects from '@/components/ProcessedProjects';
 import { extractUrlPath, extractUrlDomain } from '@/utils/urlDecoder';
 import { useProcessedProjects } from '@/hooks/useProcessedProjects';
 
-import { useLanguage } from '@/contexts/LanguageContext';
-
 // Define the demo mermaid charts outside the component
 const DEMO_FLOW_CHART = `graph TD
   A[Code Repository] --> B[OpenCorporates DeepWiki]
@@ -44,36 +42,7 @@ const DEMO_SEQUENCE_CHART = `sequenceDiagram
 
 export default function Home() {
   const router = useRouter();
-  const { language, setLanguage, messages, supportedLanguages } = useLanguage();
   const { projects, isLoading: projectsLoading } = useProcessedProjects();
-
-  // Create a simple translation function
-  const t = (key: string, params: Record<string, string | number> = {}): string => {
-    // Split the key by dots to access nested properties
-    const keys = key.split('.');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = messages;
-
-    // Navigate through the nested properties
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        // Return the key if the translation is not found
-        return key;
-      }
-    }
-
-    // If the value is a string, replace parameters
-    if (typeof value === 'string') {
-      return Object.entries(params).reduce((acc: string, [paramKey, paramValue]) => {
-        return acc.replace(`{${paramKey}}`, String(paramValue));
-      }, value);
-    }
-
-    // Return the key if the value is not a string
-    return key;
-  };
 
   const [repositoryInput, setRepositoryInput] = useState('https://github.com/oc-andrey-zaharov/OpenCorporates-DeepWiki');
 
@@ -87,7 +56,6 @@ export default function Home() {
         const configs = JSON.parse(cachedConfigs);
         const config = configs[repoUrl.trim()];
         if (config) {
-          setSelectedLanguage(config.selectedLanguage || language);
           setIsComprehensiveView(config.isComprehensiveView === undefined ? true : config.isComprehensiveView);
           setProvider(config.provider || '');
           setModel(config.model || '');
@@ -135,43 +103,8 @@ export default function Home() {
   const [includedDirs, setIncludedDirs] = useState('');
   const [includedFiles, setIncludedFiles] = useState('');
   const [selectedPlatform, setSelectedPlatform] = useState<'github'>('github');
-  const [accessToken, setAccessToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(language);
-
-  // Authentication state
-  const [authRequired, setAuthRequired] = useState<boolean>(false);
-  const [authCode, setAuthCode] = useState<string>('');
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
-
-  // Sync the language context with the selectedLanguage state
-  useEffect(() => {
-    setLanguage(selectedLanguage);
-  }, [selectedLanguage, setLanguage]);
-
-  // Fetch authentication status on component mount
-  useEffect(() => {
-    const fetchAuthStatus = async () => {
-      try {
-        setIsAuthLoading(true);
-        const response = await fetch('/api/auth/status');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setAuthRequired(data.auth_required);
-      } catch (err) {
-        console.error("Failed to fetch auth status:", err);
-        // Assuming auth is required if fetch fails to avoid blocking UI for safety
-        setAuthRequired(true);
-      } finally {
-        setIsAuthLoading(false);
-      }
-    };
-
-    fetchAuthStatus();
-  }, []);
 
   // Parse repository URL/input and extract owner and repo
   const parseRepositoryInput = (input: string): {
@@ -259,42 +192,7 @@ export default function Home() {
     setIsConfigModalOpen(true);
   };
 
-  const validateAuthCode = async () => {
-    try {
-      if (authRequired) {
-        if (!authCode) {
-          return false;
-        }
-        const response = await fetch('/api/auth/validate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 'code': authCode })
-        });
-        if (!response.ok) {
-          return false;
-        }
-        const data = await response.json();
-        return data.success || false;
-      }
-    } catch {
-      return false;
-    }
-    return true;
-  };
-
   const handleGenerateWiki = async () => {
-
-    // Check authorization code
-    const validation = await validateAuthCode();
-    if (!validation) {
-      setError(`Failed to validate the authorization code`);
-      console.error(`Failed to validate the authorization code`);
-      setIsConfigModalOpen(false);
-      return;
-    }
-
     // Prevent multiple submissions
     if (isSubmitting) {
       console.log('Form submission already in progress, ignoring duplicate click');
@@ -306,7 +204,6 @@ export default function Home() {
       if (currentRepoUrl && typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
         const existingConfigs = JSON.parse(localStorage.getItem(REPO_CONFIG_CACHE_KEY) || '{}');
         const configToSave = {
-          selectedLanguage,
           isComprehensiveView,
           provider,
           model,
@@ -338,11 +235,8 @@ export default function Home() {
 
     const { owner, repo, type, localPath } = parsedRepo;
 
-    // Store tokens in query params if they exist
+    // Build query params
     const params = new URLSearchParams();
-    if (accessToken) {
-      params.append('token', accessToken);
-    }
     // Always include the type parameter
     params.append('type', (type == 'local' ? type : selectedPlatform) || 'github');
     // Add local path if it exists
@@ -371,8 +265,8 @@ export default function Home() {
       params.append('included_files', includedFiles);
     }
 
-    // Add language parameter
-    params.append('language', selectedLanguage);
+    // Add language parameter (hardcoded to English)
+    params.append('language', 'en');
 
     // Add comprehensive parameter
     params.append('comprehensive', isComprehensiveView.toString());
@@ -395,13 +289,13 @@ export default function Home() {
               <FaWikipediaW className="text-2xl text-white" />
             </div>
             <div className="mr-6">
-              <h1 className="text-xl md:text-2xl font-bold text-[var(--accent-primary)]">{t('common.appName')}</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-[var(--accent-primary)]">OpenCorporates DeepWiki</h1>
               <div className="flex flex-wrap items-baseline gap-x-2 md:gap-x-3 mt-0.5">
-                <p className="text-xs text-[var(--muted)] whitespace-nowrap">{t('common.tagline')}</p>
+                <p className="text-xs text-[var(--muted)] whitespace-nowrap">AI-powered documentation</p>
                 <div className="hidden md:inline-block">
                   <Link href="/wiki/projects"
                     className="text-xs font-medium text-[var(--accent-primary)] hover:text-[var(--highlight)] hover:underline whitespace-nowrap">
-                    {t('nav.wikiProjects')}
+                    Wiki Projects
                   </Link>
                 </div>
               </div>
@@ -416,7 +310,7 @@ export default function Home() {
                   type="text"
                   value={repositoryInput}
                   onChange={handleRepositoryInputChange}
-                  placeholder={t('form.repoPlaceholder') || "owner/repo, GitHub URL, or local folder path"}
+                  placeholder="owner/repo, GitHub URL, or local folder path"
                   className="block w-full pl-10 pr-3 py-2.5 border border-[var(--border-color)] rounded-lg bg-[var(--background)]/60 text-[var(--foreground)] transition duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]"
                 />
                 {error && (
@@ -430,7 +324,7 @@ export default function Home() {
                 className="px-6 py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--accent-primary)] text-white hover:bg-[var(--highlight)] transition-colors"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? t('common.processing') : t('common.generateWiki')}
+                {isSubmitting ? 'Processing...' : 'Generate Wiki'}
               </button>
             </div>
           </form>
@@ -440,9 +334,6 @@ export default function Home() {
             isOpen={isConfigModalOpen}
             onClose={() => setIsConfigModalOpen(false)}
             repositoryInput={repositoryInput}
-            selectedLanguage={selectedLanguage}
-            setSelectedLanguage={setSelectedLanguage}
-            supportedLanguages={supportedLanguages}
             isComprehensiveView={isComprehensiveView}
             setIsComprehensiveView={setIsComprehensiveView}
             provider={provider}
@@ -455,8 +346,6 @@ export default function Home() {
             setCustomModel={setCustomModel}
             selectedPlatform={selectedPlatform}
             setSelectedPlatform={setSelectedPlatform}
-            accessToken={accessToken}
-            setAccessToken={setAccessToken}
             excludedDirs={excludedDirs}
             setExcludedDirs={setExcludedDirs}
             excludedFiles={excludedFiles}
@@ -467,10 +356,6 @@ export default function Home() {
             setIncludedFiles={setIncludedFiles}
             onSubmit={handleGenerateWiki}
             isSubmitting={isSubmitting}
-            authRequired={authRequired}
-            authCode={authCode}
-            setAuthCode={setAuthCode}
-            isAuthLoading={isAuthLoading}
           />
 
         </div>
@@ -491,8 +376,8 @@ export default function Home() {
                     <FaWikipediaW className="text-5xl text-[var(--accent-primary)] relative z-10" />
                   </div>
                   <div className="text-center sm:text-left">
-                    <h2 className="text-2xl font-bold text-[var(--foreground)] font-serif mb-1">{t('projects.existingProjects')}</h2>
-                    <p className="text-[var(--accent-primary)] text-sm max-w-md">{t('projects.browseExisting')}</p>
+                    <h2 className="text-2xl font-bold text-[var(--foreground)] font-serif mb-1">Existing Projects</h2>
+                    <p className="text-[var(--accent-primary)] text-sm max-w-md">Browse Existing Projects</p>
                   </div>
                 </div>
               </div>
@@ -501,7 +386,6 @@ export default function Home() {
               <ProcessedProjects
                 showHeader={false}
                 maxItems={6}
-                messages={messages}
                 className="w-full"
               />
             </div>
@@ -515,13 +399,13 @@ export default function Home() {
                     <FaWikipediaW className="text-5xl text-[var(--accent-primary)] relative z-10" />
                   </div>
                   <div className="text-center sm:text-left">
-                    <h2 className="text-2xl font-bold text-[var(--foreground)] font-serif mb-1">{t('home.welcome')}</h2>
-                    <p className="text-[var(--accent-primary)] text-sm max-w-md">{t('home.welcomeTagline')}</p>
+                    <h2 className="text-2xl font-bold text-[var(--foreground)] font-serif mb-1">Welcome to OpenCorporates DeepWiki</h2>
+                    <p className="text-[var(--accent-primary)] text-sm max-w-md">AI-powered documentation for your code repositories</p>
                   </div>
                 </div>
 
                 <p className="text-[var(--foreground)] text-center mb-8 text-lg leading-relaxed">
-                  {t('home.description')}
+                  Generate comprehensive documentation from GitHub repositories with just a few clicks.
                 </p>
               </div>
 
@@ -534,9 +418,9 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {t('home.quickStart')}
+                  Quick Start
                 </h3>
-                <p className="text-sm text-[var(--foreground)] mb-3">{t('home.enterRepoUrl')}</p>
+                <p className="text-sm text-[var(--foreground)] mb-3">Enter a repository URL in one of these formats:</p>
                 <div className="grid grid-cols-1 gap-3 text-xs text-[var(--muted)]">
                   <div
                     className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
@@ -559,21 +443,21 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
-                  <h3 className="text-base font-semibold text-[var(--foreground)] font-serif">{t('home.advancedVisualization')}</h3>
+                  <h3 className="text-base font-semibold text-[var(--foreground)] font-serif">Advanced Visualization with Mermaid Diagrams</h3>
                 </div>
                 <p className="text-sm text-[var(--foreground)] mb-5 leading-relaxed">
-                  {t('home.diagramDescription')}
+                  OpenCorporates DeepWiki automatically generates interactive diagrams to help you understand code structure and relationships:
                 </p>
 
                 {/* Diagrams with improved layout */}
                 <div className="grid grid-cols-1 gap-6">
                   <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
-                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.flowDiagram')}</h4>
+                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">Flow Diagram</h4>
                     <Mermaid chart={DEMO_FLOW_CHART} />
                   </div>
 
                   <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
-                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.sequenceDiagram')}</h4>
+                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">Sequence Diagram</h4>
                     <Mermaid chart={DEMO_SEQUENCE_CHART} />
                   </div>
                 </div>
@@ -586,7 +470,7 @@ export default function Home() {
       <footer className="max-w-6xl mx-auto mt-8 flex flex-col gap-4 w-full">
         <div
           className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[var(--card-bg)] rounded-lg p-4 border border-[var(--border-color)] shadow-custom">
-          <p className="text-[var(--muted)] text-sm font-serif">{t('footer.copyright')}</p>
+          <p className="text-[var(--muted)] text-sm font-serif">OpenCorporates DeepWiki - AI-powered documentation for code repositories</p>
 
           <div className="flex items-center gap-6">
             <div className="flex items-center space-x-5">

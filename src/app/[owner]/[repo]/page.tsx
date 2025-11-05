@@ -6,7 +6,6 @@ import Markdown from '@/components/Markdown';
 import ModelSelectionModal from '@/components/ModelSelectionModal';
 import ThemeToggle from '@/components/theme-toggle';
 import WikiTreeView from '@/components/WikiTreeView';
-import { useLanguage } from '@/contexts/LanguageContext';
 import { RepoInfo } from '@/types/repoinfo';
 import getRepoUrl from '@/utils/getRepoUrl';
 import { extractUrlDomain, extractUrlPath } from '@/utils/urlDecoder';
@@ -189,9 +188,6 @@ const createGithubHeaders = (githubToken: string): HeadersInit => {
   })();
   const repoType = 'github'; // We only support GitHub repositories now
 
-  // Import language context for translations
-  const {messages} = useLanguage();
-
   // Initialize repo info
   const repoInfo = useMemo<RepoInfo>(() => ({
     owner,
@@ -205,7 +201,7 @@ const createGithubHeaders = (githubToken: string): HeadersInit => {
     // State variables
     const [isLoading, setIsLoading] = useState(true);
     const [loadingMessage, setLoadingMessage] = useState<string | undefined>(
-    messages.loading?.initializing || 'Initializing wiki generation...'
+    'Initializing wiki generation...'
     );
     const [error, setError] = useState<string | null>(null);
     const [wikiStructure, setWikiStructure] = useState<WikiStructure | undefined>();
@@ -256,13 +252,8 @@ const createGithubHeaders = (githubToken: string): HeadersInit => {
             const [isAskModalOpen, setIsAskModalOpen] = useState(false);
             const askComponentRef = useRef<{ clearConversation: () => void } | null>(null);
 
-            // Authentication state
-            const [authRequired, setAuthRequired] = useState<boolean>(false);
-              const [authCode, setAuthCode] = useState<string>('');
-                const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
-
-                  // Default branch state
-                  const [defaultBranch, setDefaultBranch] = useState<string>('main');
+            // Default branch state
+            const [defaultBranch, setDefaultBranch] = useState<string>('main');
 
   // Helper function to generate proper repository file URLs
   const generateFileUrl = useCallback((filePath: string): string => {
@@ -320,29 +311,6 @@ const createGithubHeaders = (githubToken: string): HeadersInit => {
                       window.removeEventListener('keydown', handleEsc);
     };
   }, [isAskModalOpen]);
-
-  // Fetch authentication status on component mount
-  useEffect(() => {
-    const fetchAuthStatus = async () => {
-      try {
-                      setIsAuthLoading(true);
-                    const response = await fetch('/api/auth/status');
-                    if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-                    const data = await response.json();
-                    setAuthRequired(data.auth_required);
-      } catch (err) {
-                      console.error("Failed to fetch auth status:", err);
-                    // Assuming auth is required if fetch fails to avoid blocking UI for safety
-                    setAuthRequired(true);
-      } finally {
-                      setIsAuthLoading(false);
-      }
-    };
-
-                    fetchAuthStatus();
-  }, []);
 
   // Generate content for a wiki page
   const generatePageContent = useCallback(async (page: WikiPage, owner: string, repo: string) => {
@@ -727,7 +695,7 @@ const createGithubHeaders = (githubToken: string): HeadersInit => {
 
                                   try {
                                     setStructureRequestInProgress(true);
-                                  setLoadingMessage(messages.loading?.determiningStructure || 'Determining wiki structure...');
+                                  setLoadingMessage('Determining wiki structure...');
 
                                   // Get repository URL
                                   const repoUrl = getRepoUrl(effectiveRepoInfo);
@@ -1184,7 +1152,7 @@ Return your analysis in the following XML format:
     } finally {
                                       setStructureRequestInProgress(false);
     }
-  }, [generatePageContent, currentToken, effectiveRepoInfo, pagesInProgress.size, structureRequestInProgress, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, modelExcludedDirs, modelExcludedFiles, language, messages.loading, isComprehensiveView]);
+  }, [generatePageContent, currentToken, effectiveRepoInfo, pagesInProgress.size, structureRequestInProgress, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, modelExcludedDirs, modelExcludedFiles, language, isComprehensiveView]);
 
   // Fetch repository structure using GitHub
   const fetchRepositoryStructure = useCallback(async () => {
@@ -1208,7 +1176,7 @@ Return your analysis in the following XML format:
 
                                     // Update loading state
                                     setIsLoading(true);
-                                    setLoadingMessage(messages.loading?.fetchingStructure || 'Fetching repository structure...');
+                                    setLoadingMessage('Fetching repository structure...');
 
                                     let fileTreeData = '';
                                     let readmeContent = '';
@@ -1231,112 +1199,31 @@ Return your analysis in the following XML format:
           throw err;
         }
       } else if (effectiveRepoInfo.type === 'github') {
-                                      // GitHub API approach
-                                      // Try to get the tree data for common branch names
-                                      let treeData = null;
-                                    let apiErrorDetails = '';
-
-        // Determine the GitHub API base URL based on the repository URL
-        const getGithubApiUrl = (repoUrl: string | null): string => {
-          if (!repoUrl) {
-            return 'https://api.github.com'; // Default to public GitHub
-          }
-
-                                    try {
-            const url = new URL(repoUrl);
-                                    const hostname = url.hostname;
-
-                                    // If it's the public GitHub, use the standard API URL
-                                    if (hostname === 'github.com') {
-              return 'https://api.github.com';
-            }
-
-                                    // For GitHub Enterprise, use the enterprise API URL format
-                                    // GitHub Enterprise API URL format: https://github.company.com/api/v3
-                                    return `${url.protocol}//${hostname}/api/v3`;
-          } catch {
-            return 'https://api.github.com'; // Fallback to public GitHub if URL parsing fails
-          }
-        };
-
-                                    const githubApiBaseUrl = getGithubApiUrl(effectiveRepoInfo.repoUrl);
-                                    // First, try to get the default branch from the repository info
-                                    let defaultBranchLocal = null;
-                                    try {
-          const repoInfoResponse = await fetch(`${githubApiBaseUrl}/repos/${owner}/${repo}`, {
-                                      headers: createGithubHeaders(currentToken)
+        // Use backend endpoint which uses GITHUB_TOKEN from environment
+        try {
+          const params = new URLSearchParams({
+            owner: owner,
+            repo: repo,
           });
-
-                                    if (repoInfoResponse.ok) {
-            const repoData = await repoInfoResponse.json();
-                                    defaultBranchLocal = repoData.default_branch;
-                                    console.log(`Found default branch: ${defaultBranchLocal}`);
-                                    // Store the default branch in state
-                                    setDefaultBranch(defaultBranchLocal || 'main');
+          
+          if (effectiveRepoInfo.repoUrl) {
+            params.append('repo_url', effectiveRepoInfo.repoUrl);
           }
+          
+          const response = await fetch(`/api/github/repo/structure?${params.toString()}`);
+          
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Repository structure API error (${response.status}): ${errorData}`);
+          }
+          
+          const data = await response.json();
+          fileTreeData = data.file_tree;
+          readmeContent = data.readme;
+          setDefaultBranch(data.default_branch || 'main');
+          console.log(`Successfully fetched repository structure from backend`);
         } catch (err) {
-                                      console.warn('Could not fetch repository info for default branch:', err);
-        }
-
-                                    // Create list of branches to try, prioritizing the actual default branch
-                                    const branchesToTry = defaultBranchLocal 
-          ? [defaultBranchLocal, 'main', 'master'].filter((branch, index, arr) => arr.indexOf(branch) === index)
-                                    : ['main', 'master'];
-
-                                    for (const branch of branchesToTry) {
-          const apiUrl = `${githubApiBaseUrl}/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-                                    const headers = createGithubHeaders(currentToken);
-
-                                    console.log(`Fetching repository structure from branch: ${branch}`);
-                                    try {
-            const response = await fetch(apiUrl, {
-                                      headers
-                                    });
-
-                                    if (response.ok) {
-                                      treeData = await response.json();
-                                    console.log('Successfully fetched repository structure');
-                                    break;
-            } else {
-              const errorData = await response.text();
-                                    apiErrorDetails = `Status: ${response.status}, Response: ${errorData}`;
-                                    console.error(`Error fetching repository structure: ${apiErrorDetails}`);
-            }
-          } catch (err) {
-                                      console.error(`Network error fetching branch ${branch}:`, err);
-          }
-        }
-
-                                    if (!treeData || !treeData.tree) {
-          if (apiErrorDetails) {
-            throw new Error(`Could not fetch repository structure. API Error: ${apiErrorDetails}`);
-          } else {
-            throw new Error('Could not fetch repository structure. Repository might not exist, be empty or private.');
-          }
-        }
-
-                                    // Convert tree data to a string representation
-                                    fileTreeData = treeData.tree
-                                    .filter((item: {type: string; path: string }) => item.type === 'blob')
-                                    .map((item: {type: string; path: string }) => item.path)
-                                    .join('\n');
-
-                                    // Try to fetch README.md content
-                                    try {
-          const headers = createGithubHeaders(currentToken);
-
-                                    const readmeResponse = await fetch(`${githubApiBaseUrl}/repos/${owner}/${repo}/readme`, {
-                                      headers
-                                    });
-
-                                    if (readmeResponse.ok) {
-            const readmeData = await readmeResponse.json();
-                                    readmeContent = atob(readmeData.content);
-          } else {
-                                      console.warn(`Could not fetch README.md, status: ${readmeResponse.status}`);
-          }
-        } catch (err) {
-                                      console.warn('Could not fetch README.md, continuing with empty README', err);
+          throw err;
         }
       }
 
@@ -1354,7 +1241,7 @@ Return your analysis in the following XML format:
                                       // Reset the request in progress flag
                                       setRequestInProgress(false);
     }
-  }, [owner, repo, determineWikiStructure, currentToken, effectiveRepoInfo, requestInProgress, messages.loading]);
+  }, [owner, repo, determineWikiStructure, currentToken, effectiveRepoInfo, requestInProgress]);
 
   // Function to export wiki content
   const exportWiki = useCallback(async (format: 'markdown' | 'json') => {
@@ -1436,7 +1323,7 @@ Return your analysis in the following XML format:
 
   const confirmRefresh = useCallback(async (newToken?: string) => {
                                       setShowModelOptions(false);
-                                    setLoadingMessage(messages.loading?.clearingCache || 'Clearing server cache...');
+                                    setLoadingMessage('Clearing server cache...');
                                     setIsLoading(true); // Show loading indicator immediately
 
                                     try {
@@ -1450,7 +1337,6 @@ Return your analysis in the following XML format:
                                     is_custom_model: isCustomSelectedModelState.toString(),
                                     custom_model: customSelectedModelState,
                                     comprehensive: isComprehensiveView.toString(),
-                                    authorization_code: authCode,
       });
 
                                     // Add file filters configuration
@@ -1459,13 +1345,6 @@ Return your analysis in the following XML format:
       }
                                     if (modelExcludedFiles) {
                                       params.append('excluded_files', modelExcludedFiles);
-      }
-
-                                    if(authRequired && !authCode) {
-                                      setIsLoading(false);
-                                    console.error("Authorization code is required");
-                                    setError('Authorization code is required');
-                                    return;
       }
 
                                     const response = await fetch(`/api/wiki_cache?${params.toString()}`, {
@@ -1532,7 +1411,7 @@ Return your analysis in the following XML format:
                                     setError(null);
                                     setEmbeddingError(false); // Reset embedding error state
                                     setIsLoading(true); // Set loading state for refresh
-                                    setLoadingMessage(messages.loading?.initializing || 'Initializing wiki generation...');
+                                    setLoadingMessage('Initializing wiki generation...');
 
                                     // Clear any in-progress requests for page content
                                     activeContentRequests.clear();
@@ -1548,7 +1427,7 @@ Return your analysis in the following XML format:
     // For now, we rely on the standard loadData flow initiated by resetting effectRan and dependencies.
     // This will re-trigger the main data loading useEffect.
     // No direct call to fetchRepositoryStructure here, let the useEffect handle it based on effectRan.current = false.
-  }, [effectiveRepoInfo, language, messages.loading, activeContentRequests, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, modelExcludedDirs, modelExcludedFiles, isComprehensiveView, authCode, authRequired]);
+  }, [effectiveRepoInfo, language, activeContentRequests, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, modelExcludedDirs, modelExcludedFiles, isComprehensiveView]);
 
   // Start wiki generation when component mounts
   useEffect(() => {
@@ -1557,7 +1436,7 @@ Return your analysis in the following XML format:
 
       const loadData = async () => {
                                       // Try loading from server-side cache first
-                                      setLoadingMessage(messages.loading?.fetchingCache || 'Checking for cached wiki...');
+                                      setLoadingMessage('Checking for cached wiki...');
                                     try {
           const params = new URLSearchParams({
                                       owner: effectiveRepoInfo.owner,
@@ -1737,7 +1616,7 @@ Return your analysis in the following XML format:
 
     // Clean up function for this effect is not strictly necessary for loadData,
     // but keeping the main unmount cleanup in the other useEffect
-  }, [effectiveRepoInfo, effectiveRepoInfo.owner, effectiveRepoInfo.repo, effectiveRepoInfo.type, language, fetchRepositoryStructure, messages.loading?.fetchingCache, isComprehensiveView]);
+  }, [effectiveRepoInfo, effectiveRepoInfo.owner, effectiveRepoInfo.repo, effectiveRepoInfo.type, language, fetchRepositoryStructure, isComprehensiveView]);
 
   // Save wiki to server-side cache when generation is complete
   useEffect(() => {
@@ -1810,7 +1689,7 @@ Return your analysis in the following XML format:
                                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                                           <div className="flex items-center gap-4">
                                             <Link href="/" className="text-[var(--accent-primary)] hover:text-[var(--highlight)] flex items-center gap-1.5 transition-colors border-b border-[var(--border-color)] hover:border-[var(--accent-primary)] pb-0.5">
-                                              <FaHome /> {messages.repoPage?.home || 'Home'}
+                                              <FaHome /> Home
                                             </Link>
                                           </div>
                                         </div>
@@ -1828,8 +1707,8 @@ Return your analysis in the following XML format:
                                               </div>
                                             </div>
                                             <p className="text-[var(--foreground)] text-center mb-3 font-serif">
-                                              {loadingMessage || messages.common?.loading || 'Loading...'}
-                                              {isExporting && (messages.loading?.preparingDownload || ' Please wait while we prepare your download...')}
+                                              {loadingMessage || 'Loading...'}
+                                              {isExporting && ' Please wait while we prepare your download...'}
                                             </p>
 
                                             {/* Progress bar for page generation */}
@@ -1844,18 +1723,14 @@ Return your analysis in the following XML format:
                                                   />
                                                 </div>
                                                 <p className="text-xs text-[var(--muted)] text-center">
-                                                  {messages.repoPage?.pagesCompleted
-                                                    ? messages.repoPage.pagesCompleted
-                                                      .replace('{completed}', (wikiStructure.pages.length - pagesInProgress.size).toString())
-                                                      .replace('{total}', wikiStructure.pages.length.toString())
-                                                    : `${wikiStructure.pages.length - pagesInProgress.size} of ${wikiStructure.pages.length} pages completed`}
+                                                  {`${wikiStructure.pages.length - pagesInProgress.size} of ${wikiStructure.pages.length} pages completed`}
                                                 </p>
 
                                                 {/* Show list of in-progress pages */}
                                                 {pagesInProgress.size > 0 && (
                                                   <div className="mt-4 text-xs">
                                                     <p className="text-[var(--muted)] mb-2">
-                                                      {messages.repoPage?.currentlyProcessing || 'Currently processing:'}
+                                                      Currently processing:
                                                     </p>
                                                     <ul className="text-[var(--foreground)] space-y-1">
                                                       {Array.from(pagesInProgress).slice(0, 3).map(pageId => {
@@ -1864,9 +1739,7 @@ Return your analysis in the following XML format:
                                                       })}
                                                       {pagesInProgress.size > 3 && (
                                                         <li className="text-[var(--muted)]">
-                                                          {messages.repoPage?.andMorePages
-                                                            ? messages.repoPage.andMorePages.replace('{count}', (pagesInProgress.size - 3).toString())
-                                                            : `...and ${pagesInProgress.size - 3} more`}
+                                                          {`...and ${pagesInProgress.size - 3} more`}
                                                         </li>
                                                       )}
                                                     </ul>
@@ -1879,14 +1752,14 @@ Return your analysis in the following XML format:
                                           <div className="bg-[var(--highlight)]/5 border border-[var(--highlight)]/30 rounded-lg p-5 mb-4 shadow-sm">
                                             <div className="flex items-center text-[var(--highlight)] mb-3">
                                               <FaExclamationTriangle className="mr-2" />
-                                              <span className="font-bold font-serif">{messages.repoPage?.errorTitle || messages.common?.error || 'Error'}</span>
+                                              <span className="font-bold font-serif">Error</span>
                                             </div>
                                             <p className="text-[var(--foreground)] text-sm mb-3">{error}</p>
                                             <p className="text-[var(--muted)] text-xs">
                                               {embeddingError ? (
-                                                messages.repoPage?.embeddingErrorDefault || 'This error is related to the document embedding system used for analyzing your repository. Please verify your embedding model configuration, API keys, and try again. If the issue persists, consider switching to a different embedding provider in the model settings.'
+                                                'This error is related to the document embedding system used for analyzing your repository. Please verify your embedding model configuration, API keys, and try again. If the issue persists, consider switching to a different embedding provider in the model settings.'
                                               ) : (
-                                                messages.repoPage?.errorMessageDefault || 'Please check that your repository exists and is public. Valid formats are "owner/repo", "https://github.com/owner/repo", or local folder paths like "C:\\path\\to\\folder" or "/path/to/folder".'
+                                                'Please check that your repository exists and is public. Valid formats are "owner/repo", "https://github.com/owner/repo", or local folder paths like "C:\\path\\to\\folder" or "/path/to/folder".'
                                               )}
                                             </p>
                                             <div className="mt-5">
@@ -1895,7 +1768,7 @@ Return your analysis in the following XML format:
                                                 className="px-5 py-2 inline-flex items-center gap-1.5 bg-[var(--accent-primary)] text-white rounded-md hover:bg-[var(--highlight)] transition-colors"
                                               >
                                                 <FaHome className="text-sm" />
-                                                {messages.repoPage?.backToHome || 'Back to Home'}
+                                                Back to Home
                                               </Link>
                                             </div>
                                           </div>
@@ -1935,8 +1808,8 @@ Return your analysis in the following XML format:
                                                   ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30'
                                                   : 'bg-[var(--background)] text-[var(--foreground)] border border-[var(--border-color)]'}`}>
                                                   {isComprehensiveView
-                                                    ? (messages.form?.comprehensive || 'Comprehensive')
-                                                    : (messages.form?.concise || 'Concise')}
+                                                    ? 'Comprehensive'
+                                                    : 'Concise'}
                                                 </span>
                                               </div>
 
@@ -1948,7 +1821,7 @@ Return your analysis in the following XML format:
                                                   className="flex items-center w-full text-xs px-3 py-2 bg-[var(--background)] text-[var(--foreground)] rounded-md hover:bg-[var(--background)]/80 disabled:opacity-50 disabled:cursor-not-allowed border border-[var(--border-color)] transition-colors hover:cursor-pointer"
                                                 >
                                                   <FaSync className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                                                  {messages.repoPage?.refreshWiki || 'Refresh Wiki'}
+                                                  Refresh Wiki
                                                 </button>
                                               </div>
 
@@ -1956,7 +1829,7 @@ Return your analysis in the following XML format:
                                               {Object.keys(generatedPages).length > 0 && (
                                                 <div className="mb-5">
                                                   <h4 className="text-sm font-semibold text-[var(--foreground)] mb-3 font-serif">
-                                                    {messages.repoPage?.exportWiki || 'Export Wiki'}
+                                                    Export Wiki
                                                   </h4>
                                                   <div className="flex flex-col gap-2">
                                                     <button
@@ -1965,7 +1838,7 @@ Return your analysis in the following XML format:
                                                       className="flex items-center text-xs px-3 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--accent-primary)] text-white hover:bg-[var(--highlight)] transition-colors"
                                                     >
                                                       <FaDownload className="mr-2" />
-                                                      {messages.repoPage?.exportAsMarkdown || 'Export as Markdown'}
+                                                      Export as Markdown
                                                     </button>
                                                     <button
                                                       onClick={() => exportWiki('json')}
@@ -1973,7 +1846,7 @@ Return your analysis in the following XML format:
                                                       className="flex items-center text-xs px-3 py-2 bg-[var(--background)] text-[var(--foreground)] rounded-md hover:bg-[var(--background)]/80 disabled:opacity-50 disabled:cursor-not-allowed border border-[var(--border-color)] transition-colors"
                                                     >
                                                       <FaFileExport className="mr-2" />
-                                                      {messages.repoPage?.exportAsJson || 'Export as JSON'}
+                                                      Export as JSON
                                                     </button>
                                                   </div>
                                                   {exportError && (
@@ -1985,13 +1858,12 @@ Return your analysis in the following XML format:
                                               )}
 
                                               <h4 className="text-md font-semibold text-[var(--foreground)] mb-3 font-serif">
-                                                {messages.repoPage?.pages || 'Pages'}
+                                                Pages
                                               </h4>
                                               <WikiTreeView
                                                 wikiStructure={wikiStructure}
                                                 currentPageId={currentPageId}
                                                 onPageSelect={handlePageSelect}
-                                                messages={messages.repoPage}
                                               />
                                             </div>
 
@@ -2014,7 +1886,7 @@ Return your analysis in the following XML format:
                                                   {generatedPages[currentPageId].relatedPages.length > 0 && (
                                                     <div className="mt-8 pt-4 border-t border-[var(--border-color)]">
                                                       <h4 className="text-sm font-semibold text-[var(--muted)] mb-3">
-                                                        {messages.repoPage?.relatedPages || 'Related Pages:'}
+                                                        Related Pages:
                                                       </h4>
                                                       <div className="flex flex-wrap gap-2">
                                                         {generatedPages[currentPageId].relatedPages.map(relatedId => {
@@ -2040,7 +1912,7 @@ Return your analysis in the following XML format:
                                                     <FaBookOpen className="text-4xl relative z-10" />
                                                   </div>
                                                   <p className="font-serif">
-                                                    {messages.repoPage?.selectPagePrompt || 'Select a page from the navigation to view its content'}
+                                                    Select a page from the navigation to view its content
                                                   </p>
                                                 </div>
                                               )}
@@ -2052,7 +1924,7 @@ Return your analysis in the following XML format:
                                       <footer className="max-w-[90%] xl:max-w-[1400px] mx-auto mt-8 flex flex-col gap-4 w-full">
                                         <div className="flex justify-between items-center gap-4 text-center text-[var(--muted)] text-sm h-fit w-full bg-[var(--card-bg)] rounded-lg p-3 shadow-sm border border-[var(--border-color)]">
                                           <p className="flex-1 font-serif">
-                                            {messages.footer?.copyright || 'OpenCorporates DeepWiki - Generate Wiki from GitHub repositories'}
+                                            OpenCorporates DeepWiki - Generate Wiki from GitHub repositories
                                           </p>
                                           <ThemeToggle />
                                         </div>
@@ -2063,7 +1935,7 @@ Return your analysis in the following XML format:
                                         <button
                                           onClick={() => setIsAskModalOpen(true)}
                                           className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--accent-primary)] text-white shadow-lg flex items-center justify-center hover:bg-[var(--accent-primary)]/90 transition-all z-50"
-                                          aria-label={messages.ask?.title || 'Ask about this repository'}
+                                          aria-label="Ask about this repository"
                                         >
                                           <FaComments className="text-xl" />
                                         </button>
@@ -2123,12 +1995,7 @@ Return your analysis in the following XML format:
                                         setIncludedFiles={setModelIncludedFiles}
                                         onApply={confirmRefresh}
                                         showWikiType={true}
-                                        showTokenInput={effectiveRepoInfo.type !== 'local' && !currentToken} // Show token input if not local and no current token
                                         repositoryType={'github' as 'github'}
-                                        authRequired={authRequired}
-                                        authCode={authCode}
-                                        setAuthCode={setAuthCode}
-                                        isAuthLoading={isAuthLoading}
                                       />
                                     </div>
                                     );

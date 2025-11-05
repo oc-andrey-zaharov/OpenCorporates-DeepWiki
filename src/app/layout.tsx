@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "next-themes";
-import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -26,9 +25,7 @@ export default function RootLayout({
         className={`${geistMono.variable} antialiased`}
       >
         <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
-          <LanguageProvider>
-            {children}
-          </LanguageProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>

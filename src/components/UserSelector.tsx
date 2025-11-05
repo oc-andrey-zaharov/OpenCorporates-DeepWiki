@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useLanguage } from '@/contexts/LanguageContext';
 
 // Define the interfaces for our model configuration
 interface Model {
@@ -68,7 +67,6 @@ export default function UserSelector({
   const [isFilterSectionOpen, setIsFilterSectionOpen] = useState(false);
   // State to manage filter mode: 'exclude' or 'include'
   const [filterMode, setFilterMode] = useState<'exclude' | 'include'>('exclude');
-  const { messages: t } = useLanguage();
 
   // State for model configurations from backend
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
@@ -279,7 +277,7 @@ next.config.js
         {/* Provider Selection */}
         <div>
           <label htmlFor="provider-dropdown" className="block text-xs font-medium text-[var(--foreground)] mb-1.5">
-            {t.form?.modelProvider || 'Model Provider'}
+            Model Provider
           </label>
           <select
             id="provider-dropdown"
@@ -287,10 +285,10 @@ next.config.js
             onChange={(e) => handleProviderChange(e.target.value)}
             className="block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
           >
-            <option value="" disabled>{t.form?.selectProvider || 'Select Provider'}</option>
+            <option value="" disabled>Select Provider</option>
             {modelConfig?.providers.map((providerOption) => (
               <option key={providerOption.id} value={providerOption.id}>
-                {t.form?.[`provider${providerOption.id.charAt(0).toUpperCase() + providerOption.id.slice(1)}`] || providerOption.name}
+                {providerOption.name}
               </option>
             ))}
           </select>
@@ -299,7 +297,7 @@ next.config.js
         {/* Model Selection - consistent height regardless of type */}
         <div>
           <label htmlFor={isCustomModel ? "custom-model-input" : "model-dropdown"} className="block text-xs font-medium text-[var(--foreground)] mb-1.5">
-            {t.form?.modelSelection || 'Model Selection'}
+            Model Selection
           </label>
 
           {isCustomModel ? (
@@ -311,7 +309,7 @@ next.config.js
                 setCustomModel(e.target.value);
                 setModel(e.target.value);
               }}
-              placeholder={t.form?.customModelPlaceholder || 'Enter custom model name'}
+              placeholder="Enter custom model name"
               className="block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
             />
           ) : (
@@ -326,7 +324,7 @@ next.config.js
                 <option key={modelOption.id} value={modelOption.id}>
                   {modelOption.name}
                 </option>
-              )) || <option value="">{t.form?.selectModel || 'Select Model'}</option>}
+              )) || <option value="">Select Model</option>}
             </select>
           )}
         </div>
@@ -367,7 +365,7 @@ next.config.js
                   }
                 }}
               >
-                {t.form?.useCustomModel || 'Use custom model'}
+                Use custom model
               </label>
             </div>
           </div>
@@ -381,7 +379,7 @@ next.config.js
               className="flex items-center text-sm text-[var(--accent-primary)] hover:text-[var(--accent-primary)]/80 transition-colors"
             >
               <span className="mr-1.5 text-xs">{isFilterSectionOpen ? '▼' : '►'}</span>
-              {t.form?.advancedOptions || 'Advanced Options'}
+              Advanced Options
             </button>
 
             {isFilterSectionOpen && (
@@ -389,7 +387,7 @@ next.config.js
                 {/* Filter Mode Selection */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
-                    {t.form?.filterMode || 'Filter Mode'}
+                    Filter Mode
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -400,7 +398,7 @@ next.config.js
                           : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
                         }`}
                     >
-                      {t.form?.excludeMode || 'Exclude Paths'}
+                      Exclude Paths
                     </button>
                     <button
                       type="button"
@@ -410,13 +408,13 @@ next.config.js
                           : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
                         }`}
                     >
-                      {t.form?.includeMode || 'Include Only Paths'}
+                      Include Only Paths
                     </button>
                   </div>
                   <p className="text-xs text-[var(--muted)] mt-1">
                     {filterMode === 'exclude'
-                      ? (t.form?.excludeModeDescription || 'Specify paths to exclude from processing (default behavior)')
-                      : (t.form?.includeModeDescription || 'Specify only the paths to include, ignoring all others')
+                      ? 'Specify paths to exclude from processing (default behavior)'
+                      : 'Specify only the paths to include, ignoring all others'
                     }
                   </p>
                 </div>
@@ -425,8 +423,8 @@ next.config.js
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-[var(--muted)] mb-1.5">
                     {filterMode === 'exclude'
-                      ? (t.form?.excludedDirs || 'Excluded Directories')
-                      : (t.form?.includedDirs || 'Included Directories')
+                      ? 'Excluded Directories'
+                      : 'Included Directories'
                     }
                   </label>
                   <textarea
@@ -441,8 +439,8 @@ next.config.js
                     rows={4}
                     className="block w-full rounded-md border border-[var(--border-color)]/50 bg-[var(--input-bg)] text-[var(--foreground)] px-3 py-2 text-sm focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-opacity-50 shadow-sm"
                     placeholder={filterMode === 'exclude'
-                      ? (t.form?.enterExcludedDirs || 'Enter excluded directories, one per line...')
-                      : (t.form?.enterIncludedDirs || 'Enter included directories, one per line...')
+                      ? 'Enter excluded directories, one per line...'
+                      : 'Enter included directories, one per line...'
                     }
                   />
                   {filterMode === 'exclude' && (
@@ -453,12 +451,12 @@ next.config.js
                           onClick={() => setShowDefaultDirs(!showDefaultDirs)}
                           className="text-xs text-[var(--accent-primary)] hover:text-[var(--accent-primary)]/80 transition-colors"
                         >
-                          {showDefaultDirs ? (t.form?.hideDefault || 'Hide Default') : (t.form?.viewDefault || 'View Default')}
+                          {showDefaultDirs ? 'Hide Default' : 'View Default'}
                         </button>
                       </div>
                       {showDefaultDirs && (
                         <div className="mt-2 p-2 rounded bg-[var(--background)]/50 text-xs">
-                          <p className="mb-1 text-[var(--muted)]">{t.form?.defaultNote || 'These defaults are already applied. Add your custom exclusions above.'}</p>
+                          <p className="mb-1 text-[var(--muted)]">These defaults are already applied. Add your custom exclusions above.</p>
                           <pre className="whitespace-pre-wrap font-mono text-[var(--muted)] overflow-y-auto max-h-32">{defaultExcludedDirs}</pre>
                         </div>
                       )}
@@ -470,8 +468,8 @@ next.config.js
                 <div>
                   <label className="block text-sm font-medium text-[var(--muted)] mb-1.5">
                     {filterMode === 'exclude'
-                      ? (t.form?.excludedFiles || 'Excluded Files')
-                      : (t.form?.includedFiles || 'Included Files')
+                      ? 'Excluded Files'
+                      : 'Included Files'
                     }
                   </label>
                   <textarea
@@ -486,8 +484,8 @@ next.config.js
                     rows={4}
                     className="block w-full rounded-md border border-[var(--border-color)]/50 bg-[var(--input-bg)] text-[var(--foreground)] px-3 py-2 text-sm focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-opacity-50 shadow-sm"
                     placeholder={filterMode === 'exclude'
-                      ? (t.form?.enterExcludedFiles || 'Enter excluded files, one per line...')
-                      : (t.form?.enterIncludedFiles || 'Enter included files, one per line...')
+                      ? 'Enter excluded files, one per line...'
+                      : 'Enter included files, one per line...'
                     }
                   />
                   {filterMode === 'exclude' && (
@@ -498,12 +496,12 @@ next.config.js
                           onClick={() => setShowDefaultFiles(!showDefaultFiles)}
                           className="text-xs text-[var(--accent-primary)] hover:text-[var(--accent-primary)]/80 transition-colors"
                         >
-                          {showDefaultFiles ? (t.form?.hideDefault || 'Hide Default') : (t.form?.viewDefault || 'View Default')}
+                          {showDefaultFiles ? 'Hide Default' : 'View Default'}
                         </button>
                       </div>
                       {showDefaultFiles && (
                         <div className="mt-2 p-2 rounded bg-[var(--background)]/50 text-xs">
-                          <p className="mb-1 text-[var(--muted)]">{t.form?.defaultNote || 'These defaults are already applied. Add your custom exclusions above.'}</p>
+                          <p className="mb-1 text-[var(--muted)]">These defaults are already applied. Add your custom exclusions above.</p>
                           <pre className="whitespace-pre-wrap font-mono text-[var(--muted)] overflow-y-auto max-h-32">{defaultExcludedFiles}</pre>
                         </div>
                       )}

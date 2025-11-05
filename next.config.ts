@@ -40,12 +40,16 @@ const nextConfig: NextConfig = {
         destination: `${TARGET_SERVER_BASE_URL}/api/wiki_cache/:path*`,
       },
       {
-        source: '/export/wiki/:path*',
-        destination: `${TARGET_SERVER_BASE_URL}/export/wiki/:path*`,
-      },
-      {
         source: '/api/wiki_cache',
         destination: `${TARGET_SERVER_BASE_URL}/api/wiki_cache`,
+      },
+      {
+        source: '/api/github/repo/structure',
+        destination: `${TARGET_SERVER_BASE_URL}/github/repo/structure`,
+      },
+      {
+        source: '/export/wiki/:path*',
+        destination: `${TARGET_SERVER_BASE_URL}/export/wiki/:path*`,
       },
       {
         source: '/local_repo/structure',

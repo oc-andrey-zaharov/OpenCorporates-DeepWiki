@@ -5,7 +5,6 @@ import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FaArrowLeft, FaSync, FaDownload, FaArrowRight, FaArrowUp, FaTimes } from 'react-icons/fa';
 import ThemeToggle from '@/components/theme-toggle';
-import { useLanguage } from '@/contexts/LanguageContext';
 import { RepoInfo } from '@/types/repoinfo';
 import getRepoUrl from '@/utils/getRepoUrl';
 
@@ -62,9 +61,6 @@ export default function SlidesPage() {
   const customModelParam = searchParams.get('custom_model') || '';
   const language = searchParams.get('language') || 'en';
 
-  // Import language context for translations
-  const { messages } = useLanguage();
-
   // Initialize repo info with useMemo to prevent unnecessary re-renders
   const repoInfo = useMemo<RepoInfo>(() => ({
     owner,
@@ -78,7 +74,7 @@ export default function SlidesPage() {
   // State variables
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState<string | undefined>(
-    messages.loading?.initializing || 'Initializing slides generation...'
+    'Initializing slides generation...'
   );
   const [error, setError] = useState<string | null>(null);
   const [slides, setSlides] = useState<Slide[]>([]);
@@ -159,7 +155,7 @@ export default function SlidesPage() {
     // Clear previous content
     setSlides([]);
     setCurrentSlideIndex(0);
-    setLoadingMessage(messages.loading?.generatingSlides || 'Generating slides...');
+    setLoadingMessage('Generating slides...');
 
     try {
       // Get repository URL
@@ -880,7 +876,7 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
       setIsLoading(false);
       setLoadingMessage(undefined);
     }
-  }, [owner, repo, repoInfo, token, providerParam, modelParam, isCustomModelParam, customModelParam, language, isLoading, messages.loading, cachedWikiContent, fetchCachedWikiContent]);
+  }, [owner, repo, repoInfo, token, providerParam, modelParam, isCustomModelParam, customModelParam, language, isLoading, cachedWikiContent, fetchCachedWikiContent]);
 
   // Export slides content
   const exportSlides = useCallback(async () => {
@@ -1187,10 +1183,10 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
                 className="flex items-center text-[var(--foreground)] hover:text-[var(--accent-primary)] transition-colors"
               >
                 <FaArrowLeft className="mr-2" />
-                <span>{messages.slides?.backToWiki || 'Back to Wiki'}</span>
+                <span>Back to Wiki</span>
               </Link>
               <h1 className="text-xl font-bold text-[var(--accent-primary)]">
-                {messages.slides?.title || 'Slides'}: {repo}
+                Slides: {repo}
               </h1>
             </div>
             <div className="flex items-center space-x-3">
@@ -1198,7 +1194,7 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
                 onClick={generateSlidesContent}
                 disabled={isLoading}
                 className={`p-2 rounded-md ${isLoading ? 'bg-[var(--button-disabled-bg)] text-[var(--button-disabled-text)]' : 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20'} transition-colors`}
-                title={messages.slides?.regenerate || 'Regenerate Slides'}
+                title="Regenerate Slides"
               >
                 <FaSync className={`${isLoading ? 'animate-spin' : ''}`} />
               </button>
@@ -1206,14 +1202,14 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
                 onClick={exportSlides}
                 disabled={!slides.length || isExporting}
                 className={`p-2 rounded-md ${!slides.length || isExporting ? 'bg-[var(--button-disabled-bg)] text-[var(--button-disabled-text)]' : 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20'} transition-colors`}
-                title={messages.slides?.export || 'Export Slides'}
+                title="Export Slides"
               >
                 <FaDownload />
               </button>
               <button
                 onClick={toggleFullscreen}
                 className="p-2 rounded-md bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20 transition-colors"
-                title={messages.slides?.fullscreen || 'Toggle Fullscreen'}
+                title="Toggle Fullscreen"
               >
                 <FaArrowUp />
               </button>
@@ -1232,7 +1228,7 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
           </div>
         ) : error ? (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 mb-6">
-            <h3 className="text-red-800 dark:text-red-400 font-medium mb-2">{messages.common?.error || 'Error'}</h3>
+            <h3 className="text-red-800 dark:text-red-400 font-medium mb-2">Error</h3>
             <p className="text-red-700 dark:text-red-300">{error}</p>
           </div>
         ) : slides.length > 0 ? (
@@ -1281,7 +1277,7 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
                 <button
                   onClick={toggleFullscreen}
                   className="p-2 ml-4 rounded-md bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20 transition-colors"
-                  title={messages.slides?.fullscreen || 'Exit Fullscreen'}
+                  title="Exit Fullscreen"
                 >
                   <FaTimes />
                 </button>
@@ -1290,7 +1286,7 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center p-8 flex-grow">
-            <p className="text-[var(--foreground)]">{messages.slides?.noSlides || 'No slides generated yet. Click the refresh button to generate slides.'}</p>
+            <p className="text-[var(--foreground)]">No slides generated yet. Click the refresh button to generate slides.</p>
           </div>
         )}
       </main>

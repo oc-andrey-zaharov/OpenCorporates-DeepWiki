@@ -1,9 +1,38 @@
 "use client";
 
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by only rendering after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    // Return a placeholder with the same dimensions to prevent layout shift
+    return (
+      <button
+        type="button"
+        className="theme-toggle-button cursor-pointer bg-transparent border border-[var(--border-color)] text-[var(--foreground)] hover:border-[var(--accent-primary)] active:bg-[var(--accent-secondary)]/10 rounded-md p-2 transition-all duration-300"
+        title="Toggle theme"
+        aria-label="Toggle theme"
+        disabled
+      >
+        <div className="relative w-5 h-5">
+          {/* Placeholder - invisible but maintains layout */}
+          <div className="opacity-0">
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+              <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </div>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <button

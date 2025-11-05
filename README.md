@@ -38,17 +38,47 @@ make dev/frontend  # Start frontend (port 3000)
 
 #### Step 1: Setup Environment
 
-Create a `.env` file:
+Create a `.env` file (copy from `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your API keys:
 
 ```bash
 GOOGLE_API_KEY=your_google_api_key
 OPENAI_API_KEY=your_openai_api_key
+
+# GitHub Personal Access Token for private repositories
+# See instructions below on how to create one
+GITHUB_TOKEN=your_github_personal_access_token
 
 # Optional
 OPENROUTER_API_KEY=your_openrouter_api_key
 DEEPWIKI_EMBEDDER_TYPE=google  # or 'openai' (default), 'ollama'
 OLLAMA_HOST=http://localhost:11434
 ```
+
+### Getting a GitHub Personal Access Token
+
+To access private GitHub repositories, you need to create a GitHub Personal Access Token:
+
+1. **Go to GitHub Settings**: Navigate to [GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)](https://github.com/settings/tokens)
+2. **Generate New Token**: Click "Generate new token" > "Generate new token (classic)"
+3. **Configure Token**:
+   - Give it a descriptive name (e.g., "OpenCorporates DeepWiki")
+   - Set an expiration date (or no expiration for internal use)
+   - Select the following scopes:
+     - `repo` - Full control of private repositories (required for private repos)
+     - `read:org` - Read org membership (optional, if accessing org repos)
+4. **Generate and Copy**: Click "Generate token" and copy the token immediately (you won't be able to see it again)
+5. **Add to .env**: Add the token to your `.env` file:
+   ```bash
+   GITHUB_TOKEN=ghp_your_token_here
+   ```
+
+**Security Note**: Never commit your `.env` file or share your token. The token is stored in your `.env` file only and is used automatically by the backend when accessing private repositories.
 
 #### Step 2: Install Dependencies
 
@@ -74,8 +104,8 @@ Open [http://localhost:3000](http://localhost:3000) and start generating wikis!
 
 ## Usage
 
-1. Enter a GitHub, repository URL
-2. For private repos, click "+ Add access tokens" and enter your personal access token
+1. Enter a GitHub repository URL
+2. For private repos, the system will automatically use `GITHUB_TOKEN` from your `.env` file
 3. Choose your preferred AI model
 4. Click "Generate Wiki"
 5. Use the Ask feature to chat with your codebase
@@ -92,6 +122,7 @@ Open [http://localhost:3000](http://localhost:3000) and start generating wikis!
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | For Azure models |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint | For Azure models |
 | `AZURE_OPENAI_VERSION` | Azure OpenAI version | For Azure models |
+| `GITHUB_TOKEN` | GitHub Personal Access Token for private repositories | For private repos |
 | `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, or `ollama` | No (default: `openai`) |
 | `OLLAMA_HOST` | Ollama host URL | No (default: `http://localhost:11434`) |
 

@@ -1,6 +1,6 @@
 # OpenCorporates-DeepWiki
 
-Automatically create beautiful, interactive wikis for any GitHub, GitLab, or Bitbucket repository. Analyze code structure, generate comprehensive documentation, and create visual diagrams with AI.
+Automatically create beautiful, interactive wikis for any GitHub repository. Analyze code structure, generate comprehensive documentation, and create visual diagrams with AI.
 
 ## Features
 
@@ -74,7 +74,7 @@ Open [http://localhost:3000](http://localhost:3000) and start generating wikis!
 
 ## Usage
 
-1. Enter a GitHub, GitLab, or Bitbucket repository URL
+1. Enter a GitHub, repository URL
 2. For private repos, click "+ Add access tokens" and enter your personal access token
 3. Choose your preferred AI model
 4. Click "Generate Wiki"
@@ -132,6 +132,11 @@ opencorporates-deepwiki/
 ├── Makefile            # Build and run commands
 └── .env                # Environment variables
 ```
+
+## Architecture Overview
+
+See [docs/architecture.md](docs/architecture.md) for a deeper look at the technology stack, component interactions, and Mermaid diagrams that explain the wiki generation flow.  
+See [docs/diagram-validation.md](docs/diagram-validation.md) for details on how Mermaid diagrams are validated and automatically repaired during generation.
 
 ## API Keys
 

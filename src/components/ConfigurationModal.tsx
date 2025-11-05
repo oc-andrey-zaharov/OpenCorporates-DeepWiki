@@ -31,9 +31,9 @@ interface ConfigurationModalProps {
   customModel: string;
   setCustomModel: (value: string) => void;
 
-  // Platform selection
-  selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
-  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket') => void;
+  // Platform selection - now only supports GitHub
+  selectedPlatform: 'github';
+  setSelectedPlatform: (value: 'github') => void;
 
   // Access token
   accessToken: string;
@@ -144,7 +144,7 @@ export default function ConfigurationModal({
                 id="language-select"
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="input-japanese block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+                className="block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
               >
                 {
                   Object.entries(supportedLanguages).map(([key, value])=> <option key={key} value={key}>{value}</option>)
@@ -258,7 +258,7 @@ export default function ConfigurationModal({
                   id="authCode"
                   value={authCode || ''}
                   onChange={(e) => setAuthCode?.(e.target.value)}
-                  className="input-japanese block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  className="block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
                   placeholder="Enter your authorization code"
                 />
                  <div className="flex items-center mt-2 text-xs text-[var(--muted)]">

@@ -4,8 +4,8 @@ import React from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface TokenInputProps {
-  selectedPlatform: 'github' | 'gitlab' | 'bitbucket';
-  setSelectedPlatform: (value: 'github' | 'gitlab' | 'bitbucket') => void;
+  selectedPlatform: 'github';
+  setSelectedPlatform: (value: 'github') => void;
   accessToken: string;
   setAccessToken: (value: string) => void;
   showTokenSection?: boolean;
@@ -24,7 +24,7 @@ export default function TokenInput({
 }: TokenInputProps) {
   const { messages: t } = useLanguage();
 
-  const platformName = selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1);
+  const platformName = 'GitHub'; // Fixed to GitHub since we removed platform selection
 
   return (
     <div className="mb-4">
@@ -40,45 +40,6 @@ export default function TokenInput({
 
       {showTokenSection && (
         <div className="mt-2 p-4 bg-[var(--background)]/50 rounded-md border border-[var(--border-color)]">
-          {allowPlatformChange && (
-            <div className="mb-3">
-              <label className="block text-xs font-medium text-[var(--foreground)] mb-2">
-                {t.form?.selectPlatform || 'Select Platform'}
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPlatform('github')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border transition-all ${selectedPlatform === 'github'
-                    ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-sm'
-                    : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
-                    }`}
-                >
-                  <span className="text-sm">GitHub</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPlatform('gitlab')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border transition-all ${selectedPlatform === 'gitlab'
-                    ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-sm'
-                    : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
-                    }`}
-                >
-                  <span className="text-sm">GitLab</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPlatform('bitbucket')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border transition-all ${selectedPlatform === 'bitbucket'
-                    ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)] shadow-sm'
-                    : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
-                    }`}
-                >
-                  <span className="text-sm">Bitbucket</span>
-                </button>
-              </div>
-            </div>
-          )}
 
           <div>
             <label htmlFor="access-token" className="block text-xs font-medium text-[var(--foreground)] mb-2">
@@ -90,7 +51,7 @@ export default function TokenInput({
               value={accessToken}
               onChange={(e) => setAccessToken(e.target.value)}
               placeholder={(t.form?.tokenPlaceholder || 'Enter your access token').replace('{platform}', platformName)}
-              className="input-japanese block w-full px-3 py-2 rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)] text-sm"
+              className="block w-full px-3 py-2 rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)] text-sm"
             />
             <div className="flex items-center mt-2 text-xs text-[var(--muted)]">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[var(--muted)]"

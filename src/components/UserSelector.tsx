@@ -135,7 +135,7 @@ export default function UserSelector({
 
   // Default excluded directories from config.py
   const defaultExcludedDirs =
-`./.venv/
+    `./.venv/
 ./venv/
 ./env/
 ./virtualenv/
@@ -174,7 +174,7 @@ export default function UserSelector({
 
   // Default excluded files from config.py
   const defaultExcludedFiles =
-`package-lock.json
+    `package-lock.json
 yarn.lock
 pnpm-lock.yaml
 npm-shrinkwrap.json
@@ -285,7 +285,7 @@ next.config.js
             id="provider-dropdown"
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value)}
-            className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+            className="block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
           >
             <option value="" disabled>{t.form?.selectProvider || 'Select Provider'}</option>
             {modelConfig?.providers.map((providerOption) => (
@@ -312,14 +312,14 @@ next.config.js
                 setModel(e.target.value);
               }}
               placeholder={t.form?.customModelPlaceholder || 'Enter custom model name'}
-              className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+              className="block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
             />
           ) : (
             <select
               id="model-dropdown"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="input-japanese block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+              className="block w-full px-2.5 py-1.5 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
               disabled={!provider || isLoading || !modelConfig?.providers.find(p => p.id === provider)?.models?.length}
             >
               {modelConfig?.providers.find((p: Provider) => p.id === provider)?.models.map((modelOption) => (
@@ -349,7 +349,7 @@ next.config.js
                   id="use-custom-model"
                   type="checkbox"
                   checked={isCustomModel}
-                  onChange={() => {}}
+                  onChange={() => { }}
                   className="sr-only"
                 />
                 <div className={`w-10 h-5 rounded-full transition-colors ${isCustomModel ? 'bg-[var(--accent-primary)]' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
@@ -395,22 +395,20 @@ next.config.js
                     <button
                       type="button"
                       onClick={() => setFilterMode('exclude')}
-                      className={`flex-1 px-3 py-2 rounded-md border text-sm transition-colors ${
-                        filterMode === 'exclude'
+                      className={`flex-1 px-3 py-2 rounded-md border text-sm transition-colors ${filterMode === 'exclude'
                           ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)]'
                           : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
-                      }`}
+                        }`}
                     >
                       {t.form?.excludeMode || 'Exclude Paths'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setFilterMode('include')}
-                      className={`flex-1 px-3 py-2 rounded-md border text-sm transition-colors ${
-                        filterMode === 'include'
+                      className={`flex-1 px-3 py-2 rounded-md border text-sm transition-colors ${filterMode === 'include'
                           ? 'bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--accent-primary)]'
                           : 'border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--background)]'
-                      }`}
+                        }`}
                     >
                       {t.form?.includeMode || 'Include Only Paths'}
                     </button>

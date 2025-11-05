@@ -3,6 +3,10 @@ import sys
 import logging
 from dotenv import load_dotenv
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -15,9 +19,6 @@ logger = logging.getLogger(__name__)
 # Configure watchfiles logger to show file paths
 watchfiles_logger = logging.getLogger("watchfiles.main")
 watchfiles_logger.setLevel(logging.DEBUG)  # Enable DEBUG to see file paths
-
-# Add the current directory to the path so we can import the api package
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Check if we're in development mode
 is_development = os.environ.get("NODE_ENV") != "production"
@@ -40,7 +41,8 @@ if GOOGLE_API_KEY:
 else:
     logger.warning("GOOGLE_API_KEY not configured")
 
-if __name__ == "__main__":
+
+def main():
     # Get port from environment variable or use default
     port = int(os.environ.get("PORT", 8001))
 
@@ -59,3 +61,7 @@ if __name__ == "__main__":
         if is_development
         else None,
     )
+
+
+if __name__ == "__main__":
+    main()

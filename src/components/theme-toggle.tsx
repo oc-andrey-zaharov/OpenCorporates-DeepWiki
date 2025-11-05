@@ -13,7 +13,7 @@ export default function ThemeToggle() {
       aria-label="Toggle theme"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
     >
-      {/* Japanese-inspired sun and moon icons */}
+      {/* Sun and moon icons */}
       <div className="relative w-5 h-5">
         {/* Sun icon (light mode) */}
         <div className={`absolute inset-0 transition-opacity duration-300 ${theme === 'dark' ? 'opacity-0' : 'opacity-100'}`}>

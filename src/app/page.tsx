@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FaWikipediaW, FaGithub, FaCoffee, FaTwitter } from 'react-icons/fa';
+import { FaWikipediaW, FaGithub } from 'react-icons/fa';
 import ThemeToggle from '@/components/theme-toggle';
 import Mermaid from '../components/Mermaid';
 import ConfigurationModal from '@/components/ConfigurationModal';
@@ -15,7 +15,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 // Define the demo mermaid charts outside the component
 const DEMO_FLOW_CHART = `graph TD
-  A[Code Repository] --> B[DeepWiki]
+  A[Code Repository] --> B[OpenCorporates DeepWiki]
   B --> C[Architecture Diagrams]
   B --> D[Component Relationships]
   B --> E[Data Flow]
@@ -30,17 +30,17 @@ const DEMO_FLOW_CHART = `graph TD
 
 const DEMO_SEQUENCE_CHART = `sequenceDiagram
   participant User
-  participant DeepWiki
+  participant OpenCorporates DeepWiki
   participant GitHub
 
-  User->>DeepWiki: Enter repository URL
-  DeepWiki->>GitHub: Request repository data
-  GitHub-->>DeepWiki: Return repository data
-  DeepWiki->>DeepWiki: Process and analyze code
-  DeepWiki-->>User: Display wiki with diagrams
+  User->>OpenCorporates DeepWiki: Enter repository URL
+  OpenCorporates DeepWiki->>GitHub: Request repository data
+  GitHub-->>OpenCorporates DeepWiki: Return repository data
+  OpenCorporates DeepWiki->>OpenCorporates DeepWiki: Process and analyze code
+  OpenCorporates DeepWiki-->>User: Display wiki with diagrams
 
   %% Add a note to make text more visible
-  Note over User,GitHub: DeepWiki supports sequence diagrams for visualizing interactions`;
+  Note over User,GitHub: OpenCorporates DeepWiki supports sequence diagrams for visualizing interactions`;
 
 export default function Home() {
   const router = useRouter();
@@ -75,7 +75,7 @@ export default function Home() {
     return key;
   };
 
-  const [repositoryInput, setRepositoryInput] = useState('https://github.com/AsyncFuncAI/deepwiki-open');
+  const [repositoryInput, setRepositoryInput] = useState('https://github.com/oc-andrey-zaharov/OpenCorporates-DeepWiki');
 
   const REPO_CONFIG_CACHE_KEY = 'deepwikiRepoConfigCache';
 
@@ -111,7 +111,7 @@ export default function Home() {
     if (newRepoUrl.trim() === "") {
       // Optionally reset fields if input is cleared
     } else {
-        loadConfigFromCache(newRepoUrl);
+      loadConfigFromCache(newRepoUrl);
     }
   };
 
@@ -134,7 +134,7 @@ export default function Home() {
   const [excludedFiles, setExcludedFiles] = useState('');
   const [includedDirs, setIncludedDirs] = useState('');
   const [includedFiles, setIncludedFiles] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket'>('github');
+  const [selectedPlatform, setSelectedPlatform] = useState<'github'>('github');
   const [accessToken, setAccessToken] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -204,16 +204,11 @@ export default function Home() {
       owner = 'local';
     }
     else if (customGitRegex.test(input)) {
-      // Detect repository type based on domain
+      // We only support GitHub repositories
+      type = 'github';
       const domain = extractUrlDomain(input);
-      if (domain?.includes('github.com')) {
-        type = 'github';
-      } else if (domain?.includes('gitlab.com') || domain?.includes('gitlab.')) {
-        type = 'gitlab';
-      } else if (domain?.includes('bitbucket.org') || domain?.includes('bitbucket.')) {
-        type = 'bitbucket';
-      } else {
-        type = 'web'; // fallback for other git hosting services
+      if (!domain?.includes('github.com')) {
+        return null; // Return null for non-GitHub URLs
       }
 
       fullPath = extractUrlPath(input)?.replace(/\.git$/, '');
@@ -255,7 +250,7 @@ export default function Home() {
     const parsedRepo = parseRepositoryInput(repositoryInput);
 
     if (!parsedRepo) {
-      setError('Invalid repository format. Use "owner/repo", GitHub/GitLab/BitBucket URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
+      setError('Invalid repository format. Use "owner/repo", GitHub URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
       return;
     }
 
@@ -266,8 +261,8 @@ export default function Home() {
 
   const validateAuthCode = async () => {
     try {
-      if(authRequired) {
-        if(!authCode) {
+      if (authRequired) {
+        if (!authCode) {
           return false;
         }
         const response = await fetch('/api/auth/validate', {
@@ -275,7 +270,7 @@ export default function Home() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({'code': authCode})
+          body: JSON.stringify({ 'code': authCode })
         });
         if (!response.ok) {
           return false;
@@ -293,7 +288,7 @@ export default function Home() {
 
     // Check authorization code
     const validation = await validateAuthCode();
-    if(!validation) {
+    if (!validation) {
       setError(`Failed to validate the authorization code`);
       console.error(`Failed to validate the authorization code`);
       setIsConfigModalOpen(false);
@@ -336,7 +331,7 @@ export default function Home() {
     const parsedRepo = parseRepositoryInput(repositoryInput);
 
     if (!parsedRepo) {
-      setError('Invalid repository format. Use "owner/repo", GitHub/GitLab/BitBucket URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
+      setError('Invalid repository format. Use "owner/repo", GitHub URL, or a local folder path like "/path/to/folder" or "C:\\path\\to\\folder".');
       setIsSubmitting(false);
       return;
     }
@@ -421,8 +416,8 @@ export default function Home() {
                   type="text"
                   value={repositoryInput}
                   onChange={handleRepositoryInputChange}
-                  placeholder={t('form.repoPlaceholder') || "owner/repo, GitHub/GitLab/BitBucket URL, or local folder path"}
-                  className="input-japanese block w-full pl-10 pr-3 py-2.5 border-[var(--border-color)] rounded-lg bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  placeholder={t('form.repoPlaceholder') || "owner/repo, GitHub URL, or local folder path"}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-[var(--border-color)] rounded-lg bg-[var(--background)]/60 text-[var(--foreground)] transition duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]"
                 />
                 {error && (
                   <div className="text-[var(--highlight)] text-xs mt-1">
@@ -432,7 +427,7 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                className="btn-japanese px-6 py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--accent-primary)] text-white hover:bg-[var(--highlight)] transition-colors"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? t('common.processing') : t('common.generateWiki')}
@@ -483,7 +478,7 @@ export default function Home() {
 
       <main className="flex-1 max-w-6xl mx-auto w-full overflow-y-auto">
         <div
-          className="min-h-full flex flex-col items-center p-8 pt-10 bg-[var(--card-bg)] rounded-lg shadow-custom card-japanese">
+          className="min-h-full flex flex-col items-center p-8 pt-10 bg-[var(--card-bg)] rounded-lg shadow-custom">
 
           {/* Conditionally show processed projects or welcome content */}
           {!projectsLoading && projects.length > 0 ? (
@@ -530,67 +525,59 @@ export default function Home() {
                 </p>
               </div>
 
-          {/* Quick Start section - redesigned for better spacing */}
-          <div
-            className="w-full max-w-2xl mb-10 bg-[var(--accent-primary)]/5 border border-[var(--accent-primary)]/20 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-[var(--accent-primary)] mb-3 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {t('home.quickStart')}
-            </h3>
-            <p className="text-sm text-[var(--foreground)] mb-3">{t('home.enterRepoUrl')}</p>
-            <div className="grid grid-cols-1 gap-3 text-xs text-[var(--muted)]">
+              {/* Quick Start section - redesigned for better spacing */}
               <div
-                className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
-              >https://github.com/AsyncFuncAI/deepwiki-open
-              </div>
-              <div
-                className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
-              >https://gitlab.com/gitlab-org/gitlab
-              </div>
-              <div
-                className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
-              >AsyncFuncAI/deepwiki-open
-              </div>
-              <div
-                className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
-              >https://bitbucket.org/atlassian/atlaskit
-              </div>
-            </div>
-          </div>
-
-          {/* Visualization section - improved for better visibility */}
-          <div
-            className="w-full max-w-2xl mb-8 bg-[var(--background)]/70 rounded-lg p-6 border border-[var(--border-color)]">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-[var(--accent-primary)] flex-shrink-0 mt-0.5 sm:mt-0" fill="none"
-                viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <h3 className="text-base font-semibold text-[var(--foreground)] font-serif">{t('home.advancedVisualization')}</h3>
-            </div>
-            <p className="text-sm text-[var(--foreground)] mb-5 leading-relaxed">
-              {t('home.diagramDescription')}
-            </p>
-
-            {/* Diagrams with improved layout */}
-            <div className="grid grid-cols-1 gap-6">
-              <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
-                <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.flowDiagram')}</h4>
-                <Mermaid chart={DEMO_FLOW_CHART} />
+                className="w-full max-w-2xl mb-10 bg-[var(--accent-primary)]/5 border border-[var(--accent-primary)]/20 rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-[var(--accent-primary)] mb-3 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {t('home.quickStart')}
+                </h3>
+                <p className="text-sm text-[var(--foreground)] mb-3">{t('home.enterRepoUrl')}</p>
+                <div className="grid grid-cols-1 gap-3 text-xs text-[var(--muted)]">
+                  <div
+                    className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
+                  >https://github.com/oc-andrey-zaharov/OpenCorporates-DeepWiki
+                  </div>
+                  <div
+                    className="bg-[var(--background)]/70 p-3 rounded border border-[var(--border-color)] font-mono overflow-x-hidden whitespace-nowrap"
+                  >oc-andrey-zaharov/OpenCorporates-DeepWiki
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
-                <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.sequenceDiagram')}</h4>
-                <Mermaid chart={DEMO_SEQUENCE_CHART} />
+              {/* Visualization section - improved for better visibility */}
+              <div
+                className="w-full max-w-2xl mb-8 bg-[var(--background)]/70 rounded-lg p-6 border border-[var(--border-color)]">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 text-[var(--accent-primary)] flex-shrink-0 mt-0.5 sm:mt-0" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <h3 className="text-base font-semibold text-[var(--foreground)] font-serif">{t('home.advancedVisualization')}</h3>
+                </div>
+                <p className="text-sm text-[var(--foreground)] mb-5 leading-relaxed">
+                  {t('home.diagramDescription')}
+                </p>
+
+                {/* Diagrams with improved layout */}
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
+                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.flowDiagram')}</h4>
+                    <Mermaid chart={DEMO_FLOW_CHART} />
+                  </div>
+
+                  <div className="bg-[var(--card-bg)] p-4 rounded-lg border border-[var(--border-color)] shadow-custom">
+                    <h4 className="text-sm font-medium text-[var(--foreground)] mb-3 font-serif">{t('home.sequenceDiagram')}</h4>
+                    <Mermaid chart={DEMO_SEQUENCE_CHART} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
             </>
           )}
         </div>
@@ -603,17 +590,9 @@ export default function Home() {
 
           <div className="flex items-center gap-6">
             <div className="flex items-center space-x-5">
-              <a href="https://github.com/AsyncFuncAI/deepwiki-open" target="_blank" rel="noopener noreferrer"
+              <a href="https://github.com/oc-andrey-zaharov/OpenCorporates-DeepWiki" target="_blank" rel="noopener noreferrer"
                 className="text-[var(--muted)] hover:text-[var(--accent-primary)] transition-colors">
                 <FaGithub className="text-xl" />
-              </a>
-              <a href="https://buymeacoffee.com/sheing" target="_blank" rel="noopener noreferrer"
-                className="text-[var(--muted)] hover:text-[var(--accent-primary)] transition-colors">
-                <FaCoffee className="text-xl" />
-              </a>
-              <a href="https://x.com/sashimikun_void" target="_blank" rel="noopener noreferrer"
-                className="text-[var(--muted)] hover:text-[var(--accent-primary)] transition-colors">
-                <FaTwitter className="text-xl" />
               </a>
             </div>
             <ThemeToggle />

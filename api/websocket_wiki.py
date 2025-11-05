@@ -37,13 +37,13 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., description="List of chat messages")
     filePath: Optional[str] = Field(None, description="Optional path to a file in the repository to include in the prompt")
     token: Optional[str] = Field(None, description="Personal access token for private repositories")
-    type: Optional[str] = Field("github", description="Type of repository (e.g., 'github', 'gitlab', 'bitbucket')")
+    type: Optional[str] = Field("github", description="Type of repository (e.g., 'github')")
 
     # model parameters
     provider: str = Field("google", description="Model provider (google, openai, openrouter, ollama, azure)")
     model: Optional[str] = Field(None, description="Model name for the specified provider")
 
-    language: Optional[str] = Field("en", description="Language for content generation (e.g., 'en', 'ja', 'zh', 'es', 'kr', 'vi')")
+    language: Optional[str] = Field("en", description="Language for content generation (e.g., 'en')")
     excluded_dirs: Optional[str] = Field(None, description="Comma-separated list of directories to exclude from processing")
     excluded_files: Optional[str] = Field(None, description="Comma-separated list of file patterns to exclude from processing")
     included_dirs: Optional[str] = Field(None, description="Comma-separated list of directories to include exclusively")

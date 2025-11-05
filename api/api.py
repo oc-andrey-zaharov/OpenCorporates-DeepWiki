@@ -462,7 +462,7 @@ async def save_wiki_cache(data: WikiCacheRequest) -> bool:
 async def get_cached_wiki(
     owner: str = Query(..., description="Repository owner"),
     repo: str = Query(..., description="Repository name"),
-    repo_type: str = Query(..., description="Repository type (e.g., github, gitlab)"),
+    repo_type: str = Query(..., description="Repository type (e.g., github)"),
     language: str = Query(..., description="Language of the wiki content")
 ):
     """
@@ -505,7 +505,7 @@ async def store_wiki_cache(request_data: WikiCacheRequest):
 async def delete_wiki_cache(
     owner: str = Query(..., description="Repository owner"),
     repo: str = Query(..., description="Repository name"),
-    repo_type: str = Query(..., description="Repository type (e.g., github, gitlab)"),
+    repo_type: str = Query(..., description="Repository type (e.g., github)"),
     language: str = Query(..., description="Language of the wiki content"),
     authorization_code: Optional[str] = Query(None, description="Authorization code")
 ):

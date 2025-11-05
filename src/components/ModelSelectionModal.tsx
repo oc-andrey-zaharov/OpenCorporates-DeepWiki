@@ -37,7 +37,7 @@ interface ModelSelectionModalProps {
   
   // Token input for refresh
   showTokenInput?: boolean;
-  repositoryType?: 'github' | 'gitlab' | 'bitbucket';
+  repositoryType?: 'github';
   // Authentication
   authRequired?: boolean;
   authCode?: string;
@@ -91,7 +91,7 @@ export default function ModelSelectionModal({
   
   // Token input state
   const [localAccessToken, setLocalAccessToken] = useState('');
-  const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github' | 'gitlab' | 'bitbucket'>(repositoryType);
+  const [localSelectedPlatform, setLocalSelectedPlatform] = useState<'github'>(repositoryType || 'github');
   const [showTokenSection, setShowTokenSection] = useState(showTokenInput);
 
   // Reset local state when modal is opened
@@ -220,7 +220,7 @@ export default function ModelSelectionModal({
                       id="authCode"
                       value={authCode || ''}
                       onChange={(e) => setAuthCode?.(e.target.value)}
-                      className="input-japanese block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
+                      className="block w-full px-3 py-2 text-sm rounded-md bg-transparent text-[var(--foreground)] focus:outline-none focus:border-[var(--accent-primary)]"
                       placeholder="Enter your authorization code"
                   />
                   <div className="flex items-center mt-2 text-xs text-[var(--muted)]">

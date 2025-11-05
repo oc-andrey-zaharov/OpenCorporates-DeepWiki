@@ -83,14 +83,11 @@ stop:
 # Clean build artifacts and caches
 clean:
 	@echo "Cleaning build artifacts and caches..."
+	@rm -rf .next .turbo dist coverage .mypy_cache .pytest_cache
 	@rm -rf node_modules/.cache
-	@rm -rf .next
-	@rm -rf api/__pycache__
-	@rm -rf api/**/__pycache__
-	@rm -rf api/.pytest_cache
-	@rm -rf test/__pycache__
-	@rm -rf tests/__pycache__
+	@rm -rf api/.pytest_cache api/.mypy_cache
+	@rm -rf api/logs/*
+	@rm -rf test/__pycache__ tests/__pycache__
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✓ Cleaned successfully"
-

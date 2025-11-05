@@ -41,6 +41,7 @@ interface AskProps {
   customModel?: string;
   language?: string;
   onRef?: (ref: { clearConversation: () => void }) => void;
+  onClose?: () => void;
 }
 
 const Ask: React.FC<AskProps> = ({
@@ -50,7 +51,8 @@ const Ask: React.FC<AskProps> = ({
   isCustomModel = false,
   customModel = '',
   language = 'en',
-  onRef
+  onRef,
+  onClose
 }) => {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
@@ -640,18 +642,39 @@ const Ask: React.FC<AskProps> = ({
   return (
     <div>
       <div className="p-4">
-        <div className="flex items-center justify-end mb-4">
-          {/* Model selection button */}
-          <button
-            type="button"
-            onClick={() => setIsModelSelectionModalOpen(true)}
-            className="text-xs px-2.5 py-1 rounded border border-[var(--border-color)]/40 bg-[var(--background)]/10 text-[var(--foreground)]/80 hover:bg-[var(--background)]/30 hover:text-[var(--foreground)] transition-colors flex items-center gap-1.5"
-          >
-            <span>{selectedProvider}/{isCustomSelectedModel ? customSelectedModel : selectedModel}</span>
-            <svg className="h-3.5 w-3.5 text-[var(--accent-primary)]/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+        <div className="flex items-center justify-between mb-4">
+          {/* Title */}
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">
+            {messages.ask?.title || 'Ask about this repository'}
+          </h2>
+          
+          <div className="flex items-center gap-2">
+            {/* Model selection button */}
+            <button
+              type="button"
+              onClick={() => setIsModelSelectionModalOpen(true)}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--border-color)]/40 bg-[var(--background)]/10 text-[var(--foreground)]/80 hover:bg-[var(--background)]/30 hover:text-[var(--foreground)] transition-colors flex items-center gap-1.5"
+            >
+              <span>{selectedProvider}/{isCustomSelectedModel ? customSelectedModel : selectedModel}</span>
+              <svg className="h-3.5 w-3.5 text-[var(--accent-primary)]/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            
+            {/* Close button */}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-[var(--muted)] hover:text-[var(--foreground)] transition-colors p-1.5 hover:bg-[var(--background)]/30 rounded"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Question input */}
@@ -702,7 +725,7 @@ const Ask: React.FC<AskProps> = ({
                     onChange={() => setDeepResearch(!deepResearch)}
                     className="sr-only"
                   />
-                  <div className={`w-10 h-5 rounded-full transition-colors ${deepResearch ? 'bg-purple-600' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                  <div className={`w-10 h-5 rounded-full transition-colors ${deepResearch ? 'bg-[#B8605D]' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
                   <div className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform transform ${deepResearch ? 'translate-x-5' : ''}`}></div>
                 </div>
               </label>
@@ -722,7 +745,7 @@ const Ask: React.FC<AskProps> = ({
               </div>
             </div>
             {deepResearch && (
-              <div className="text-xs text-purple-600 dark:text-purple-400">
+              <div className="text-xs text-[#B8605D] dark:text-[#C87370]">
                 Multi-turn research process enabled
                 {researchIteration > 0 && !researchComplete && ` (iteration ${researchIteration})`}
                 {researchComplete && ` (complete)`}
@@ -791,7 +814,7 @@ const Ask: React.FC<AskProps> = ({
               <button
                 id="ask-clear-conversation"
                 onClick={clearConversation}
-                className="text-xs text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-[#B8605D] dark:hover:text-[#C87370] px-2 py-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700"
               >
                 Clear conversation
               </button>
@@ -805,9 +828,9 @@ const Ask: React.FC<AskProps> = ({
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-2">
               <div className="animate-pulse flex space-x-1">
-                <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
-                <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
-                <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
+                <div className="h-2 w-2 bg-[#B8605D] rounded-full"></div>
+                <div className="h-2 w-2 bg-[#B8605D] rounded-full"></div>
+                <div className="h-2 w-2 bg-[#B8605D] rounded-full"></div>
               </div>
               <span className="text-xs text-gray-500 dark:text-gray-400">
                 {deepResearch
@@ -851,7 +874,7 @@ const Ask: React.FC<AskProps> = ({
                         <span>Investigating remaining questions...</span>
                       </div>
                       <div className="flex items-center">
-                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                        <div className="w-2 h-2 bg-[#B8605D] rounded-full mr-2"></div>
                         <span>Connecting findings from previous iterations...</span>
                       </div>
                     </>
@@ -883,7 +906,7 @@ const Ask: React.FC<AskProps> = ({
                   {researchIteration >= 5 && (
                     <>
                       <div className="flex items-center">
-                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                        <div className="w-2 h-2 bg-[#B8605D] rounded-full mr-2"></div>
                         <span>Finalizing comprehensive answer...</span>
                       </div>
                       <div className="flex items-center">

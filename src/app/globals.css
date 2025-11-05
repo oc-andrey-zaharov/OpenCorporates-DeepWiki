@@ -8,13 +8,13 @@
   --background: #f8f4e6; /* Warm off-white like washi paper */
   --foreground: #333333; /* Soft black for text */
   --shadow-color: rgba(0, 0, 0, 0.05);
-  --accent-primary: #9b7cb9; /* Soft purple (Fuji) */
+  --accent-primary: #B8605D; /* Reddish terracotta */
   --accent-secondary: #d7c4bb; /* Soft beige (Kinari) */
   --border-color: #e0d8c8; /* Soft beige border */
   --card-bg: #fffaf0; /* Slightly warmer than background */
   --highlight: #e8927c; /* Soft coral (Akane) */
   --muted: #a59e8c; /* Soft gray-brown (Nezumi) */
-  --link-color: #7c5aa0; /* Slightly darker purple for links */
+  --link-color: #9D4F4C; /* Slightly darker terracotta for links */
 }
 
 html[data-theme='dark'] {
@@ -22,13 +22,13 @@ html[data-theme='dark'] {
   --background: #1a1a1a; /* Deep charcoal */
   --foreground: #f0f0f0; /* Soft white */
   --shadow-color: rgba(0, 0, 0, 0.2);
-  --accent-primary: #9370db; /* Soft lavender */
+  --accent-primary: #C87370; /* Lighter terracotta for dark mode */
   --accent-secondary: #5d4037; /* Warm brown */
   --border-color: #2c2c2c; /* Dark border */
   --card-bg: #222222; /* Slightly lighter than background */
   --highlight: #e57373; /* Soft red */
   --muted: #8c8c8c; /* Muted gray */
-  --link-color: #b19cd9; /* Lighter purple for dark mode links */
+  --link-color: #D8958F; /* Lighter terracotta for dark mode links */
 }
 
 /* Fix for unreadable <select> options in Chrome's dark mode */
@@ -108,7 +108,7 @@ html[data-theme='dark'] .paper-texture {
 
 .input-japanese:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(155, 124, 185, 0.2);
+  box-shadow: 0 0 0 2px rgba(184, 96, 93, 0.2);
   outline: none;
 }
 

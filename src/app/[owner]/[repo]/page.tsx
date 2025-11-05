@@ -1653,8 +1653,10 @@ IMPORTANT:
     console.log('Refreshing wiki. Server cache will be overwritten upon new generation if not cleared.');
 
     // Clear the localStorage cache (if any remnants or if it was used before this change)
-    const localStorageCacheKey = getCacheKey(effectiveRepoInfo.owner, effectiveRepoInfo.repo, effectiveRepoInfo.type, language, isComprehensiveView);
-    localStorage.removeItem(localStorageCacheKey);
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      const localStorageCacheKey = getCacheKey(effectiveRepoInfo.owner, effectiveRepoInfo.repo, effectiveRepoInfo.type, language, isComprehensiveView);
+      localStorage.removeItem(localStorageCacheKey);
+    }
 
     // Reset cache loaded flag
     cacheLoadedSuccessfully.current = false;
@@ -2239,6 +2241,7 @@ IMPORTANT:
               customModel={customSelectedModelState}
               language={language}
               onRef={(ref) => (askComponentRef.current = ref)}
+              onClose={() => setIsAskModalOpen(false)}
             />
           </div>
         </div>

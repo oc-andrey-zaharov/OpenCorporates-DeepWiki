@@ -30,7 +30,7 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
                 text.includes('Thought') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300' :
                 text.includes('Action') ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
                 text.includes('Observation') ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' :
-                text.includes('Answer') ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300' :
+                text.includes('Answer') ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' :
                 'dark:text-white'
               }`}
               {...props}
@@ -61,7 +61,7 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
       return (
         <a
           href={href}
-          className="text-purple-600 dark:text-purple-400 hover:underline font-medium"
+          className="text-[#B8605D] dark:text-[#C87370] hover:underline font-medium"
           target="_blank"
           rel="noopener noreferrer"
           {...props}
@@ -183,7 +183,7 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
       // Handle inline code
       return (
         <code
-          className={`${className} font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded text-pink-500 dark:text-pink-400 text-sm`}
+          className={`${className} font-mono bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded text-[#B8605D] dark:text-[#C87370] text-sm`}
           {...otherProps}
         >
           {children}

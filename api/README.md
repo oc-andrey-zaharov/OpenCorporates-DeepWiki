@@ -1,6 +1,6 @@
-# 🚀 DeepWiki API
+# 🚀 OpenCorporates-DeepWiki API
 
-This is the backend API for DeepWiki, providing smart code analysis and AI-powered documentation generation.
+This is the backend API for OpenCorporates-DeepWiki, providing smart code analysis and AI-powered documentation generation.
 
 ## ✨ Features
 
@@ -15,8 +15,9 @@ This is the backend API for DeepWiki, providing smart code analysis and AI-power
 ### Step 1: Install Dependencies
 
 ```bash
-# From the project root
-python -m pip install poetry==2.0.1 && poetry install
+# From the api directory
+cd api
+poetry install
 ```
 
 ### Step 2: Set Up Environment Variables
@@ -50,6 +51,7 @@ PORT=8001  # Optional, defaults to 8001
 If you're not using Ollama mode, you need to configure an OpenAI API key for embeddings. Other API keys are only required when configuring and using models from the corresponding providers.
 
 > 💡 **Where to get these keys:**
+>
 > - Get a Google API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 > - Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
 > - Get an OpenRouter API key from [OpenRouter](https://openrouter.ai/keys)
@@ -58,6 +60,7 @@ If you're not using Ollama mode, you need to configure an OpenAI API key for emb
 #### Advanced Environment Configuration
 
 ##### Provider-Based Model Selection
+
 DeepWiki supports multiple LLM providers. The environment variables above are required depending on which providers you want to use:
 
 - **Google Gemini**: Requires `GOOGLE_API_KEY`
@@ -67,6 +70,7 @@ DeepWiki supports multiple LLM providers. The environment variables above are re
 - **Ollama**: No API key required (runs locally)
 
 ##### Custom OpenAI API Endpoints
+
 The `OPENAI_BASE_URL` variable allows you to specify a custom endpoint for the OpenAI API. This is useful for:
 
 - Enterprise users with private API channels
@@ -74,11 +78,13 @@ The `OPENAI_BASE_URL` variable allows you to specify a custom endpoint for the O
 - Integration with third-party OpenAI API-compatible services
 
 **Example:** you can use the endpoint which support the OpenAI protocol provided by any organization
+
 ```
 OPENAI_BASE_URL=https://custom-openai-endpoint.com/v1
 ```
 
 ##### Configuration Files
+
 DeepWiki now uses JSON configuration files to manage various system components instead of hardcoded values:
 
 1. **`generator.json`**: Configuration for text generation models
@@ -110,7 +116,7 @@ This allows you to maintain different configurations for various environments or
 
 ```bash
 # From the project root
-python -m api.main
+api/.venv/bin/python -m api.main
 ```
 
 The API will be available at `http://localhost:8001`
@@ -118,19 +124,24 @@ The API will be available at `http://localhost:8001`
 ## 🧠 How It Works
 
 ### 1. Repository Indexing
+
 When you provide a GitHub repository URL, the API:
+
 - Clones the repository locally (if not already cloned)
 - Reads all files in the repository
 - Creates embeddings for the files using OpenAI
 - Stores the embeddings in a local database
 
 ### 2. Smart Retrieval (RAG)
+
 When you ask a question:
+
 - The API finds the most relevant code snippets
 - These snippets are used as context for the AI
 - The AI generates a response based on this context
 
 ### 3. Real-Time Streaming
+
 - Responses are streamed in real-time
 - You see the answer as it's being generated
 - This creates a more interactive experience
@@ -138,9 +149,11 @@ When you ask a question:
 ## 📡 API Endpoints
 
 ### GET /
+
 Returns basic API information and available endpoints.
 
 ### POST /chat/completions/stream
+
 Streams an AI-generated response about a GitHub repository.
 
 **Request Body:**
@@ -192,6 +205,7 @@ for chunk in response.iter_content(chunk_size=None):
 ## 💾 Storage
 
 All data is stored locally on your machine:
+
 - Cloned repositories: `~/.adalflow/repos/`
 - Embeddings and indexes: `~/.adalflow/databases/`
 - Generated wiki cache: `~/.adalflow/wikicache/`

@@ -104,7 +104,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         try {
           // Only access localStorage in the browser
           let storedLanguage;
-          if (typeof window !== 'undefined') {
+          if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
             storedLanguage = localStorage.getItem('language');
     
             // If no language is stored, detect browser language
@@ -113,7 +113,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
               storedLanguage = detectBrowserLanguage();
     
               // Store the detected language
-              localStorage.setItem('language', storedLanguage);
+              if (typeof localStorage.setItem === 'function') {
+                localStorage.setItem('language', storedLanguage);
+              }
             }
           } else {
             console.log('Running on server-side, using default language');
@@ -162,7 +164,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       setMessages(langMessages);
 
       // Store in localStorage (only in browser)
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
         localStorage.setItem('language', validLanguage);
       }
 
@@ -179,7 +181,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#B8605D] mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </div>

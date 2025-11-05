@@ -823,11 +823,11 @@ Please return ONLY the HTML with no markdown formatting or code blocks. Just the
 
     /* Accent colors for creative use */
     .text-accent-blue { color: #58a6ff; }
-    .text-accent-purple { color: #8957e5; }
+    .text-accent-terracotta { color: #B8605D; }
     .text-accent-green { color: #3fb950; }
     .text-accent-orange { color: #f0883e; }
     .bg-accent-blue { background-color: rgba(88, 166, 255, 0.2); }
-    .bg-accent-purple { background-color: rgba(137, 87, 229, 0.2); }
+    .bg-accent-terracotta { background-color: rgba(184, 96, 93, 0.2); }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">

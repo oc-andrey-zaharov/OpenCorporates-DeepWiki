@@ -1,6 +1,6 @@
-# DeepWiki Tests
+# OpenCorporates-DeepWiki Tests
 
-This directory contains all tests for the DeepWiki project, organized by type and scope.
+This directory contains all tests for the OpenCorporates-DeepWiki project, organized by type and scope.
 
 ## Directory Structure
 
@@ -20,35 +20,36 @@ tests/
 
 ### All Tests
 ```bash
-python tests/run_tests.py
+# From project root
+api/.venv/bin/python tests/run_tests.py
 ```
 
 ### Unit Tests Only
 ```bash
-python tests/run_tests.py --unit
+api/.venv/bin/python tests/run_tests.py --unit
 ```
 
 ### Integration Tests Only
 ```bash
-python tests/run_tests.py --integration
+api/.venv/bin/python tests/run_tests.py --integration
 ```
 
 ### API Tests Only
 ```bash
-python tests/run_tests.py --api
+api/.venv/bin/python tests/run_tests.py --api
 ```
 
 ### Individual Test Files
 ```bash
 # Unit tests
-python tests/unit/test_google_embedder.py
-python tests/unit/test_google_embedder_fix.py
+api/.venv/bin/python tests/unit/test_google_embedder.py
+api/.venv/bin/python tests/unit/test_google_embedder_fix.py
 
 # Integration tests
-python tests/integration/test_full_integration.py
+api/.venv/bin/python tests/integration/test_full_integration.py
 
 # API tests
-python tests/api/test_api.py
+api/.venv/bin/python tests/api/test_api.py
 ```
 
 ## Test Requirements
@@ -121,6 +122,6 @@ DEEPWIKI_EMBEDDER_TYPE=google
 For API tests, ensure the FastAPI server is running on the expected port:
 
 ```bash
-cd api
-python main.py
+# From project root
+api/.venv/bin/python -m api.main
 ```

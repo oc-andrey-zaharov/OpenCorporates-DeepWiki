@@ -22,10 +22,10 @@ const DEMO_FLOW_CHART = `graph TD
   B --> F[Process Workflows]
 
   style A fill:#f9d3a9,stroke:#d86c1f
-  style B fill:#d4a9f9,stroke:#6c1fd8
+  style B fill:#D4A098,stroke:#B8605D
   style C fill:#a9f9d3,stroke:#1fd86c
   style D fill:#a9d3f9,stroke:#1f6cd8
-  style E fill:#f9a9d3,stroke:#d81f6c
+  style E fill:#E8C4C0,stroke:#B8605D
   style F fill:#d3f9a9,stroke:#6cd81f`;
 
 const DEMO_SEQUENCE_CHART = `sequenceDiagram
@@ -80,7 +80,7 @@ export default function Home() {
   const REPO_CONFIG_CACHE_KEY = 'deepwikiRepoConfigCache';
 
   const loadConfigFromCache = (repoUrl: string) => {
-    if (!repoUrl) return;
+    if (!repoUrl || typeof window === 'undefined' || typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return;
     try {
       const cachedConfigs = localStorage.getItem(REPO_CONFIG_CACHE_KEY);
       if (cachedConfigs) {
@@ -308,7 +308,7 @@ export default function Home() {
 
     try {
       const currentRepoUrl = repositoryInput.trim();
-      if (currentRepoUrl) {
+      if (currentRepoUrl && typeof window !== 'undefined' && typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
         const existingConfigs = JSON.parse(localStorage.getItem(REPO_CONFIG_CACHE_KEY) || '{}');
         const configToSave = {
           selectedLanguage,

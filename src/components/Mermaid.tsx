@@ -303,18 +303,64 @@ const FullScreenModal: React.FC<{
   );
 };
 
+const normalizeLabel = (label: string): string => {
+  return label
+    .replace(/<\s*br\s*\/?\s*>/gi, '<br/>')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const sanitizeFlowchart = (source: string): string => {
+  let output = source;
+
+  // Wrap node labels with quotes for [], (), {}, <>
+  const wrappers: Array<{ open: string; close: string }> = [
+    { open: '[', close: ']' },
+    { open: '(', close: ')' },
+    { open: '{', close: '}' },
+    { open: '<', close: '>' },
+  ];
+
+  wrappers.forEach(({ open, close }) => {
+    const pattern = new RegExp(
+      `([A-Za-z0-9_]+)\\${open}(?!")([\\s\\S]*?)(?<!")\\${close}`,
+      'g'
+    );
+    output = output.replace(pattern, (_, id: string, label: string) => {
+      const normalized = normalizeLabel(label);
+      const escaped = normalized.replace(/"/g, '\\"');
+      return `${id}${open}"${escaped}"${close}`;
+    });
+  });
+
+  // Convert colon-labelled edges to Mermaid format (A -->|Label| B)
+  const arrowPattern = /([A-Za-z0-9_]+)\s*-->\s*([A-Za-z0-9_]+)\s*:\s*([^\n]+)/g;
+  output = output.replace(arrowPattern, (_, from: string, to: string, label: string) => {
+    return `${from} -->|${label.trim()}| ${to}`;
+  });
+
+  return output;
+};
+
 const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled = false }) => {
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [renderAttempts, setRenderAttempts] = useState(0);
   const mermaidRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(`mermaid-${Math.random().toString(36).substring(2, 9)}`);
+  const normalizedChartRef = useRef(chart);
   const isDarkModeRef = useRef(
     typeof window !== 'undefined' &&
     window.matchMedia &&
     window.matchMedia('(prefers-color-scheme: dark)').matches
   );
+
+  useEffect(() => {
+    setRenderAttempts(0);
+    normalizedChartRef.current = chart;
+  }, [chart]);
 
   // Initialize pan-zoom functionality when SVG is rendered
   useEffect(() => {
@@ -362,11 +408,25 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
       if (!isMounted) return;
 
       try {
+        const normalizedChart = chart && /^\s*flowchart/i.test(chart)
+          ? sanitizeFlowchart(chart)
+          : chart;
+        normalizedChartRef.current = normalizedChart;
+
         setError(null);
         setSvg('');
 
+        // Ensure custom fonts are loaded before measuring text for nodes
+        if (typeof document !== 'undefined' && 'fonts' in document) {
+          try {
+            await document.fonts.ready;
+          } catch (fontError) {
+            console.warn('Mermaid fonts failed to load before render:', fontError);
+          }
+        }
+
         // Render the chart directly without preprocessing
-        const { svg: renderedSvg } = await mermaid.render(idRef.current, chart);
+        const { svg: renderedSvg } = await mermaid.render(idRef.current, normalizedChart);
 
         if (!isMounted) return;
 
@@ -392,7 +452,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
           if (mermaidRef.current) {
             mermaidRef.current.innerHTML = `
               <div class="text-red-500 dark:text-red-400 text-xs mb-1">Syntax error in diagram</div>
-              <pre class="text-xs overflow-auto p-2 bg-gray-100 dark:bg-gray-800 rounded">${chart}</pre>
+              <pre class="text-xs overflow-auto p-2 bg-gray-100 dark:bg-gray-800 rounded">${normalizedChartRef.current}</pre>
             `;
           }
         }
@@ -404,12 +464,18 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
     return () => {
       isMounted = false;
     };
-  }, [chart]);
+  }, [chart, renderAttempts]);
 
   const handleDiagramClick = () => {
     if (!error && svg) {
       setIsFullscreen(true);
     }
+  };
+
+  const handleRetryRender = () => {
+    setError(null);
+    setSvg('');
+    setRenderAttempts(prev => prev + 1);
   };
 
   if (error) {
@@ -426,6 +492,14 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
         <div ref={mermaidRef} className="text-xs overflow-auto"></div>
         <div className="mt-3 text-xs text-[var(--muted)] font-serif">
           The diagram contains syntax errors and cannot be rendered.
+        </div>
+        <div className="mt-3 flex">
+          <button
+            onClick={handleRetryRender}
+            className="text-xs px-3 py-1.5 rounded-md border border-[var(--highlight)]/50 text-[var(--highlight)] hover:bg-[var(--highlight)]/10 transition-colors"
+          >
+            Retry Diagram
+          </button>
         </div>
       </div>
     );

@@ -5,12 +5,12 @@
 
 :root {
   /* Light mode color palette */
-  --background: #f8f4e6; /* Warm off-white like washi paper */
+  --background: #F8F7F6; /* Solid background color */
   --foreground: #333333; /* Soft black for text */
   --shadow-color: rgba(0, 0, 0, 0.05);
   --accent-primary: #B8605D; /* Reddish terracotta */
   --accent-secondary: #d7c4bb; /* Soft beige (Kinari) */
-  --border-color: #e0d8c8; /* Soft beige border */
+  --border-color: #d3d3d3; /* Light gray for dashed borders */
   --card-bg: #fffaf0; /* Slightly warmer than background */
   --highlight: #e8927c; /* Soft coral (Akane) */
   --muted: #a59e8c; /* Soft gray-brown (Nezumi) */
@@ -19,12 +19,12 @@
 
 html[data-theme='dark'] {
   /* Dark mode color palette */
-  --background: #1a1a1a; /* Deep charcoal */
+  --background: #101010; /* Dark background */
   --foreground: #f0f0f0; /* Soft white */
   --shadow-color: rgba(0, 0, 0, 0.2);
   --accent-primary: #C87370; /* Lighter terracotta for dark mode */
   --accent-secondary: #5d4037; /* Warm brown */
-  --border-color: #2c2c2c; /* Dark border */
+  --border-color: #404040; /* Dark gray for dashed borders */
   --card-bg: #222222; /* Slightly lighter than background */
   --highlight: #e57373; /* Soft red */
   --muted: #8c8c8c; /* Muted gray */
@@ -43,10 +43,40 @@ html[data-theme='dark'] {
   --font-mono: var(--font-geist-mono);
 }
 
-body {
+/* Apply background to both html and body to ensure full coverage */
+html, body {
   background: var(--background);
   color: var(--foreground);
+}
+
+body {
   font-family: var(--font-sans), sans-serif;
+}
+
+/* Ensure background covers the entire viewport */
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* Ensure main containers use the theme background */
+#__next {
+  background: var(--background);
+  min-height: 100vh;
+}
+
+/* Apply to common container classes */
+.container, .main, .content {
+  background: var(--background);
+}
+
+/* Base background for major containers while still allowing utility overrides */
+body, html, #root, #__next, [data-theme="light"], [data-theme="dark"] {
+  background-color: var(--background);
+  background: var(--background);
 }
 
 /* Custom shadow styles */
@@ -54,18 +84,31 @@ body {
   box-shadow: 0 4px 8px -2px var(--shadow-color);
 }
 
-/* Paper texture background */
-.paper-texture {
-  background-color: var(--card-bg);
-  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23e0d8c8' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E");
+/* Paper texture background - only apply to main containers, not buttons */
+body .paper-texture:not(button):not(.bg-\[var\(--accent-primary\)\]):not(.bg-\[var\(--highlight\)\]) {
+  background-color: var(--background) !important;
+  background-image: none !important;
 }
 
-/* Dark mode paper texture */
-html[data-theme='dark'] .paper-texture {
-  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23333333' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E");
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-
+@keyframes floatPulse {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
 
 
 /* Line clamp utilities */

@@ -402,6 +402,8 @@ DEFAULT_EXCLUDED_FILES: List[str] = [
     "packages/*/dist",
     "packages/*/build",
     ".output",
+    ".devcontainer",
+    ".cursor",
 ]
 
 # Initialize empty configuration

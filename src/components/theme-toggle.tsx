@@ -21,6 +21,7 @@ export default function ThemeToggle() {
         title="Toggle theme"
         aria-label="Toggle theme"
         disabled
+        style={{ borderStyle: 'dashed' }}
       >
         <div className="relative w-5 h-5">
           {/* Placeholder - invisible but maintains layout */}
@@ -41,6 +42,7 @@ export default function ThemeToggle() {
       title="Toggle theme"
       aria-label="Toggle theme"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      style={{ borderStyle: 'dashed' }}
     >
       {/* Sun and moon icons */}
       <div className="relative w-5 h-5">

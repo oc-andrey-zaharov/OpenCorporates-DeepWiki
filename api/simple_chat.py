@@ -38,6 +38,30 @@ from api.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def _is_truthy(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED"))
+
+
+def _extract_chat_completion_text(completion) -> Optional[str]:
+    try:
+        choices = getattr(completion, "choices", [])
+        if choices:
+            first_choice = choices[0]
+            message = getattr(first_choice, "message", None)
+            if message and hasattr(message, "content"):
+                return message.content
+            delta = getattr(first_choice, "delta", None)
+            if delta and hasattr(delta, "content"):
+                return delta.content
+        return getattr(completion, "content", None)
+    except Exception as exc:
+        logger.warning(f"Failed to extract text from completion: {exc}")
+        return None
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -477,9 +501,14 @@ async def chat_completions_stream(request: ChatCompletionRequest):
 
             # Initialize Openai client
             model = OpenAIClient()
+            stream_requested = OPENAI_STREAMING_ENABLED
+            if not stream_requested:
+                logger.info(
+                    "OpenAI streaming disabled; will request non-streaming completions"
+                )
             model_kwargs = {
                 "model": request.model,
-                "stream": True,
+                "stream": stream_requested,
                 "temperature": model_config["temperature"],
             }
             # Only add top_p if it exists in the model config
@@ -578,18 +607,78 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                         response = await model.acall(
                             api_kwargs=api_kwargs, model_type=ModelType.LLM
                         )
-                        # Handle streaming response from Openai
-                        async for chunk in response:
-                            choices = getattr(chunk, "choices", [])
-                            if len(choices) > 0:
-                                delta = getattr(choices[0], "delta", None)
-                                if delta is not None:
-                                    text = getattr(delta, "content", None)
-                                    if text is not None:
-                                        yield text
+                        if model_kwargs.get("stream", True):
+                            # Handle streaming response from Openai
+                            async for chunk in response:
+                                choices = getattr(chunk, "choices", [])
+                                if len(choices) > 0:
+                                    delta = getattr(choices[0], "delta", None)
+                                    if delta is not None:
+                                        text = getattr(delta, "content", None)
+                                        if text is not None:
+                                            yield text
+                        else:
+                            completion_text = _extract_chat_completion_text(response)
+                            if completion_text:
+                                logger.debug(
+                                    "OpenAI non-stream response (first 200 chars): %s",
+                                    completion_text[:200],
+                                )
+                                yield completion_text
+                            else:
+                                logger.warning(
+                                    "OpenAI non-stream response empty; yielding raw completion"
+                                )
+                                yield str(response)
                     except Exception as e_openai:
-                        logger.error(f"Error with Openai API: {str(e_openai)}")
-                        yield f"\nError with Openai API: {str(e_openai)}\n\nPlease check that you have set the OPENAI_API_KEY environment variable with a valid API key."
+                        error_text = str(e_openai)
+                        streaming_attempted = model_kwargs.get("stream", True)
+                        if streaming_attempted and "unsupported_value" in error_text and "stream" in error_text:
+                            logger.warning(
+                                "OpenAI streaming not permitted for this model; retrying without stream"
+                            )
+                            try:
+                                non_stream_model_kwargs = {
+                                    **model_kwargs,
+                                    "stream": False,
+                                }
+                                fallback_api_kwargs = (
+                                    model.convert_inputs_to_api_kwargs(
+                                        input=prompt,
+                                        model_kwargs=non_stream_model_kwargs,
+                                        model_type=ModelType.LLM,
+                                    )
+                                )
+                                completion = await model.acall(
+                                    api_kwargs=fallback_api_kwargs,
+                                    model_type=ModelType.LLM,
+                                )
+                                completion_text = _extract_chat_completion_text(
+                                    completion
+                                )
+                                if completion_text:
+                                    logger.debug(
+                                        "OpenAI fallback non-stream response (first 200 chars): %s",
+                                        completion_text[:200],
+                                    )
+                                    yield completion_text
+                                    return
+                                logger.warning(
+                                    "OpenAI fallback non-stream response empty; yielding raw completion"
+                                )
+                                yield str(completion)
+                                return
+                            except Exception as fallback_error:
+                                logger.error(
+                                    f"Error with Openai API non-stream fallback: {str(fallback_error)}"
+                                )
+                                yield (
+                                    f"\nError with Openai API fallback: {str(fallback_error)}\n\n"
+                                    "Please check that you have set the OPENAI_API_KEY environment variable with a valid API key."
+                                )
+                                return
+                        logger.error(f"Error with Openai API: {error_text}")
+                        yield f"\nError with Openai API: {error_text}\n\nPlease check that you have set the OPENAI_API_KEY environment variable with a valid API key."
                 elif request.provider == "bedrock":
                     try:
                         # Get the response and handle it properly using the previously created api_kwargs

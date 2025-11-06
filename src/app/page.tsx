@@ -17,14 +17,7 @@ const DEMO_FLOW_CHART = `graph TD
   B --> C[Architecture Diagrams]
   B --> D[Component Relationships]
   B --> E[Data Flow]
-  B --> F[Process Workflows]
-
-  style A fill:#f9d3a9,stroke:#d86c1f
-  style B fill:#D4A098,stroke:#B8605D
-  style C fill:#a9f9d3,stroke:#1fd86c
-  style D fill:#a9d3f9,stroke:#1f6cd8
-  style E fill:#E8C4C0,stroke:#B8605D
-  style F fill:#d3f9a9,stroke:#6cd81f`;
+  B --> F[Process Workflows]`;
 
 const DEMO_SEQUENCE_CHART = `sequenceDiagram
   participant User
@@ -344,8 +337,6 @@ export default function Home() {
             setIsCustomModel={setIsCustomModel}
             customModel={customModel}
             setCustomModel={setCustomModel}
-            selectedPlatform={selectedPlatform}
-            setSelectedPlatform={setSelectedPlatform}
             excludedDirs={excludedDirs}
             setExcludedDirs={setExcludedDirs}
             excludedFiles={excludedFiles}

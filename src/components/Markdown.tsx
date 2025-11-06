@@ -125,7 +125,7 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
       // Handle Mermaid diagrams
       if (!inline && match && match[1] === 'mermaid') {
         return (
-          <div className="my-8 bg-gray-50 dark:bg-gray-800 rounded-md overflow-hidden shadow-sm">
+          <div className="not-prose my-8 bg-gray-50 dark:bg-gray-800 rounded-md overflow-hidden shadow-sm">
             <Mermaid
               chart={codeContent}
               className="w-full max-w-full"

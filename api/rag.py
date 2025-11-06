@@ -1,7 +1,7 @@
 import logging
 import weakref
 from dataclasses import dataclass
-from typing import List, Tuple, Dict
+from typing import List, Dict
 from uuid import uuid4
 
 import adalflow as adal
@@ -510,7 +510,7 @@ IMPORTANT FORMATTING RULES:
                 logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
             raise
 
-    def call(self, query: str, language: str = "en") -> Tuple[List]:
+    def call(self, query: str, language: str = "en") -> List:
         """
         Process a query using RAG.
 
@@ -535,8 +535,8 @@ IMPORTANT FORMATTING RULES:
             logger.error(f"Error in RAG call: {str(e)}")
 
             # Create error response
-            error_response = RAGAnswer(
-                rationale="Error occurred while processing the query.",
-                answer="I apologize, but I encountered an error while processing your question. Please try again or rephrase your question.",
+            # Preserve structured error logging while returning empty results for callers
+            logger.debug(
+                "Returning empty document list due to RAG error for query: %s", query
             )
-            return error_response, []
+            return []

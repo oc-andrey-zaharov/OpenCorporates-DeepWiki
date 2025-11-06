@@ -3,26 +3,18 @@
 import React from 'react';
 
 interface TokenInputProps {
-  selectedPlatform: 'github';
-  setSelectedPlatform: (value: 'github') => void;
   accessToken: string;
   setAccessToken: (value: string) => void;
   showTokenSection?: boolean;
   onToggleTokenSection?: () => void;
-  allowPlatformChange?: boolean;
 }
 
 export default function TokenInput({
-  selectedPlatform,
-  setSelectedPlatform,
   accessToken,
   setAccessToken,
   showTokenSection = true,
-  onToggleTokenSection,
-  allowPlatformChange = true
+  onToggleTokenSection
 }: TokenInputProps) {
-  const platformName = 'GitHub'; // Fixed to GitHub since we removed platform selection
-
   return (
     <div className="mb-4">
       {onToggleTokenSection && (

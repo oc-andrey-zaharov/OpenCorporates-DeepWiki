@@ -7,8 +7,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file, preferring values in .env
+load_dotenv(override=True)
 
 from api.logging_config import setup_logging
 

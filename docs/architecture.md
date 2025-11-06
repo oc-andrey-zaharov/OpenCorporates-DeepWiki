@@ -19,21 +19,21 @@ This document gives a quick overview of the technologies in use and how the main
 ## High-Level Component View
 
 ```mermaid
-graph TD
-  User[(User Browser)]
-  Frontend[Next.js Frontend<br/>App Router]
-  Backend[FastAPI Backend<br/>Uvicorn]
-  GitProviders[(Git Providers<br/>GitHub)]
-  LLMs[(LLM Providers<br/>Gemini / OpenAI / etc.)]
-  Cache[(Local Cache<br/>Artifacts & Metadata)]
+graph TD;
+  User[(User Browser)];
+  Frontend[Next.js Frontend<br/>App Router];
+  Backend[FastAPI Backend<br/>Uvicorn];
+  GitProviders[(Git Providers<br/>GitHub)];
+  LLMs[(LLM Providers<br/>Gemini / OpenAI / etc.)];
+  Cache[(Local Cache<br/>Artifacts & Metadata)];
 
-  User -->|HTTP(S)| Frontend
-  Frontend -->|fetch /api/...| Backend
-  Backend -->|Repo content| GitProviders
-  Backend -->|Prompts & embeddings| LLMs
-  Backend -->|Read/Write| Cache
-  Backend -->> Frontend: Streamed wiki content
-  Frontend -->> User: Rendered wiki & diagrams
+  User -->|HTTPS| Frontend;
+  Frontend -->|fetch api| Backend;
+  Backend -->|Repo content| GitProviders;
+  Backend -->|Prompts and embeddings| LLMs;
+  Backend -->|Read and Write| Cache;
+  Backend -->|Streamed wiki content| Frontend;
+  Frontend -->|Rendered wiki and diagrams| User;
 ```
 
 ## Wiki Generation Flow

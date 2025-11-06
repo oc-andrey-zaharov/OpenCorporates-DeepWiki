@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import UserSelector from './UserSelector';
 
 interface ConfigurationModalProps {
@@ -23,10 +23,6 @@ interface ConfigurationModalProps {
   setIsCustomModel: (value: boolean) => void;
   customModel: string;
   setCustomModel: (value: string) => void;
-
-  // Platform selection - now only supports GitHub
-  selectedPlatform: 'github';
-  setSelectedPlatform: (value: 'github') => void;
 
   // File filter options
   excludedDirs: string;
@@ -57,8 +53,6 @@ export default function ConfigurationModal({
   setIsCustomModel,
   customModel,
   setCustomModel,
-  selectedPlatform,
-  setSelectedPlatform,
   excludedDirs,
   setExcludedDirs,
   excludedFiles,

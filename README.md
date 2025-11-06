@@ -8,7 +8,6 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 - **Private Repository Support**: Securely access private repositories with tokens
 - **Smart Analysis**: AI-powered code understanding
 - **Beautiful Diagrams**: Automatic Mermaid diagrams for architecture and data flow
-- **Interactive Chat**: Ask questions about your codebase with RAG-powered AI
 - **DeepResearch**: Multi-turn research process for complex topics
 - **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, Azure OpenAI, and local Ollama
 
@@ -108,7 +107,6 @@ Open [http://localhost:3000](http://localhost:3000) and start generating wikis!
 2. For private repos, the system will automatically use `GITHUB_TOKEN` from your `.env` file
 3. Choose your preferred AI model
 4. Click "Generate Wiki"
-5. Use the Ask feature to chat with your codebase
 
 ## Configuration
 

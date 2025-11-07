@@ -25,6 +25,7 @@ wheels/
 *.venv
 # testing
 /coverage
+.pytest_cache/
 
 # misc
 .DS_Store

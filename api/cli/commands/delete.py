@@ -4,7 +4,7 @@ Delete wiki command.
 
 import click
 import requests
-from api.cli.utils import get_cache_path
+from api.cli.utils import get_cache_path, select_wiki_from_list, confirm_action
 
 
 @click.command(name="delete")
@@ -62,28 +62,16 @@ def delete(yes: bool):
         click.echo("No valid cached wikis found.")
         return
 
-    # Display options
-    click.echo("\nAvailable wikis:\n")
-    for wiki in wikis:
-        click.echo(f"  {wiki['index']}. {wiki['name']} ({wiki['repo_type']})")
-
-    # Prompt for selection
-    selection = click.prompt("\nSelect wiki to delete (enter number)", type=int)
-
-    if selection < 1 or selection > len(wikis):
-        click.echo("Invalid selection.")
-        return
-
-    selected_wiki = wikis[selection - 1]
+    # Select wiki using menu
+    selected_wiki = select_wiki_from_list(wikis, "Select wiki to delete")
 
     # Confirm deletion
     if not yes:
-        confirm = click.confirm(
+        if not confirm_action(
             f"\nAre you sure you want to delete '{selected_wiki['name']}' "
             f"({selected_wiki['repo_type']})?",
             default=False,
-        )
-        if not confirm:
+        ):
             click.echo("Deletion cancelled.")
             return
 

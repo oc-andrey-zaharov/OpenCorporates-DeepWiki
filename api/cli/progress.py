@@ -40,7 +40,12 @@ class ProgressManager:
         self.total = total
         self.completed = 0
         self.overall_bar = self.manager.counter(
-            total=total, desc=desc, unit="pages", color="green"
+            total=total,
+            desc=desc,
+            unit="pages",
+            color="green",
+            autorefresh=True,
+            min_delta=0.1,
         )
 
     def add_page_progress(self, page_id: str, page_title: str) -> enlighten.Counter:
@@ -61,7 +66,13 @@ class ProgressManager:
         display_title = page_title[:40] + "..." if len(page_title) > 40 else page_title
 
         counter = self.manager.counter(
-            total=100, desc=f"  {display_title}", unit="%", color="cyan", leave=False
+            total=100,
+            desc=f"  {display_title}",
+            unit="%",
+            color="cyan",
+            leave=False,
+            autorefresh=True,
+            min_delta=0.1,
         )
         self.page_bars[page_id] = counter
         return counter

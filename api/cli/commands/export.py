@@ -6,7 +6,7 @@ import os
 import json
 import click
 from datetime import datetime
-from api.cli.utils import get_cache_path
+from api.cli.utils import get_cache_path, select_from_list, select_wiki_from_list
 from api.server import generate_markdown_export, generate_json_export, WikiPage
 
 
@@ -15,7 +15,6 @@ from api.server import generate_markdown_export, generate_json_export, WikiPage
     "--format",
     "-f",
     type=click.Choice(["markdown", "json"], case_sensitive=False),
-    prompt="Export format",
     help="Export format (markdown or json)",
 )
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
@@ -68,19 +67,16 @@ def export(format: str, output: str):
         click.echo("No valid cached wikis found.")
         return
 
-    # Display options
-    click.echo("\nAvailable wikis:\n")
-    for wiki in wikis:
-        click.echo(f"  {wiki['index']}. {wiki['name']} ({wiki['repo_type']})")
+    # Select wiki using menu
+    selected_wiki = select_wiki_from_list(wikis, "Select wiki to export")
 
-    # Prompt for selection
-    selection = click.prompt("\nSelect wiki to export (enter number)", type=int)
-
-    if selection < 1 or selection > len(wikis):
-        click.echo("Invalid selection.")
-        return
-
-    selected_wiki = wikis[selection - 1]
+    # Prompt for format if not provided
+    if not format:
+        format = select_from_list(
+            "Select export format",
+            ["markdown", "json"],
+            default="markdown",
+        )
 
     # Load the wiki cache
     try:

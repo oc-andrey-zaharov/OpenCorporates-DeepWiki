@@ -5,6 +5,7 @@ Wiki generation command.
 import os
 import sys
 import json
+import time
 import click
 import logging
 from typing import Dict, Optional, List
@@ -15,6 +16,8 @@ from api.cli.utils import (
     get_cache_path,
     ensure_cache_dir,
     select_from_list,
+    confirm_action,
+    prompt_text_input,
 )
 from api.cli.progress import ProgressManager
 from api.rag import RAG
@@ -40,7 +43,9 @@ def prompt_repository() -> tuple:
     click.echo("  • Local directory path: /path/to/repo")
 
     while True:
-        repo_input = click.prompt("\nEnter repository", type=str)
+        repo_input = prompt_text_input(
+            "\nEnter repository", default="", show_default=False
+        )
 
         try:
             repo_type, repo_url_or_path, owner, repo_name = parse_repository_input(
@@ -50,7 +55,7 @@ def prompt_repository() -> tuple:
             return repo_type, repo_url_or_path, owner, repo_name
         except ValueError as e:
             click.echo(f"✗ {e}", err=True)
-            if not click.confirm("Try again?", default=True):
+            if not confirm_action("Try again?", default=True):
                 raise click.Abort()
 
 
@@ -104,7 +109,7 @@ def prompt_model_config(config: Dict) -> tuple:
     else:
         # No predefined models, must enter custom
         click.echo(f"\nNo predefined models configured for {provider}.")
-        model = click.prompt("Enter model name", type=str)
+        model = prompt_text_input("Enter model name", default="", show_default=False)
 
     if not model:
         click.echo("✗ Model name is required.", err=True)
@@ -112,7 +117,7 @@ def prompt_model_config(config: Dict) -> tuple:
 
     # Warn if custom model is used
     if available_models and model not in available_models:
-        if not click.confirm(
+        if not confirm_action(
             f"⚠ '{model}' is not in the predefined list. Continue anyway?",
             default=True,
         ):
@@ -138,10 +143,13 @@ def prompt_wiki_type(config: Dict) -> bool:
     click.echo("\n  • Comprehensive: More pages with detailed sections (recommended)")
     click.echo("  • Concise: Fewer pages with essential information")
 
-    is_comprehensive = click.confirm(
-        "\nGenerate comprehensive wiki?", default=default_comprehensive
+    wiki_type_choice = select_from_list(
+        "\nSelect wiki type",
+        ["Comprehensive", "Concise"],
+        default="Comprehensive" if default_comprehensive else "Concise",
     )
 
+    is_comprehensive = wiki_type_choice == "Comprehensive"
     wiki_type = "comprehensive" if is_comprehensive else "concise"
     click.echo(f"✓ Wiki type: {wiki_type}")
     return is_comprehensive
@@ -158,39 +166,45 @@ def prompt_file_filters() -> tuple:
     click.echo("File Filters (Optional)")
     click.echo("=" * 60)
 
-    use_filters = click.confirm("\nConfigure file filters?", default=False)
+    use_filters = confirm_action("\nConfigure file filters?", default=False)
 
     if not use_filters:
         return None, None, None, None
 
     click.echo("\nEnter patterns (comma-separated) or leave empty:")
 
-    excluded_dirs = click.prompt("Exclude directories", default="", show_default=False)
-    excluded_files = click.prompt("Exclude files", default="", show_default=False)
-    included_dirs = click.prompt(
+    excluded_dirs_input = prompt_text_input(
+        "Exclude directories", default="", show_default=False
+    )
+    excluded_files_input = prompt_text_input(
+        "Exclude files", default="", show_default=False
+    )
+    included_dirs_input = prompt_text_input(
         "Include only directories", default="", show_default=False
     )
-    included_files = click.prompt("Include only files", default="", show_default=False)
+    included_files_input = prompt_text_input(
+        "Include only files", default="", show_default=False
+    )
 
     # Parse comma-separated values
     excluded_dirs = (
-        [d.strip() for d in excluded_dirs.split(",") if d.strip()]
-        if excluded_dirs
+        [d.strip() for d in excluded_dirs_input.split(",") if d.strip()]
+        if excluded_dirs_input
         else None
     )
     excluded_files = (
-        [f.strip() for f in excluded_files.split(",") if f.strip()]
-        if excluded_files
+        [f.strip() for f in excluded_files_input.split(",") if f.strip()]
+        if excluded_files_input
         else None
     )
     included_dirs = (
-        [d.strip() for d in included_dirs.split(",") if d.strip()]
-        if included_dirs
+        [d.strip() for d in included_dirs_input.split(",") if d.strip()]
+        if included_dirs_input
         else None
     )
     included_files = (
-        [f.strip() for f in included_files.split(",") if f.strip()]
-        if included_files
+        [f.strip() for f in included_files_input.split(",") if f.strip()]
+        if included_files_input
         else None
     )
 
@@ -545,13 +559,50 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
             logger.error(f"Error generating page {page_title}: {response.status_code}")
             return None
 
-        # Collect streamed content
+        # Collect streamed content with incremental progress updates
         content = ""
+        chunk_count = 0
+        start_time = time.time()
+        last_update_time = start_time
+        last_progress = 50
+
         for line in response.iter_content(chunk_size=1024, decode_unicode=True):
             if line:
                 content += line.decode("utf-8") if isinstance(line, bytes) else line
+                chunk_count += 1
+                current_time = time.time()
+                elapsed = current_time - start_time
 
-        page_bar.update(90)  # Content received
+                # Update progress smoothly based on time and content received
+                # Gradually move from 50% to 90% over time as we receive chunks
+                # Use a combination of time-based and content-based progress
+                if elapsed > 0:
+                    # Time-based progress: assume it takes ~30 seconds to stream
+                    # This ensures progress moves even if chunks arrive slowly
+                    time_progress = min(50 + (elapsed / 30.0) * 40, 90)
+
+                    # Content-based progress: move faster if we're receiving chunks
+                    content_progress = min(50 + (chunk_count / 50.0) * 40, 90)
+
+                    # Use the maximum of both to ensure progress moves
+                    target_progress = max(
+                        time_progress, content_progress, last_progress
+                    )
+                    target_progress = min(target_progress, 90)
+
+                    # Update every 0.2 seconds or when we've made significant progress
+                    if (current_time - last_update_time >= 0.2) or (
+                        target_progress - last_progress >= 1
+                    ):
+                        progress_delta = int(target_progress - last_progress)
+                        if progress_delta > 0:
+                            page_bar.update(progress_delta)
+                            last_progress = page_bar.count
+                            last_update_time = current_time
+
+        # Ensure we're at 90% when content is fully received
+        if page_bar.count < 90:
+            page_bar.update(90 - page_bar.count)
 
         # Clean up content
         content = content.strip()

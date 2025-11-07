@@ -33,7 +33,7 @@ azure-identity = ">=1.12.0"
 azure-core = ">=1.24.0"
 click = "^8.3.0"
 enlighten = "^1.14.1"
-simple-term-menu = "^1.6.0"
+simple-term-menu = "^1.6.6"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

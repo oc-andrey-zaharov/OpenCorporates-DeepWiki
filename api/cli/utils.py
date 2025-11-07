@@ -275,3 +275,184 @@ def select_from_list(
 
         click.echo("\n✗ Selection cancelled.", err=True)
         sys.exit(1)
+
+
+def confirm_action(
+    prompt_text: str,
+    default: bool = True,
+) -> bool:
+    """
+    Interactive yes/no confirmation using arrow keys (simple-term-menu).
+
+    Args:
+        prompt_text: The prompt/question to display.
+        default: Default choice (True for Yes, False for No).
+
+    Returns:
+        True if Yes selected, False if No selected.
+    """
+    choices = ["Yes", "No"]
+    default_index = 0 if default else 1
+
+    if not SIMPLE_TERM_MENU_AVAILABLE:
+        # Fallback to basic prompt if simple-term-menu is not available
+        import click
+
+        return click.confirm(prompt_text, default=default)
+
+    try:
+        terminal_menu = TerminalMenu(
+            choices,
+            title=prompt_text,
+            cursor_index=default_index,
+            clear_screen=False,
+        )
+
+        selected_index = terminal_menu.show()
+
+        if selected_index is None:
+            import click
+
+            click.echo("\n✗ Selection cancelled.", err=True)
+            sys.exit(1)
+
+        return selected_index == 0  # 0 = Yes, 1 = No
+
+    except KeyboardInterrupt:
+        import click
+
+        click.echo("\n✗ Selection cancelled.", err=True)
+        sys.exit(1)
+
+
+def prompt_text_input(
+    prompt_text: str,
+    default: Optional[str] = None,
+    show_default: bool = True,
+) -> str:
+    """
+    Prompt for text input with optional menu-based type selection.
+    For repository input, shows a menu to select input type first.
+
+    Args:
+        prompt_text: The prompt/question to display.
+        default: Default value (optional).
+        show_default: Whether to show the default value.
+
+    Returns:
+        User input string.
+    """
+    import click
+
+    # For repository input, show input type menu first
+    if "repository" in prompt_text.lower() or "repo" in prompt_text.lower():
+        input_types = [
+            "GitHub URL (https://github.com/owner/repo)",
+            "GitHub shorthand (owner/repo)",
+            "Local directory path",
+        ]
+
+        if not SIMPLE_TERM_MENU_AVAILABLE:
+            # Fallback to direct prompt
+            return click.prompt(prompt_text, default=default, show_default=show_default)
+
+        try:
+            terminal_menu = TerminalMenu(
+                input_types,
+                title="Select repository input type",
+                clear_screen=False,
+            )
+
+            selected_index = terminal_menu.show()
+
+            if selected_index is None:
+                click.echo("\n✗ Selection cancelled.", err=True)
+                sys.exit(1)
+
+            # Show appropriate hint based on selection
+            hints = {
+                0: "Enter GitHub URL (e.g., https://github.com/owner/repo)",
+                1: "Enter GitHub shorthand (e.g., owner/repo)",
+                2: "Enter local directory path (e.g., /path/to/repo)",
+            }
+            click.echo(f"\n{hints[selected_index]}")
+
+        except KeyboardInterrupt:
+            click.echo("\n✗ Selection cancelled.", err=True)
+            sys.exit(1)
+
+    # Get text input
+    return click.prompt(prompt_text, default=default, show_default=show_default)
+
+
+def select_wiki_from_list(
+    wikis: List[dict],
+    prompt_text: str = "Select wiki",
+) -> dict:
+    """
+    Display wikis in a menu format for selection.
+
+    Args:
+        wikis: List of wiki dictionaries, each containing at least 'index' and 'name' keys.
+        prompt_text: Prompt text to display.
+
+    Returns:
+        Selected wiki dictionary.
+
+    Raises:
+        ValueError: If wikis list is empty.
+    """
+    if not wikis:
+        raise ValueError("No wikis provided")
+
+    import click
+
+    # Format wiki display strings
+    display_choices = []
+    for wiki in wikis:
+        index = wiki.get("index", wikis.index(wiki) + 1)
+        name = wiki.get("name", "Unknown")
+        repo_type = wiki.get("repo_type", "")
+        display_str = f"{index}. {name}"
+        if repo_type:
+            display_str += f" ({repo_type})"
+        display_choices.append(display_str)
+
+    if not SIMPLE_TERM_MENU_AVAILABLE:
+        # Fallback to basic prompt
+        click.echo(f"\n{prompt_text}")
+        for choice in display_choices:
+            click.echo(f"  {choice}")
+
+        while True:
+            try:
+                selection = click.prompt("\nSelect wiki (enter number)", type=int)
+                if 1 <= selection <= len(wikis):
+                    return wikis[selection - 1]
+                else:
+                    click.echo(f"✗ Invalid selection. Please choose 1-{len(wikis)}")
+            except click.Abort:
+                raise
+            except (ValueError, TypeError):
+                click.echo(
+                    f"✗ Invalid input. Please enter a number between 1 and {len(wikis)}"
+                )
+
+    try:
+        terminal_menu = TerminalMenu(
+            display_choices,
+            title=prompt_text,
+            clear_screen=False,
+        )
+
+        selected_index = terminal_menu.show()
+
+        if selected_index is None:
+            click.echo("\n✗ Selection cancelled.", err=True)
+            sys.exit(1)
+
+        return wikis[selected_index]
+
+    except KeyboardInterrupt:
+        click.echo("\n✗ Selection cancelled.", err=True)
+        sys.exit(1)

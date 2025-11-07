@@ -24,8 +24,9 @@ help:
 	@echo "  make test/api         - Run API tests only"
 	@echo ""
 	@echo "CLI:"
-	@echo "  make cli              - Run DeepWiki CLI (pass arguments after '--')"
-	@echo "                        Example: make cli -- wiki list"
+	@echo "  make cli [COMMAND]    - Run DeepWiki CLI command"
+	@echo "                        Example: make cli generate"
+	@echo "                        Example: make cli list"
 	@echo ""
 
 # Install backend dependencies
@@ -91,4 +92,8 @@ test/api:
 
 # Run CLI tool
 cli:
-	@./deepwiki $(ARGS)
+	@./deepwiki $(filter-out $@,$(MAKECMDGOALS))
+
+# Catch-all target to prevent Make from treating CLI arguments as targets
+%:
+	@:

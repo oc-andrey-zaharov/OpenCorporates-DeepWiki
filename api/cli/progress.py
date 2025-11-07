@@ -80,6 +80,8 @@ class ProgressManager:
     def update_page_progress(self, page_id: str, progress: int):
         """Update progress for a specific page."""
         if page_id in self.page_bars:
+            # Clamp progress to valid range
+            progress = max(0, min(100, progress))
             self.page_bars[page_id].update(progress - self.page_bars[page_id].count)
 
     def complete_page(self, page_id: str):
@@ -130,4 +132,3 @@ class SimpleProgressBar:
     def close(self):
         """Close the progress bar."""
         self.bar.close()
-        self.manager.stop()

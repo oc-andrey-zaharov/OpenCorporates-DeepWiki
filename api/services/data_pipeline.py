@@ -14,7 +14,7 @@ from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.db import LocalDB
 from api.config import configs, DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES
 from api.ollama_patch import OllamaDocumentProcessor
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 import requests
 from requests.exceptions import RequestException
 
@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 # Maximum token limit for OpenAI embedding models
 MAX_EMBEDDING_TOKENS = 8192
+
+# Multiplier for code files token limit (configurable via configs)
+# Default to 2 for safety, but can be overridden in config
+CODE_FILE_TOKEN_MULTIPLIER = 2
 
 
 # Cache encoding objects to avoid repeated initialization
@@ -126,6 +130,66 @@ def count_tokens_batch(
         return [count_tokens(text, embedder_type) for text in texts]
 
 
+def _chunk_file_content(
+    content: str,
+    relative_path: str,
+    ext: str,
+    is_code: bool,
+    is_implementation: bool,
+    embedder_type: str,
+    max_chunk_tokens: int,
+) -> List[Document]:
+    """
+    Chunk a file's content into multiple documents that fit within the token limit.
+
+    Args:
+        content: The file content to chunk
+        relative_path: Relative path of the file
+        ext: File extension
+        is_code: Whether this is a code file
+        is_implementation: Whether this is an implementation file
+        embedder_type: Embedder type for token counting
+        max_chunk_tokens: Maximum tokens per chunk
+
+    Returns:
+        List of Document objects, one per chunk
+    """
+    encoding = _get_encoding(embedder_type)
+    encoded_tokens = encoding.encode(content)
+
+    chunks = []
+    chunk_index = 0
+
+    # Split into chunks of max_chunk_tokens
+    for i in range(0, len(encoded_tokens), max_chunk_tokens):
+        chunk_tokens = encoded_tokens[i : i + max_chunk_tokens]
+        chunk_text = encoding.decode(chunk_tokens)
+        chunk_token_count = len(chunk_tokens)
+
+        # Create document for this chunk
+        chunk_doc = Document(
+            text=chunk_text,
+            meta_data={
+                "file_path": relative_path,
+                "type": ext[1:],
+                "is_code": is_code,
+                "is_implementation": is_implementation,
+                "title": f"{relative_path} (chunk {chunk_index + 1})",
+                "token_count": chunk_token_count,
+                "chunk_index": chunk_index,
+                "is_chunked": True,
+            },
+        )
+        chunks.append(chunk_doc)
+        chunk_index += 1
+
+    logger.info(
+        f"Chunked {relative_path} into {len(chunks)} chunks "
+        f"(max {max_chunk_tokens} tokens each)"
+    )
+    return chunks
+
+
 def download_repo(
     repo_url: str, local_path: str, repo_type: str = None, access_token: str = None
 ) -> str:
@@ -162,42 +226,99 @@ def download_repo(
         # Ensure the local path exists
         os.makedirs(local_path, exist_ok=True)
 
-        # Prepare the clone URL with access token if provided
+        # Build token-less clone URL (never embed token in URL for security)
         clone_url = repo_url
-        if access_token:
-            parsed = urlparse(repo_url)
-            # Format: https://{token}@{domain}/owner/repo.git
-            # Works for both github.com and enterprise GitHub domains
-            clone_url = urlunparse(
-                (
-                    parsed.scheme,
-                    f"{access_token}@{parsed.netloc}",
-                    parsed.path,
-                    "",
-                    "",
-                    "",
-                )
-            )
-            logger.info("Using access token for authentication")
+        logger.info(f"Cloning repository to {local_path}")
 
-        # Clone the repository
-        logger.info(f"Cloning repository from {repo_url} to {local_path}")
-        # We use repo_url in the log to avoid exposing the token in logs
-        result = subprocess.run(
-            ["git", "clone", "--depth=1", "--single-branch", clone_url, local_path],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        # Prepare environment for Git with credential helper if token is provided
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"  # Disable terminal prompts
+
+        # If access token is provided, use Git credential helper to supply credentials securely
+        # This avoids embedding the token in command arguments or URLs
+        if access_token:
+            logger.info("Using access token for authentication via credential helper")
+
+            # Create a Git credential helper script that provides the token securely
+            # Git credential helper protocol: reads protocol, host, path from stdin
+            # and outputs username=value and password=value
+            import tempfile
+            import stat
+
+            # Create a temporary credential helper script
+            credential_script = tempfile.NamedTemporaryFile(
+                mode="w", delete=False, suffix=".sh"
+            )
+            # For GitHub HTTPS, use token as username with empty password
+            # The script reads Git's credential request and outputs credentials
+            credential_script.write(f"""#!/bin/sh
+# Git credential helper - reads protocol, host, path and outputs credentials
+read protocol
+read host
+read path
+read
+echo username={access_token}
+echo password=
+""")
+            credential_script.close()
+
+            # Make it executable
+            os.chmod(credential_script.name, stat.S_IRUSR | stat.S_IXUSR)
+
+            # Configure Git to use our credential helper
+            # Use absolute path to avoid PATH issues and ensure security
+            env["GIT_CREDENTIAL_HELPER"] = f"!{credential_script.name}"
+
+            # Also set GIT_ASKPASS as fallback (though credential helper should handle HTTPS)
+            env["GIT_ASKPASS"] = credential_script.name
+
+            try:
+                # Clone the repository with safe environment (token not in argv)
+                result = subprocess.run(
+                    [
+                        "git",
+                        "clone",
+                        "--depth=1",
+                        "--single-branch",
+                        clone_url,
+                        local_path,
+                    ],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=env,
+                )
+            finally:
+                # Clean up the temporary credential helper script
+                try:
+                    os.unlink(credential_script.name)
+                except OSError:
+                    pass
+        else:
+            # No token, clone normally
+            result = subprocess.run(
+                ["git", "clone", "--depth=1", "--single-branch", clone_url, local_path],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+            )
 
         logger.info("Repository cloned successfully")
         return result.stdout.decode("utf-8")
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode("utf-8")
-        # Sanitize error message to remove any tokens
-        if access_token and access_token in error_msg:
+        # Sanitize error message to remove any tokens that might have leaked
+        if access_token:
+            # Remove token from error message if it somehow appears
             error_msg = error_msg.replace(access_token, "***TOKEN***")
+            # Also check for token-like patterns in URLs
+            import re
+
+            # Pattern to match tokens in URLs (e.g., https://token@domain)
+            url_token_pattern = re.compile(r"https?://[^@]+@")
+            error_msg = url_token_pattern.sub("https://***TOKEN***@", error_msg)
         raise ValueError(f"Error during cloning: {error_msg}")
     except Exception as e:
         raise ValueError(f"An unexpected error occurred: {str(e)}")
@@ -391,9 +512,10 @@ def read_all_documents(
 
     def read_single_file(
         file_path: str, ext: str, is_code: bool, path: str, embedder_type: str
-    ) -> Optional[Document]:
+    ) -> Optional[List[Document]]:
         """
-        Read a single file and return a Document object if successful.
+        Read a single file and return Document object(s). May return multiple
+        documents if the file needs to be chunked.
 
         Args:
             file_path: Full path to the file
@@ -403,12 +525,23 @@ def read_all_documents(
             embedder_type: Embedder type for token counting
 
         Returns:
-            Document object or None if file should be skipped
+            List of Document objects (or None if file should be skipped)
+            Note: Returns a list to support chunking, but typically contains one document
         """
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 relative_path = os.path.relpath(file_path, path)
+
+                # Get configurable multiplier from configs, fallback to default
+                multiplier = CODE_FILE_TOKEN_MULTIPLIER
+                if "code_file_token_multiplier" in configs:
+                    multiplier = configs["code_file_token_multiplier"]
+                elif (
+                    "file_filters" in configs
+                    and "code_file_token_multiplier" in configs.get("file_filters", {})
+                ):
+                    multiplier = configs["file_filters"]["code_file_token_multiplier"]
 
                 if is_code:
                     # Determine if this is an implementation file
@@ -417,19 +550,30 @@ def read_all_documents(
                         and not relative_path.startswith("app_")
                         and "test" not in relative_path.lower()
                     )
-                    max_tokens = MAX_EMBEDDING_TOKENS * 10
+                    max_tokens = MAX_EMBEDDING_TOKENS * multiplier
                 else:
                     is_implementation = False
                     max_tokens = MAX_EMBEDDING_TOKENS
 
                 # Check token count
                 token_count = count_tokens(content, embedder_type)
-                if token_count > max_tokens:
-                    logger.warning(
-                        f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit"
-                    )
-                    return None
 
+                # If file exceeds max tokens, chunk it into embedding-sized pieces
+                if token_count > max_tokens:
+                    logger.info(
+                        f"Chunking large file {relative_path}: Token count ({token_count}) exceeds limit ({max_tokens})"
+                    )
+                    return _chunk_file_content(
+                        content=content,
+                        relative_path=relative_path,
+                        ext=ext,
+                        is_code=is_code,
+                        is_implementation=is_implementation,
+                        embedder_type=embedder_type,
+                        max_chunk_tokens=MAX_EMBEDDING_TOKENS,
+                    )
+
+                # File fits within limit, return single document
                 doc = Document(
                     text=content,
                     meta_data={
@@ -441,7 +585,7 @@ def read_all_documents(
                         "token_count": token_count,
                     },
                 )
-                return doc
+                return [doc]
         except Exception as e:
             logger.error(f"Error reading {file_path}: {e}")
             return None
@@ -495,9 +639,14 @@ def read_all_documents(
         for future in as_completed(future_to_file):
             file_path, ext, is_code = future_to_file[future]
             try:
-                doc = future.result()
-                if doc is not None:
-                    documents.append(doc)
+                result = future.result()
+                if result is not None:
+                    # read_single_file now returns a list (for chunking support)
+                    if isinstance(result, list):
+                        documents.extend(result)
+                    else:
+                        # Backward compatibility: handle single Document if returned
+                        documents.append(result)
             except Exception as e:
                 logger.error(f"Error processing {file_path}: {e}")
 
@@ -965,15 +1114,23 @@ class DatabaseManager:
                                 )
 
                                 # Combine unchanged and new/updated documents
+                                # Note: Both unchanged_files and transformed_new are already transformed,
+                                # so we should not call transform() again to avoid double-embedding
                                 all_documents = unchanged_files + transformed_new
 
                                 # Rebuild database with all documents
+                                # Since all documents are already transformed, we load them directly
+                                # without calling transform() again
                                 self.db = LocalDB()
                                 self.db.register_transformer(
                                     transformer=data_transformer, key="split_and_embed"
                                 )
+                                # Load already-transformed documents without re-transforming
+                                # We use load() to add them to the database, but skip transform()
+                                # since they're already transformed
                                 self.db.load(all_documents)
-                                self.db.transform(key="split_and_embed")
+                                # Skip transform() - documents are already transformed
+                                # This prevents double-embedding of unchanged_files
                                 self.db.save_state(
                                     filepath=self.repo_paths["save_db_file"]
                                 )

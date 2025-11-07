@@ -199,14 +199,19 @@ def is_ollama_embedder():
     if not embedder_config:
         return False
 
-    # Check if model_client is OllamaClient
+    # First check client_class string (more reliable)
+    client_class = embedder_config.get("client_class", "")
+    if client_class == "OllamaClient":
+        return True
+
+    # Fallback: check if model_client is OllamaClient
     model_client = embedder_config.get("model_client")
     if model_client:
-        return model_client.__name__ == "OllamaClient"
+        # Safely access __name__ attribute (handles MagicMock and other cases)
+        client_name = getattr(model_client, "__name__", None)
+        return client_name == "OllamaClient"
 
-    # Fallback: check client_class string
-    client_class = embedder_config.get("client_class", "")
-    return client_class == "OllamaClient"
+    return False
 
 
 def is_google_embedder():
@@ -220,14 +225,19 @@ def is_google_embedder():
     if not embedder_config:
         return False
 
-    # Check if model_client is GoogleEmbedderClient
+    # First check client_class string (more reliable)
+    client_class = embedder_config.get("client_class", "")
+    if client_class == "GoogleEmbedderClient":
+        return True
+
+    # Fallback: check if model_client is GoogleEmbedderClient
     model_client = embedder_config.get("model_client")
     if model_client:
-        return model_client.__name__ == "GoogleEmbedderClient"
+        # Safely access __name__ attribute (handles MagicMock and other cases)
+        client_name = getattr(model_client, "__name__", None)
+        return client_name == "GoogleEmbedderClient"
 
-    # Fallback: check client_class string
-    client_class = embedder_config.get("client_class", "")
-    return client_class == "GoogleEmbedderClient"
+    return False
 
 
 def get_embedder_type():

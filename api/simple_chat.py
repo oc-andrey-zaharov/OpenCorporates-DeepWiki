@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 from urllib.parse import unquote
 
@@ -18,8 +16,31 @@ from api.core.chat import generate_chat_completion_core
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Thread pool executor for running blocking sync generators
-executor = ThreadPoolExecutor(max_workers=10)
+
+def _is_truthy(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED"))
+
+
+def _extract_chat_completion_text(completion) -> Optional[str]:
+    try:
+        choices = getattr(completion, "choices", [])
+        if choices:
+            first_choice = choices[0]
+            message = getattr(first_choice, "message", None)
+            if message and hasattr(message, "content"):
+                return message.content
+            delta = getattr(first_choice, "delta", None)
+            if delta and hasattr(delta, "content"):
+                return delta.content
+        return getattr(completion, "content", None)
+    except Exception as exc:
+        logger.warning(f"Failed to extract text from completion: {exc}")
+        return None
 
 
 # Initialize FastAPI app
@@ -27,81 +48,13 @@ app = FastAPI(
     title="Simple Chat API", description="Simplified API for streaming chat completions"
 )
 
-
-def _parse_cors_origins() -> List[str]:
-    """Parse ALLOWED_ORIGINS env var or fallback to localhost dev values."""
-    origins_env = os.environ.get("ALLOWED_ORIGINS")
-    if origins_env:
-        origins = [
-            origin.strip() for origin in origins_env.split(",") if origin.strip()
-        ]
-        if origins:
-            return origins
-    # Fallback to localhost dev values
-    return [
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-    ]
-
-
-def _parse_cors_methods() -> List[str]:
-    """Parse ALLOWED_METHODS env var or return default."""
-    methods_env = os.environ.get("ALLOWED_METHODS")
-    if methods_env:
-        methods = [
-            method.strip() for method in methods_env.split(",") if method.strip()
-        ]
-        if methods:
-            return methods
-    return ["*"]
-
-
-def _parse_cors_headers() -> List[str]:
-    """Parse ALLOWED_HEADERS env var or return default."""
-    headers_env = os.environ.get("ALLOWED_HEADERS")
-    if headers_env:
-        headers = [
-            header.strip() for header in headers_env.split(",") if header.strip()
-        ]
-        if headers:
-            return headers
-    return ["*"]
-
-
 # Configure CORS
-cors_origins = _parse_cors_origins()
-cors_methods = _parse_cors_methods()
-cors_headers = _parse_cors_headers()
-
-# Validate: allow_credentials=True with wildcard origins is not allowed
-cors_allow_credentials = os.environ.get("CORS_ALLOW_CREDENTIALS", "true").lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-
-# Check for wildcards in origins
-has_wildcard_origins = "*" in cors_origins or any(
-    "*" in origin for origin in cors_origins
-)
-
-if cors_allow_credentials and has_wildcard_origins:
-    error_msg = (
-        "CORS configuration error: allow_credentials=True cannot be used with wildcard origins. "
-        "Set CORS_ALLOW_CREDENTIALS=false or provide specific origins in ALLOWED_ORIGINS."
-    )
-    logger.error(error_msg)
-    raise ValueError(error_msg)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=cors_allow_credentials,
-    allow_methods=cors_methods,
-    allow_headers=cors_headers,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 
@@ -141,18 +94,17 @@ class ChatCompletionRequest(BaseModel):
     )
     excluded_dirs: Optional[str] = Field(
         None,
-        description="Newline-separated list of directories to exclude from processing",
+        description="Comma-separated list of directories to exclude from processing",
     )
     excluded_files: Optional[str] = Field(
         None,
-        description="Newline-separated list of file patterns to exclude from processing",
+        description="Comma-separated list of file patterns to exclude from processing",
     )
     included_dirs: Optional[str] = Field(
-        None, description="Newline-separated list of directories to include exclusively"
+        None, description="Comma-separated list of directories to include exclusively"
     )
     included_files: Optional[str] = Field(
-        None,
-        description="Newline-separated list of file patterns to include exclusively",
+        None, description="Comma-separated list of file patterns to include exclusively"
     )
 
 
@@ -216,15 +168,9 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         )
 
         # Convert sync generator to async generator for FastAPI StreamingResponse
-        # Run blocking sync generator in thread pool to avoid blocking event loop
         async def async_stream():
-            loop = asyncio.get_event_loop()
-            while True:
-                try:
-                    chunk = await loop.run_in_executor(executor, next, sync_gen)
-                    yield chunk
-                except StopIteration:
-                    break
+            for chunk in sync_gen:
+                yield chunk
 
         # Return streaming response
         return StreamingResponse(async_stream(), media_type="text/event-stream")

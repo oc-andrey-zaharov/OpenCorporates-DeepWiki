@@ -160,7 +160,7 @@ def generate_chat_completion_core(
             logger.info(f"Request size: {tokens} tokens")
             if tokens > 8000:
                 logger.warning(
-                    f"Request exceeds recommended token limit ({tokens} > 7500)"
+                    f"Request exceeds recommended token limit ({tokens} > 8000)"
                 )
                 input_too_large = True
 

@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 This release represents a major architectural change. See `docs/migration-guide.md` for detailed migration instructions.
 
 Key changes:
+
 - Web UI removed - use CLI instead
 - Frontend dependencies removed - only Python required
 - Default mode is standalone - no server needed
@@ -64,4 +65,3 @@ Key changes:
 ## Previous Versions
 
 Previous versions included a Next.js frontend. This has been completely removed in favor of a CLI-first approach.
-

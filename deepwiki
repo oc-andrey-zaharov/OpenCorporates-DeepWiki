@@ -5,16 +5,20 @@
 
 # Get the directory where this script is located (project root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_DIR="$SCRIPT_DIR/api"
 
-# Check if api directory exists
-if [ ! -d "$API_DIR" ]; then
-    echo "Error: api directory not found at $API_DIR" >&2
+# Check if pyproject.toml exists in root
+if [ ! -f "$SCRIPT_DIR/pyproject.toml" ]; then
+    echo "Error: pyproject.toml not found at $SCRIPT_DIR" >&2
     exit 1
 fi
 
-# Change to the API directory where poetry.toml is located
-cd "$API_DIR" || exit 1
+# Stay in the project root where pyproject.toml is located
+cd "$SCRIPT_DIR" || exit 1
+
+# Ensure dependencies are installed (poetry install is idempotent)
+poetry install --no-interaction --quiet > /dev/null 2>&1 || {
+    echo "Warning: Failed to install dependencies. Continuing anyway..." >&2
+}
 
 # Run deepwiki through poetry
 poetry run deepwiki "$@"

@@ -32,6 +32,30 @@ def ensure_config_dir():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Deep merge two dictionaries recursively.
+
+    Args:
+        base: Base dictionary (defaults)
+        override: Dictionary with values to override
+
+    Returns:
+        New dictionary with merged values. Nested dicts are merged recursively.
+    """
+    result = base.copy()
+
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            # Both are dicts, merge recursively
+            result[key] = _deep_merge(result[key], value)
+        else:
+            # Override with new value
+            result[key] = value
+
+    return result
+
+
 def load_config() -> Dict[str, Any]:
     """
     Load configuration from file.
@@ -45,9 +69,8 @@ def load_config() -> Dict[str, Any]:
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
-            # Merge with defaults to ensure all keys exist
-            merged = DEFAULT_CONFIG.copy()
-            merged.update(config)
+            # Deep merge with defaults to ensure all keys exist
+            merged = _deep_merge(DEFAULT_CONFIG, config)
             return merged
     except Exception as e:
         logger.warning(f"Error loading config file: {e}. Using defaults.")
@@ -104,15 +127,29 @@ def set_config_value(key: str, value: Any):
     Args:
         key: Configuration key (supports nested keys with dots)
         value: Value to set
+
+    Raises:
+        TypeError: If an intermediate key exists but is not a dict
     """
     config = load_config()
 
     # Support nested keys
     keys = key.split(".")
     target = config
+    path_parts = []
+
     for k in keys[:-1]:
+        path_parts.append(k)
         if k not in target:
+            # Create empty dict for missing intermediate key
             target[k] = {}
+        elif not isinstance(target[k], dict):
+            # Intermediate key exists but is not a dict - config is malformed
+            path = ".".join(path_parts)
+            raise TypeError(
+                f"Configuration key '{path}' exists but is not a dictionary. "
+                f"Cannot set nested key '{key}'. Current value type: {type(target[k]).__name__}"
+            )
         target = target[k]
 
     target[keys[-1]] = value

@@ -7,8 +7,17 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-# Load environment variables from .env file, preferring values in .env
-load_dotenv(override=True)
+# Check if we're in development mode (before loading .env)
+# Check common environment variable names: ENVIRONMENT, ENV, NODE_ENV
+env_value = (
+    os.environ.get("ENVIRONMENT") or os.environ.get("ENV") or os.environ.get("NODE_ENV")
+)
+is_development = env_value != "production"
+
+# Load environment variables from .env file
+# In development, .env values override environment variables
+# In production, environment variables take precedence (deployment-provided)
+load_dotenv(override=is_development)
 
 from api.logging_config import setup_logging
 
@@ -19,9 +28,6 @@ logger = logging.getLogger(__name__)
 # Configure watchfiles logger to show file paths
 watchfiles_logger = logging.getLogger("watchfiles.main")
 watchfiles_logger.setLevel(logging.DEBUG)  # Enable DEBUG to see file paths
-
-# Check if we're in development mode
-is_development = os.environ.get("NODE_ENV") != "production"
 
 import uvicorn
 

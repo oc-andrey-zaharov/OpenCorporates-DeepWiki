@@ -23,12 +23,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from api.config import get_model_config, OPENROUTER_API_KEY, OPENAI_API_KEY
-from api.services.data_pipeline import count_tokens, get_file_content
-from api.clients.openai_client import OpenAIClient
-from api.clients.openrouter_client import OpenRouterClient
-from api.clients.azureai_client import AzureAIClient
-from api.clients.dashscope_client import DashscopeClient
-from api.services.rag import RAG
+from api.data_pipeline import count_tokens, get_file_content
+from api.openai_client import OpenAIClient
+from api.openrouter_client import OpenRouterClient
+from api.azureai_client import AzureAIClient
+from api.dashscope_client import DashscopeClient
+from api.rag import RAG
 
 # Configure logging
 from api.logging_config import setup_logging
@@ -112,7 +112,7 @@ async def handle_websocket_chat(websocket: WebSocket):
                 logger.info(f"Request size: {tokens} tokens")
                 if tokens > 8000:
                     logger.warning(
-                        f"Request exceeds recommended token limit ({tokens} > 8000)"
+                        f"Request exceeds recommended token limit ({tokens} > 7500)"
                     )
                     input_too_large = True
 
@@ -817,18 +817,12 @@ This file contains...
 
                             # Handle streaming fallback_response from Openai
                             async for chunk in fallback_response:
-                                content = None
-                                if isinstance(chunk, str):
-                                    content = chunk
-                                else:
-                                    choices = getattr(chunk, "choices", [])
-                                    if len(choices) > 0:
-                                        delta = getattr(choices[0], "delta", None)
-                                        if delta is not None:
-                                            content = getattr(delta, "content", None)
-
-                                if content is not None and content:
-                                    await websocket.send_text(content)
+                                text = (
+                                    chunk
+                                    if isinstance(chunk, str)
+                                    else getattr(chunk, "text", str(chunk))
+                                )
+                                await websocket.send_text(text)
                         except Exception as e_fallback:
                             logger.error(
                                 f"Error with Openai API fallback: {str(e_fallback)}"

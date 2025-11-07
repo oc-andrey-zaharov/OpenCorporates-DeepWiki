@@ -40,8 +40,8 @@ def validate_github_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
         # Check if it's a GitHub-like domain
         path_parts = parsed.path.strip("/").split("/")
         if len(path_parts) >= 2:
-            owner = path_parts[-2]
-            repo = path_parts[-1].replace(".git", "")
+            owner = path_parts[0]
+            repo = path_parts[1].replace(".git", "")
             return True, owner, repo
 
         return False, None, None
@@ -56,17 +56,31 @@ def validate_github_shorthand(
     """
     Validate GitHub shorthand format (owner/repo).
 
+    Enforces GitHub naming rules:
+    - Owner and repo names must start and end with alphanumeric characters
+    - Can contain hyphens and dots in the middle
+    - Owner length: 1-39 characters
+    - Repository length: 1-100 characters
+
     Args:
         shorthand: Shorthand string (e.g., "owner/repo")
 
     Returns:
         Tuple of (is_valid, owner, repo)
     """
-    pattern = r"^[\w\-\.]+/[\w\-\.]+$"
-    if re.match(pattern, shorthand):
-        parts = shorthand.split("/")
-        if len(parts) == 2:
-            return True, parts[0], parts[1]
+    # Stricter pattern: ensures owner/repo don't start/end with hyphens or dots
+    # Pattern breakdown:
+    # - [a-zA-Z0-9] : must start with alphanumeric
+    # - ([a-zA-Z0-9\-\.]*[a-zA-Z0-9])? : optional middle part ending with alphanumeric
+    # - This allows single char names (e.g., "a/b") and multi-char names
+    # The regex guarantees exactly one slash, so no need to check parts length
+    pattern = r"^([a-zA-Z0-9](?:[a-zA-Z0-9\-\.]*[a-zA-Z0-9])?)/([a-zA-Z0-9](?:[a-zA-Z0-9\-\.]*[a-zA-Z0-9])?)$"
+    match = re.match(pattern, shorthand)
+    if match:
+        owner, repo = match.groups()
+        # Enforce GitHub length limits
+        if 1 <= len(owner) <= 39 and 1 <= len(repo) <= 100:
+            return True, owner, repo
     return False, None, None
 
 
@@ -95,12 +109,7 @@ def parse_repository_input(
     Returns:
         Tuple of (repo_type, repo_url_or_path, owner, repo_name)
     """
-    # Check if it's a local path
-    if validate_local_path(repo_input):
-        repo_name = os.path.basename(os.path.abspath(repo_input))
-        return "local", repo_input, None, repo_name
-
-    # Check if it's a full GitHub URL
+    # Check if it's a full GitHub URL first
     is_valid, owner, repo = validate_github_url(repo_input)
     if is_valid:
         return "github", repo_input, owner, repo
@@ -110,6 +119,11 @@ def parse_repository_input(
     if is_valid:
         url = f"https://github.com/{owner}/{repo}"
         return "github", url, owner, repo
+
+    # Only check local path if URL/shorthand patterns don't match
+    if validate_local_path(repo_input):
+        repo_name = os.path.basename(os.path.abspath(repo_input))
+        return "local", repo_input, None, repo_name
 
     # Invalid input
     raise ValueError(
@@ -164,8 +178,18 @@ def truncate_string(s: str, max_length: int = 50, suffix: str = "...") -> str:
         suffix: Suffix to add if truncated
 
     Returns:
-        Truncated string
+        Truncated string (never exceeds max_length)
     """
+    # Handle edge case: max_length <= 0
+    if max_length <= 0:
+        return ""
+
+    # Handle edge case: max_length <= len(suffix)
+    # Return a substring of the original string limited to max_length
+    if max_length <= len(suffix):
+        return s[:max_length]
+
+    # Normal case: truncate and append suffix
     if len(s) <= max_length:
         return s
     return s[: max_length - len(suffix)] + suffix

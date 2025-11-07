@@ -44,7 +44,7 @@ class CustomConversation:
 # Import other adalflow components
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from api.config import configs
-from api.services.data_pipeline import DatabaseManager
+from api.services.data_pipeline import DatabaseManager, count_tokens
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -206,7 +206,6 @@ class RAG(adal.Component):
         # Check if Ollama model exists before proceeding
         if self.is_ollama_embedder:
             from api.ollama_patch import check_ollama_model_exists
-            from api.config import get_embedder_config
 
             embedder_config = get_embedder_config()
             if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
@@ -421,6 +420,70 @@ IMPORTANT FORMATTING RULES:
 
         return valid_documents
 
+    def _truncate_query_by_tokens(self, query: str, max_tokens: int) -> str:
+        """
+        Truncate a query string to fit within the maximum token limit.
+
+        Uses binary search to efficiently find the truncation point that results
+        in exactly max_tokens or fewer tokens.
+
+        Args:
+            query: The query string to truncate
+            max_tokens: Maximum number of tokens allowed
+
+        Returns:
+            Truncated query string that fits within the token limit
+        """
+        if not query:
+            return query
+
+        # Count tokens in the original query
+        token_count = count_tokens(query, embedder_type=self.embedder_type)
+
+        # If within limit, return as-is
+        if token_count <= max_tokens:
+            return query
+
+        # Binary search for the truncation point
+        # Start with the full query length
+        left, right = 0, len(query)
+        best_truncated = query
+
+        while left < right:
+            mid = (left + right) // 2
+            truncated = query[:mid]
+
+            if not truncated:
+                left = mid + 1
+                continue
+
+            current_tokens = count_tokens(truncated, embedder_type=self.embedder_type)
+
+            if current_tokens <= max_tokens:
+                best_truncated = truncated
+                left = mid + 1
+            else:
+                right = mid
+
+        # Final check: ensure we didn't exceed the limit
+        final_tokens = count_tokens(best_truncated, embedder_type=self.embedder_type)
+        if final_tokens > max_tokens:
+            # If still over limit, reduce character by character from the end
+            while (
+                best_truncated
+                and count_tokens(best_truncated, embedder_type=self.embedder_type)
+                > max_tokens
+            ):
+                best_truncated = best_truncated[:-1]
+
+        logger.warning(
+            f"Query truncated from {token_count} tokens to "
+            f"{count_tokens(best_truncated, embedder_type=self.embedder_type)} tokens "
+            f"(limit: {max_tokens} tokens)"
+        )
+
+        return best_truncated
+
     def prepare_retriever(
         self,
         repo_url_or_path: str,
@@ -570,29 +633,15 @@ IMPORTANT FORMATTING RULES:
                 f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})"
             )
 
-            # Determine optimal index type based on dataset size
-            # For smaller datasets (<100K), IndexFlat is faster
-            # For larger datasets, IVFFlat provides better performance
             num_docs = len(self.transformed_docs)
-
-            # Use embedding dimension from final safety check above
-            # (embedding_dim is already set in the verification loop)
 
             retriever_config = configs["retriever"].copy()
 
             # Log retriever config for debugging
             logger.info(f"Retriever config: {retriever_config}")
-
-            # For Apple Silicon, optimize FAISS index creation
-            # Pre-allocate memory and use optimal index type
-            if embedding_dim and num_docs < 100000:
-                # Use IndexFlat for smaller datasets - faster on Apple Silicon
-                logger.info(
-                    f"Using IndexFlat for {num_docs} documents (optimal for <100K)"
-                )
-            else:
-                # For larger datasets, IVFFlat is better
-                logger.info(f"Using IVFFlat for {num_docs} documents")
+            logger.info(
+                f"Creating FAISS retriever with {num_docs} documents (dim={embedding_dim})"
+            )
 
             # Extract vectors from documents for FAISSRetriever
             # Vectors are already Python lists from the validation step above
@@ -656,6 +705,15 @@ IMPORTANT FORMATTING RULES:
             Tuple of (RAGAnswer, retrieved_documents)
         """
         try:
+            # Validate and truncate query if it exceeds token limit
+            original_query = query
+            query = self._truncate_query_by_tokens(query, MAX_INPUT_TOKENS)
+
+            if query != original_query:
+                logger.info(
+                    f"Query was truncated due to token limit ({MAX_INPUT_TOKENS} tokens)"
+                )
+
             retrieved_documents = self.retriever(query)
 
             # Fill in the documents

@@ -8,6 +8,8 @@ import json
 import time
 import click
 import logging
+import subprocess
+import fnmatch
 from typing import Dict, Optional, List
 
 from api.cli.config import load_config, get_provider_models
@@ -871,6 +873,180 @@ IMPORTANT:
         return None
 
 
+def _is_git_repo(path: str) -> bool:
+    """Check if a path is a git repository."""
+    git_dir = os.path.join(path, ".git")
+    return os.path.exists(git_dir) or os.path.isdir(git_dir)
+
+
+def _load_gitignore_patterns(repo_path: str) -> List[str]:
+    """Load .gitignore patterns from repository root."""
+    patterns = []
+    gitignore_path = os.path.join(repo_path, ".gitignore")
+
+    if os.path.exists(gitignore_path):
+        try:
+            with open(gitignore_path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith("#"):
+                        patterns.append(line)
+        except Exception as e:
+            logger.warning(f"Error reading .gitignore: {e}")
+
+    return patterns
+
+
+def _matches_gitignore_pattern(
+    file_path: str, patterns: List[str], repo_path: str
+) -> bool:
+    """Check if a file path matches any .gitignore pattern."""
+    # Normalize path relative to repo root
+    rel_path = os.path.relpath(file_path, repo_path)
+    rel_path_parts = rel_path.split(os.sep)
+
+    for pattern in patterns:
+        # Skip negated patterns (starting with !) for now
+        if pattern.startswith("!"):
+            continue
+
+        # Handle patterns anchored to root (starting with /)
+        if pattern.startswith("/"):
+            pattern = pattern[1:]
+            # Match from repo root only
+            if fnmatch.fnmatch(rel_path, pattern) or fnmatch.fnmatch(
+                rel_path_parts[0], pattern
+            ):
+                return True
+            continue
+
+        # Handle directory patterns (ending with /)
+        if pattern.endswith("/"):
+            pattern = pattern[:-1]
+            # Check if any directory in the path matches
+            for part in rel_path_parts[:-1]:  # Exclude filename for directory patterns
+                # Support ** for matching any number of directories
+                if "**" in pattern:
+                    pattern_normalized = pattern.replace("**", "*")
+                    if fnmatch.fnmatch(part, pattern_normalized):
+                        return True
+                elif fnmatch.fnmatch(part, pattern):
+                    return True
+            continue
+
+        # Handle ** patterns for files
+        if "**" in pattern:
+            # Replace ** with * for fnmatch compatibility
+            pattern_normalized = pattern.replace("**", "*")
+            if fnmatch.fnmatch(rel_path, pattern_normalized):
+                return True
+            continue
+
+        # Check full path or filename
+        if fnmatch.fnmatch(rel_path, pattern) or fnmatch.fnmatch(
+            os.path.basename(rel_path), pattern
+        ):
+            return True
+
+    return False
+
+
+def _collect_files_with_git(repo_path: str) -> Optional[List[str]]:
+    """Collect tracked files using git ls-files."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        files = []
+        for line in result.stdout.strip().split("\n"):
+            if line.strip():
+                full_path = os.path.join(repo_path, line.strip())
+                if os.path.isfile(full_path):
+                    files.append(full_path)
+        return files
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ) as e:
+        logger.warning(f"git ls-files failed: {e}, falling back to directory walk")
+        return None
+
+
+def _collect_files_with_walk(repo_path: str) -> List[str]:
+    """Collect files by walking the directory tree with .gitignore filtering."""
+    files = []
+    gitignore_patterns = _load_gitignore_patterns(repo_path)
+
+    # Always exclude .git and vendor directories
+    excluded_dirs = {".git", "vendor"}
+
+    for root, dirs, filenames in os.walk(repo_path):
+        # Filter out excluded directories from dirs list to prevent traversal
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+        # Check if current directory should be excluded
+        rel_root = os.path.relpath(root, repo_path)
+        root_parts = rel_root.split(os.sep) if rel_root != "." else []
+
+        # Skip if any part of the path matches excluded directories
+        if any(part in excluded_dirs for part in root_parts):
+            continue
+
+        for filename in filenames:
+            file_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(file_path, repo_path)
+
+            # Skip if matches .gitignore patterns
+            if gitignore_patterns and _matches_gitignore_pattern(
+                file_path, gitignore_patterns, repo_path
+            ):
+                continue
+
+            # Skip if in excluded directories
+            if any(part in excluded_dirs for part in rel_path.split(os.sep)):
+                continue
+
+            files.append(file_path)
+
+    return files
+
+
+def collect_repository_files(repo_path: str) -> List[str]:
+    """
+    Collect all relevant files from a repository using repository-aware discovery.
+
+    Prefers using git ls-files for tracked files, falls back to walking the tree
+    with .gitignore filtering. Excludes .git and vendor directories.
+
+    Args:
+        repo_path: Path to the local repository
+
+    Returns:
+        List of absolute file paths
+    """
+    if not os.path.isdir(repo_path):
+        raise ValueError(f"Repository path does not exist: {repo_path}")
+
+    # Try git ls-files first if it's a git repository
+    if _is_git_repo(repo_path):
+        files = _collect_files_with_git(repo_path)
+        if files is not None:
+            logger.info(f"Collected {len(files)} files using git ls-files")
+            return files
+
+    # Fall back to directory walk with .gitignore filtering
+    files = _collect_files_with_walk(repo_path)
+    logger.info(f"Collected {len(files)} files using directory walk")
+    return files
+
+
 @click.command(name="generate")
 def generate():
     """Generate a new wiki interactively."""
@@ -942,14 +1118,8 @@ def generate():
                 file_tree = data.get("file_tree", "")
                 readme = data.get("readme", "")
             else:
-                # Local repository
-                import glob
-
-                files = []
-                for ext in [".py", ".js", ".ts", ".java", ".md"]:
-                    files.extend(
-                        glob.glob(f"{repo_url_or_path}/**/*{ext}", recursive=True)
-                    )
+                # Local repository - use repository-aware file collection
+                files = collect_repository_files(repo_url_or_path)
                 file_tree = "\n".join(
                     [os.path.relpath(f, repo_url_or_path) for f in files]
                 )
@@ -966,6 +1136,12 @@ def generate():
             click.echo("✓ Structure fetched")
         except Exception as e:
             click.echo(f"✗ Error fetching structure: {e}", err=True)
+            progress.close()
+            raise click.Abort()
+
+        # Validate file_tree is not empty
+        if not file_tree or (isinstance(file_tree, str) and not file_tree.strip()):
+            click.echo("✗ No files found in repository", err=True)
             progress.close()
             raise click.Abort()
 

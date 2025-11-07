@@ -6,6 +6,8 @@ without requiring a server to be running.
 """
 
 import pytest
+import tempfile
+from unittest.mock import patch
 
 
 class TestStandaloneMode:
@@ -48,5 +50,13 @@ class TestStandaloneMode:
         """Test cache read/write operations."""
         from api.cli.utils import get_cache_path
 
-        cache_path = get_cache_path()
-        assert cache_path.exists() or cache_path.parent.exists()
+        # Mock get_adalflow_default_root_path to return a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch(
+                "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir
+            ):
+                cache_path = get_cache_path()
+                # Verify the path is constructed correctly
+                assert str(cache_path).endswith("wikicache")
+                # The parent directory should exist (the temp dir)
+                assert cache_path.parent.exists()

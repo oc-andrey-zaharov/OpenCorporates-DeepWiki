@@ -17,8 +17,15 @@ mermaid.initialize({
     nodeSpacing: 60,
     rankSpacing: 60,
     padding: 20,
+    useMaxWidth: true,
   },
   themeCSS: `
+    /* Ensure SVG and all containers have transparent backgrounds */
+    svg {
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    
     /* Custom styles for all diagrams */
     .node rect, .node circle, .node ellipse, .node polygon, .node path {
       fill: #f8f4e6;
@@ -31,13 +38,13 @@ mermaid.initialize({
     }
     .edgeLabel {
       background-color: transparent;
-      color: #333333;
+      color: var(--foreground, #333333);
       p {
         background-color: transparent !important;
       }
     }
     .label {
-      color: #333333;
+      color: var(--foreground, #333333);
     }
     .cluster rect {
       fill: #f8f4e6;
@@ -52,18 +59,18 @@ mermaid.initialize({
       stroke-width: 1px;
     }
     text.actor {
-      fill: #333333;
+      fill: var(--foreground, #333333);
       stroke: none;
     }
     .messageText {
-      fill: #333333;
+      fill: var(--foreground, #333333);
       stroke: none;
     }
     .messageLine0, .messageLine1 {
       stroke: #B8605D;
     }
     .noteText {
-      fill: #333333;
+      fill: var(--foreground, #333333);
     }
 
     /* Dark mode overrides - will be applied with data-theme="dark" */
@@ -80,10 +87,10 @@ mermaid.initialize({
     }
     [data-theme="dark"] .edgeLabel {
       background-color: transparent;
-      color: #f0f0f0;
+      color: var(--foreground, #f0f0f0);
     }
     [data-theme="dark"] .label {
-      color: #f0f0f0;
+      color: var(--foreground, #f0f0f0);
     }
     [data-theme="dark"] .cluster rect {
       fill: #222222;
@@ -99,11 +106,11 @@ mermaid.initialize({
       stroke: #5d4037;
     }
     [data-theme="dark"] text.actor {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
       stroke: none;
     }
     [data-theme="dark"] .messageText {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
       stroke: none;
       font-weight: 500;
     }
@@ -112,18 +119,18 @@ mermaid.initialize({
       stroke-width: 1.5px;
     }
     [data-theme="dark"] .noteText {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
     }
     /* Additional styles for sequence diagram text */
     [data-theme="dark"] #sequenceNumber {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
     }
     [data-theme="dark"] text.sequenceText {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
       font-weight: 500;
     }
     [data-theme="dark"] text.loopText, [data-theme="dark"] text.loopText tspan {
-      fill: #f0f0f0;
+      fill: var(--foreground, #f0f0f0);
     }
     /* Add a subtle background to message text for better readability */
     [data-theme="dark"] .messageText, [data-theme="dark"] text.sequenceText {
@@ -134,14 +141,15 @@ mermaid.initialize({
       stroke-linejoin: round;
     }
 
-    /* Force text elements to be properly colored */
+    /* Force text elements to be properly colored - use CSS variables for theme consistency */
     text[text-anchor][dominant-baseline],
     text[text-anchor][alignment-baseline],
     .nodeLabel,
     .edgeLabel,
     .label,
     text {
-      fill: #777 !important;
+      fill: var(--foreground, #333333) !important;
+      font-family: var(--font-geist-sans), sans-serif !important;
     }
 
     [data-theme="dark"] text[text-anchor][dominant-baseline],
@@ -150,7 +158,8 @@ mermaid.initialize({
     [data-theme="dark"] .edgeLabel,
     [data-theme="dark"] .label,
     [data-theme="dark"] text {
-      fill: #f0f0f0 !important;
+      fill: var(--foreground, #f0f0f0) !important;
+      font-family: var(--font-geist-sans), sans-serif !important;
     }
 
     /* Add clickable element styles with subtle transitions */
@@ -163,6 +172,70 @@ mermaid.initialize({
     }
     .clickable:hover > * {
       filter: brightness(0.95);
+    }
+    
+    /* Prevent text cutoff in nodes */
+    .nodeLabel,
+    .edgeLabel,
+    .label text,
+    text {
+      overflow: visible !important;
+      text-overflow: clip !important;
+      white-space: pre-wrap !important;
+    }
+    
+    /* Ensure foreignObject elements don't clip content and center text */
+    foreignObject {
+      overflow: visible !important;
+      text-align: center !important;
+    }
+    
+    /* Ensure proper text rendering in HTML labels */
+    .nodeLabel div,
+    .edgeLabel div {
+      overflow: visible !important;
+      word-wrap: break-word !important;
+      white-space: pre-wrap !important;
+      text-align: center !important;
+      color: var(--foreground, #333333) !important;
+      font-family: var(--font-geist-sans), sans-serif !important;
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    
+    [data-theme="dark"] .nodeLabel div,
+    [data-theme="dark"] .edgeLabel div {
+      color: var(--foreground, #f0f0f0) !important;
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    
+    /* Remove any black backgrounds from text containers */
+    .nodeLabel,
+    .edgeLabel,
+    foreignObject {
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    
+    /* Ensure text elements don't have blue or black colors */
+    text {
+      fill: var(--foreground, #333333) !important;
+    }
+    
+    [data-theme="dark"] text {
+      fill: var(--foreground, #f0f0f0) !important;
+    }
+    
+    /* Center text in SVG text elements */
+    .nodeLabel text,
+    .label text {
+      text-anchor: middle !important;
+    }
+    
+    /* Center content in divs within foreignObject (HTML labels) */
+    foreignObject div {
+      text-align: center !important;
     }
   `,
   fontFamily: 'var(--font-geist-sans), var(--font-serif-jp), sans-serif',
@@ -236,43 +309,17 @@ const FullScreenModal: React.FC<{
         {/* Modal header with controls */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
           <div className="font-medium text-[var(--foreground)] font-serif">Diagram View</div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-                className="text-[var(--foreground)] hover:bg-[var(--accent-primary)]/10 p-2 rounded-md border border-[var(--border-color)] transition-colors"
-                aria-label="Zoom out"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  <line x1="8" y1="11" x2="14" y2="11"></line>
-                </svg>
-              </button>
-              <span className="text-sm text-[var(--muted)]">{Math.round(zoom * 100)}%</span>
-              <button
-                onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-                className="text-[var(--foreground)] hover:bg-[var(--accent-primary)]/10 p-2 rounded-md border border-[var(--border-color)] transition-colors"
-                aria-label="Zoom in"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  <line x1="11" y1="8" x2="11" y2="14"></line>
-                  <line x1="8" y1="11" x2="14" y2="11"></line>
-                </svg>
-              </button>
-              <button
-                onClick={() => setZoom(1)}
-                className="text-[var(--foreground)] hover:bg-[var(--accent-primary)]/10 p-2 rounded-md border border-[var(--border-color)] transition-colors"
-                aria-label="Reset zoom"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-                  <path d="M21 3v5h-5"></path>
-                </svg>
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setZoom(1)}
+              className="text-[var(--foreground)] hover:bg-[var(--accent-primary)]/10 p-2 rounded-md border border-[var(--border-color)] transition-colors"
+              aria-label="Reset zoom"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+              </svg>
+            </button>
             <button
               onClick={onClose}
               className="text-[var(--foreground)] hover:bg-[var(--accent-primary)]/10 p-2 rounded-md border border-[var(--border-color)] transition-colors"
@@ -292,7 +339,8 @@ const FullScreenModal: React.FC<{
             style={{
               transform: `scale(${zoom})`,
               transformOrigin: 'center center',
-              transition: 'transform 0.3s ease-out'
+              transition: 'transform 0.3s ease-out',
+              background: 'transparent'
             }}
           >
             {children}
@@ -346,9 +394,10 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [renderAttempts, setRenderAttempts] = useState(0);
+  const [isPanZoomReady, setIsPanZoomReady] = useState(false);
   const mermaidRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panZoomRef = useRef<any>(null); // Store pan-zoom instance
   const idRef = useRef(`mermaid-${Math.random().toString(36).substring(2, 9)}`);
   const normalizedChartRef = useRef(chart);
   const isDarkModeRef = useRef(
@@ -358,7 +407,6 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
   );
 
   useEffect(() => {
-    setRenderAttempts(0);
     normalizedChartRef.current = chart;
   }, [chart]);
 
@@ -368,24 +416,34 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
       const initializePanZoom = async () => {
         const svgElement = containerRef.current?.querySelector("svg");
         if (svgElement) {
-          // Remove any max-width constraints
+          // Remove any max-width constraints and ensure proper sizing
           svgElement.style.maxWidth = "none";
           svgElement.style.width = "100%";
-          svgElement.style.height = "100%";
+          svgElement.style.height = "auto";
+
+          // Fix text overflow by ensuring proper viewBox
+          const viewBox = svgElement.getAttribute('viewBox');
+          if (viewBox) {
+            const [x, y, width, height] = viewBox.split(' ').map(Number);
+            // Add padding to viewBox to prevent text cutoff
+            const padding = 50;
+            svgElement.setAttribute('viewBox', `${x - padding} ${y - padding} ${width + padding * 2} ${height + padding * 2}`);
+          }
 
           try {
             // Dynamically import svg-pan-zoom only when needed in the browser
             const svgPanZoom = (await import("svg-pan-zoom")).default;
 
-            svgPanZoom(svgElement, {
+            panZoomRef.current = svgPanZoom(svgElement, {
               zoomEnabled: true,
-              controlIconsEnabled: true,
+              controlIconsEnabled: false, // Disable default controls
               fit: true,
               center: true,
               minZoom: 0.1,
               maxZoom: 10,
               zoomScaleSensitivity: 0.3,
             });
+            setIsPanZoomReady(true);
           } catch (error) {
             console.error("Failed to load svg-pan-zoom:", error);
           }
@@ -397,7 +455,23 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
         void initializePanZoom();
       }, 100);
     }
+
+    // Cleanup
+    return () => {
+      if (panZoomRef.current && typeof panZoomRef.current.destroy === 'function') {
+        panZoomRef.current.destroy();
+        panZoomRef.current = null;
+      }
+      setIsPanZoomReady(false);
+    };
   }, [svg, zoomingEnabled]);
+
+  const handleReset = () => {
+    if (panZoomRef.current) {
+      panZoomRef.current.resetZoom();
+      panZoomRef.current.resetPan();
+    }
+  };
 
   useEffect(() => {
     if (!chart) return;
@@ -435,6 +509,167 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
           processedSvg = processedSvg.replace('<svg ', '<svg data-theme="dark" ');
         }
 
+        // Remove black background from SVG root element first
+        processedSvg = processedSvg.replace(
+          /<svg([^>]*)>/i,
+          (match, attrs) => {
+            // Remove any black background from SVG element
+            let newAttrs = attrs;
+            // Remove black background-color from style attribute
+            newAttrs = newAttrs.replace(
+              /style="([^"]*)"/i,
+              (styleMatch: string, styleContent: string) => {
+                let newStyle = styleContent
+                  .replace(/background(?:-color)?:\s*(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))[^;]*;?/gi, '')
+                  .replace(/;;+/g, ';')
+                  .replace(/^;|;$/g, '');
+                // Add transparent background if no background is set
+                if (!newStyle.includes('background')) {
+                  newStyle = `background: transparent; ${newStyle}`;
+                }
+                return `style="${newStyle}"`;
+              }
+            );
+            // If no style attribute exists, add one with transparent background
+            if (!newAttrs.includes('style=')) {
+              newAttrs += ' style="background: transparent;"';
+            }
+            return `<svg${newAttrs}>`;
+          }
+        );
+
+        // Remove black background rect elements (common in Mermaid diagrams)
+        processedSvg = processedSvg.replace(
+          /<rect([^>]*fill="(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))"[^>]*)>/gi,
+          (match, attrs) => {
+            // Remove fill attribute or make it transparent
+            let newAttrs = attrs.replace(/fill="(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))"/gi, 'fill="transparent"');
+            return `<rect${newAttrs}>`;
+          }
+        );
+
+        // Also check for black backgrounds in rect style attributes
+        processedSvg = processedSvg.replace(
+          /<rect([^>]*)>/gi,
+          (match, attrs) => {
+            if (attrs.includes('style=')) {
+              return match.replace(
+                /style="([^"]*)"/i,
+                (styleMatch, styleContent) => {
+                  let newStyle = styleContent
+                    .replace(/fill:\s*(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))[^;]*;?/gi, 'fill: transparent;')
+                    .replace(/background(?:-color)?:\s*(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))[^;]*;?/gi, '')
+                    .replace(/;;+/g, ';')
+                    .replace(/^;|;$/g, '');
+                  return `style="${newStyle}"`;
+                }
+              );
+            }
+            return match;
+          }
+        );
+
+        // Inject CSS variables for text colors to match page theme
+        // Since SVG can't directly use CSS variables, we read them and apply the values
+        if (typeof window !== 'undefined') {
+          const root = document.documentElement;
+          const foregroundColor = getComputedStyle(root).getPropertyValue('--foreground').trim() ||
+            (isDarkModeRef.current ? '#f0f0f0' : '#333333');
+          const fontFamily = getComputedStyle(root).getPropertyValue('--font-geist-sans').trim() ||
+            getComputedStyle(document.body).fontFamily ||
+            'sans-serif';
+
+          // Replace ALL text fill colors with theme color (more comprehensive)
+          // Match any fill color including blue, black, and other colors
+          processedSvg = processedSvg.replace(
+            /fill="(#[0-9a-fA-F]{3,6}|rgb\([^)]+\)|rgba\([^)]+\)|blue|black|#000|#333|#777|#333333|#000000|#212529|#343a40|#0066cc|#0066FF|#0000ff)"/gi,
+            `fill="${foregroundColor}"`
+          );
+
+          // Also replace fill colors in style attributes (including blue)
+          processedSvg = processedSvg.replace(
+            /style="([^"]*fill:\s*)(?:#[0-9a-fA-F]{3,6}|rgb\([^)]+\)|rgba\([^)]+\)|blue|black|#000|#333|#777|#333333|#000000|#212529|#343a40|#0066cc|#0066FF|#0000ff)([^"]*)"/gi,
+            `style="$1${foregroundColor}$2"`
+          );
+
+          // Remove black backgrounds from ANY element (fix the black box issue)
+          processedSvg = processedSvg.replace(
+            /style="([^"]*)(?:background|bg-color|background-color):\s*(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))([^"]*)"/gi,
+            (match, before, after) => {
+              // Remove the background property entirely
+              let cleaned = before + after;
+              // Clean up double semicolons
+              cleaned = cleaned.replace(/;;+/g, ';');
+              // Clean up leading/trailing semicolons
+              cleaned = cleaned.replace(/^;|;$/g, '');
+              return `style="${cleaned}"`;
+            }
+          );
+
+          // Also remove black backgrounds from div elements specifically
+          processedSvg = processedSvg.replace(
+            /<div([^>]*)style="([^"]*)"/g,
+            (match, attrs, style) => {
+              let newStyle = style;
+              // Remove black backgrounds
+              newStyle = newStyle.replace(/background(?:-color)?:\s*(?:black|#000|#000000|rgb\(0,\s*0,\s*0\)|rgba\(0,\s*0,\s*0[^)]*\))[^;]*;?/gi, '');
+              // Replace blue colors with theme color
+              newStyle = newStyle.replace(/color:\s*(?:blue|#0066cc|#0066FF|#0000ff|rgb\(0,\s*102,\s*204\))/gi, `color: ${foregroundColor}`);
+              // Clean up double semicolons
+              newStyle = newStyle.replace(/;;+/g, ';');
+              newStyle = newStyle.replace(/^;|;$/g, '');
+              return `<div${attrs}style="${newStyle}"`;
+            }
+          );
+
+          // Inject font family into foreignObject divs (HTML labels)
+          processedSvg = processedSvg.replace(
+            /<div([^>]*class="[^"]*nodeLabel[^"]*"[^>]*)>/g,
+            (match, attrs) => {
+              if (attrs.includes('style=')) {
+                return match.replace(/style="([^"]*)"/, (_, existingStyle) => {
+                  // Add font-family and color if not already present
+                  let newStyle = existingStyle;
+                  if (!newStyle.includes('font-family')) {
+                    newStyle += `; font-family: ${fontFamily}`;
+                  }
+                  if (!newStyle.includes('color:')) {
+                    newStyle += `; color: ${foregroundColor}`;
+                  }
+                  // Remove black backgrounds
+                  newStyle = newStyle.replace(/background(?:-color)?:\s*(?:black|#000|#000000)[^;]*;?/gi, '');
+                  return `style="${newStyle}"`;
+                });
+              }
+              return `<div${attrs} style="font-family: ${fontFamily}; color: ${foregroundColor};">`;
+            }
+          );
+        }
+
+        // Fix text overflow issues - minimal safe changes
+        processedSvg = processedSvg.replace(
+          /<text([^>]*)>/g,
+          (match, attrs) => {
+            // Only add text-anchor if not already present and add overflow fix
+            if (!attrs.includes('text-anchor')) {
+              return `<text${attrs} text-anchor="middle">`;
+            }
+            return match;
+          }
+        );
+
+        // Ensure foreignObject elements have proper overflow handling
+        processedSvg = processedSvg.replace(
+          /<foreignObject([^>]*)>/g,
+          (match, attrs) => {
+            // Only add style if not already present
+            if (!attrs.includes('style=')) {
+              return `<foreignObject${attrs} style="overflow: visible;">`;
+            }
+            return match;
+          }
+        );
+
         setSvg(processedSvg);
 
         // Call mermaid.contentLoaded to ensure proper initialization
@@ -464,18 +699,12 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
     return () => {
       isMounted = false;
     };
-  }, [chart, renderAttempts]);
+  }, [chart]);
 
   const handleDiagramClick = () => {
     if (!error && svg) {
       setIsFullscreen(true);
     }
-  };
-
-  const handleRetryRender = () => {
-    setError(null);
-    setSvg('');
-    setRenderAttempts(prev => prev + 1);
   };
 
   if (error) {
@@ -492,14 +721,6 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
         <div ref={mermaidRef} className="text-xs overflow-auto"></div>
         <div className="mt-3 text-xs text-[var(--muted)] font-serif">
           The diagram contains syntax errors and cannot be rendered.
-        </div>
-        <div className="mt-3 flex">
-          <button
-            onClick={handleRetryRender}
-            className="text-xs px-3 py-1.5 rounded-md border border-[var(--highlight)]/50 text-[var(--highlight)] hover:bg-[var(--highlight)]/10 transition-colors"
-          >
-            Retry Diagram
-          </button>
         </div>
       </div>
     );
@@ -525,14 +746,30 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
         className={`w-full max-w-full ${zoomingEnabled ? "h-[600px] p-4" : ""}`}
       >
         <div
-          className={`relative group ${zoomingEnabled ? "h-full rounded-lg border-2 border-black" : ""}`}
+          className={`relative group ${zoomingEnabled ? "h-full rounded-lg border-2 border-[var(--border-color)]" : ""}`}
         >
           <div
             className={`flex justify-center overflow-auto text-center my-2 cursor-pointer hover:shadow-md transition-shadow duration-200 rounded-md ${className} ${zoomingEnabled ? "h-full" : ""}`}
+            style={{ background: 'transparent' }}
             dangerouslySetInnerHTML={{ __html: svg }}
             onClick={zoomingEnabled ? undefined : handleDiagramClick}
             title={zoomingEnabled ? undefined : "Click to view fullscreen"}
           />
+
+          {zoomingEnabled && (
+            <button
+              onClick={handleReset}
+              disabled={!isPanZoomReady}
+              className="absolute top-2 right-2 bg-[var(--card-bg)]/90 hover:bg-[var(--card-bg)] text-[var(--foreground)] p-2 rounded-md border border-[var(--border-color)] transition-colors shadow-md z-10 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+              </svg>
+            </button>
+          )}
 
           {!zoomingEnabled && (
             <div className="absolute top-2 right-2 bg-gray-700/70 dark:bg-gray-900/70 text-white p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1.5 text-xs shadow-md pointer-events-none">
@@ -553,7 +790,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = '', zoomingEnabled
           isOpen={isFullscreen}
           onClose={() => setIsFullscreen(false)}
         >
-          <div dangerouslySetInnerHTML={{ __html: svg }} />
+          <div style={{ background: 'transparent' }} dangerouslySetInnerHTML={{ __html: svg }} />
         </FullScreenModal>
       )}
     </>

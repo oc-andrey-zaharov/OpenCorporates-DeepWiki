@@ -3,6 +3,7 @@
 
 import Markdown from '@/components/Markdown';
 import ModelSelectionModal from '@/components/ModelSelectionModal';
+import PageRefreshModal from '@/components/PageRefreshModal';
 import ThemeToggle from '@/components/theme-toggle';
 import WikiTreeView from '@/components/WikiTreeView';
 import { RepoInfo } from '@/types/repoinfo';
@@ -346,11 +347,24 @@ export default function RepoWikiPage() {
   }, [currentPageId]);
 
   // Generate content for a wiki page
-  const generatePageContent = useCallback(async (page: WikiPage, owner: string, repo: string, options?: { force?: boolean; feedback?: string }) => {
+  const generatePageContent = useCallback(async (page: WikiPage, owner: string, repo: string, options?: {
+    force?: boolean;
+    feedback?: string;
+    provider?: string;
+    model?: string;
+    isCustomModel?: boolean;
+    customModel?: string;
+  }) => {
     return new Promise<boolean>(async (resolve) => {
       const forceRegeneration = options?.force ?? false;
       const feedbackNote = options?.feedback?.trim();
       const previousContent = generatedPages[page.id]?.content;
+
+      // Use provided model settings or fall back to state
+      const provider = options?.provider ?? selectedProviderState;
+      const model = options?.model ?? selectedModelState;
+      const isCustomModel = options?.isCustomModel ?? isCustomSelectedModelState;
+      const customModel = options?.customModel ?? customSelectedModelState;
 
       try {
         // Skip if content already exists and we're not forcing a refresh
@@ -523,7 +537,13 @@ ${previousContentSection}${feedbackSection}
                         6.  **Source Citations (EXTREMELY IMPORTANT):**
                         *   For EVERY piece of significant information, explanation, diagram, table entry, or code snippet, you MUST cite the specific source file(s) and relevant line numbers from which the information was derived.
                         *   Place citations at the end of the paragraph, under the diagram/table, or after the code snippet.
-                        *   Use the exact format: \`Sources: [filename.ext:start_line-end_line]()\` for a range, or \`Sources: [filename.ext:line_number]()\` for a single line. Multiple files can be cited: \`Sources: [file1.ext:1-10](), [file2.ext:5](), [dir/file3.ext]()\` (if the whole file is relevant and line numbers are not applicable or too broad).
+                        *   CRITICAL FORMATTING: The word "Sources:" MUST appear on its own line, followed by the source references on the same line or next line. Use the exact format: 
+                        *   
+                        *   \`\`\`
+                        *   Sources: [filename.ext:start_line-end_line](), [file2.ext:line_number]()
+                        *   \`\`\`
+                        *   
+                        *   For a range use \`[filename.ext:start_line-end_line]()\`, for a single line use \`[filename.ext:line_number]()\`. Multiple files can be cited: \`Sources: [file1.ext:1-10](), [file2.ext:5](), [dir/file3.ext]()\` (if the whole file is relevant and line numbers are not applicable or too broad).
                         *   If an entire section is overwhelmingly based on one or two files, you can cite them under the section heading in addition to more specific citations within the section.
                         *   IMPORTANT: You MUST cite AT LEAST 5 different source files throughout the wiki page to ensure comprehensive coverage.
 
@@ -553,7 +573,7 @@ ${previousContentSection}${feedbackSection}
         };
 
         // Add tokens if available
-        addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, selectedProviderState, selectedModelState, isCustomSelectedModelState, customSelectedModelState, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles);
+        addTokensToRequestBody(requestBody, currentToken, effectiveRepoInfo.type, provider, model, isCustomModel, customModel, language, modelExcludedDirs, modelExcludedFiles, modelIncludedDirs, modelIncludedFiles);
 
         const sanitizeMarkdown = (input: string) =>
           input.replace(/^```markdown\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -630,7 +650,7 @@ ${previousContentSection}${feedbackSection}
           let latestContent = initialContent;
           let issues = await safeValidate(latestContent);
 
-          while (issues.length > 0 && attempts < 3) {
+          while (issues.length > 0 && attempts < 1) {
             attempts += 1;
             console.warn(`Mermaid validation failed for ${page.title} (attempt ${attempts})`, issues);
 
@@ -742,6 +762,33 @@ ${previousContentSection}${feedbackSection}
     try {
       setStructureRequestInProgress(true);
       setLoadingMessage('Determining wiki structure...');
+
+      // Calculate repository size based on file count
+      const fileCount = fileTree.split('\n').filter(line => line.trim().length > 0).length;
+
+      // Determine page count ranges based on repository size
+      let minPages: number;
+      let maxPages: number;
+
+      if (fileCount < 50) {
+        // Small repository
+        minPages = isComprehensiveView ? 6 : 4;
+        maxPages = isComprehensiveView ? 8 : 6;
+      } else if (fileCount < 200) {
+        // Medium repository
+        minPages = isComprehensiveView ? 8 : 5;
+        maxPages = isComprehensiveView ? 12 : 7;
+      } else if (fileCount < 500) {
+        // Large repository
+        minPages = isComprehensiveView ? 10 : 6;
+        maxPages = isComprehensiveView ? 15 : 9;
+      } else {
+        // Very large repository
+        minPages = isComprehensiveView ? 12 : 7;
+        maxPages = isComprehensiveView ? 18 : 11;
+      }
+
+      console.log(`Repository size: ${fileCount} files, page range: ${minPages}-${maxPages} pages`);
 
       // Get repository URL
       const repoUrl = getRepoUrl(effectiveRepoInfo);
@@ -860,7 +907,7 @@ Return your analysis in the following XML format:
                             - Start directly with <wiki_structure> and end with </wiki_structure>
 
                             IMPORTANT:
-                            1. Create ${isComprehensiveView ? '8-12' : '4-6'} pages that would make a ${isComprehensiveView ? 'comprehensive' : 'concise'} wiki for this repository
+                            1. Create ${minPages}-${maxPages} pages (aim for ${Math.round((minPages + maxPages) / 2)} pages) that would make a ${isComprehensiveView ? 'comprehensive' : 'concise'} wiki for this repository. The repository contains ${fileCount} files, so adjust the number of pages accordingly - larger repositories may need more pages to cover all important aspects.
                             2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
                             3. The relevant_files should be actual files from the repository that would be used to generate that page
                             4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters`
@@ -1053,7 +1100,7 @@ Return your analysis in the following XML format:
           const importanceText = importanceMatch ? importanceMatch[1].trim().toLowerCase() : 'medium';
           const importanceValue: 'high' | 'medium' | 'low' =
             importanceText === 'high' ? 'high' :
-            importanceText === 'low' ? 'low' : 'medium';
+              importanceText === 'low' ? 'low' : 'medium';
 
           const filePaths = filePathMatches
             .map(([, path]) => path?.trim())
@@ -1152,8 +1199,9 @@ Return your analysis in the following XML format:
 
         console.log(`Starting generation for ${pages.length} pages with controlled concurrency`);
 
-        // Maximum concurrent requests
-        const MAX_CONCURRENT = 1;
+        // Maximum concurrent requests - increased for parallel processing
+        // Use 3-5 concurrent requests for optimal performance without overwhelming the API
+        const MAX_CONCURRENT = Math.min(5, Math.max(3, Math.ceil(pages.length / 2)));
 
         // Create a queue of pages
         const queue = [...pages];
@@ -1407,7 +1455,14 @@ Return your analysis in the following XML format:
     });
   }, []);
 
-  const handleRefreshPage = useCallback(async (pageId: string) => {
+  const handleRefreshPage = useCallback(async (
+    pageId: string,
+    feedback: string,
+    provider: string,
+    model: string,
+    isCustomModel: boolean,
+    customModel: string
+  ) => {
     if (!wikiStructure) {
       return;
     }
@@ -1417,7 +1472,11 @@ Return your analysis in the following XML format:
       return;
     }
 
-    const feedback = pageFeedbackDrafts[pageId]?.trim() || '';
+    // Update feedback draft
+    setPageFeedbackDrafts(prev => ({
+      ...prev,
+      [pageId]: feedback
+    }));
 
     setPageRefreshMessages(prev => {
       const next = { ...prev };
@@ -1427,7 +1486,15 @@ Return your analysis in the following XML format:
 
     cacheLoadedSuccessfully.current = false;
     setLoadingMessage(`Refreshing "${page.title}"...`);
-    const success = await generatePageContent(page, owner, repo, { force: true, feedback });
+
+    const success = await generatePageContent(page, owner, repo, {
+      force: true,
+      feedback,
+      provider,
+      model,
+      isCustomModel,
+      customModel
+    });
     setLoadingMessage(undefined);
 
     setPageRefreshMessages(prev => ({
@@ -1436,7 +1503,7 @@ Return your analysis in the following XML format:
         ? { type: 'success', text: 'Page refreshed successfully.' }
         : { type: 'error', text: 'Failed to refresh page. Please review the logs and try again.' }
     }));
-  }, [wikiStructure, pageFeedbackDrafts, generatePageContent, owner, repo]);
+  }, [wikiStructure, generatePageContent, owner, repo]);
 
   const confirmRefresh = useCallback(async (newToken?: string) => {
     setShowModelOptions(false);
@@ -1742,19 +1809,20 @@ Return your analysis in the following XML format:
     }
   }, [isLoading, error, generatedPages, persistWikiCache]);
 
-const handlePageSelect = (pageId: string) => {
-  if (currentPageId != pageId) {
-    setCurrentPageId(pageId)
-  }
-};
+  const handlePageSelect = (pageId: string) => {
+    if (currentPageId != pageId) {
+      setCurrentPageId(pageId)
+    }
+  };
 
-const totalPages = wikiStructure?.pages.length ?? 0;
-const completedPages = wikiStructure ? wikiStructure.pages.length - pagesInProgress.size : 0;
-const progressPercent = totalPages > 0
-  ? Math.min(100, Math.max(0, Math.round((completedPages / totalPages) * 100)))
-  : 0;
+  const totalPages = wikiStructure?.pages.length ?? 0;
+  const completedPages = wikiStructure ? wikiStructure.pages.length - pagesInProgress.size : 0;
+  const progressPercent = totalPages > 0
+    ? Math.min(100, Math.max(0, Math.round((completedPages / totalPages) * 100)))
+    : 0;
 
-const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false);
+  const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false);
+  const [pageRefreshModalOpen, setPageRefreshModalOpen] = useState<string | null>(null);
 
   return (
     <div className="h-screen paper-texture p-4 md:p-8 flex flex-col">
@@ -1779,7 +1847,7 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
                 className="absolute inset-3 rounded-full border-t-2 border-[var(--accent-primary)]/70 border-l-transparent border-r-transparent border-b-transparent animate-spin"
                 style={{ animationDuration: '1.4s' }}
               ></div>
-              <div className="relative w-4 h-4 rounded-full bg-[var(--accent-primary)] animate-[floatPulse_1.6s_ease-in-out_infinite]"></div>
+              <div className="relative w-4 h-4 rounded-full bg-[var(--accent-primary)]"></div>
             </div>
             <p className="text-[var(--foreground)] text-center mb-1 font-serif text-sm md:text-base transition-opacity duration-300">
               {loadingMessage || 'Preparing your wiki...'}
@@ -1793,10 +1861,10 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
               <div className="w-full max-w-md mt-4">
                 <div className="relative h-2 rounded-full bg-[var(--background)]/70 border border-[var(--border-color)] overflow-hidden">
                   <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-[var(--accent-primary)]/85 transition-all duration-500 ease-out"
+                    className="absolute inset-y-0 left-0 rounded-full bg-[var(--accent-primary)]/85 transition-all duration-500 ease-out overflow-hidden"
                     style={{ width: `${Math.max(8, progressPercent)}%` }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent opacity-70 animate-[shimmer_1.4s_linear_infinite]" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50 animate-[shimmer_2s_linear_infinite]" />
                   </div>
                 </div>
                 <div className="flex justify-between text-xs text-[var(--muted)] mt-3">
@@ -1815,7 +1883,7 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
                         const page = wikiStructure.pages.find(p => p.id === pageId);
                         return page ? (
                           <li key={pageId} className="flex items-center gap-2 truncate">
-                            <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent-primary)]/80 animate-[floatPulse_1.8s_ease-in-out_infinite]" />
+                            <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent-primary)]/80" />
                             <span className="truncate">{page.title}</span>
                           </li>
                         ) : null;
@@ -1830,7 +1898,7 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
                 )}
               </div>
             ) : (
-              <p className="text-xs text-[var(--muted)] mt-4 animate-pulse">Discovering wiki structure…</p>
+              <p className="text-xs text-[var(--muted)] mt-4">Discovering wiki structure…</p>
             )}
           </div>
         ) : error ? (
@@ -1955,69 +2023,41 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
             {/* Wiki Content */}
             <div id="wiki-content" className="w-full flex-grow p-6 lg:p-8 overflow-y-auto">
               {currentPageId && generatedPages[currentPageId] ? (
-                <div className="max-w-[900px] xl:max-w-[1000px] mx-auto">
+                <div className="max-w-[900px] xl:max-w-[1000px] mx-auto relative">
+                  {/* Refresh Page Button - Top Right */}
+                  <button
+                    onClick={() => setPageRefreshModalOpen(currentPageId)}
+                    disabled={pagesInProgress.has(currentPageId)}
+                    className="absolute top-0 right-0 flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md border border-[var(--border-color)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--background)]/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    title="Refresh this page"
+                  >
+                    <FaSync className={`text-sm ${pagesInProgress.has(currentPageId) ? 'animate-spin' : ''}`} />
+                    <span>Refresh Page</span>
+                  </button>
+
                   <h3 className="text-xl font-bold text-[var(--foreground)] mb-4 break-words font-serif">
                     {generatedPages[currentPageId].title}
                   </h3>
 
-                  <details className="mb-6 border border-[var(--border-color)] bg-[var(--background)]/50 rounded-lg shadow-sm">
-                    <summary className="p-4 cursor-pointer hover:bg-[var(--background)]/70 transition-colors rounded-lg">
-                      <h4 className="text-sm font-semibold text-[var(--foreground)] font-serif inline-block">
-                        Refresh this page
-                      </h4>
-                      <span className="text-xs text-[var(--muted)] ml-2">
-                        (Add notes about what needs to change, then regenerate)
-                      </span>
-                    </summary>
-                    <div className="px-4 pb-4">
-                      <p className="text-xs text-[var(--muted)] mb-3 mt-2">
-                        Add notes about what needs to change, then regenerate the page with those fixes.
-                      </p>
-                      <textarea
-                        className="w-full h-24 text-sm rounded-md border border-[var(--border-color)] bg-[var(--card-bg)] p-2 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/30 focus:border-[var(--accent-primary)] transition-colors resize-y"
-                        placeholder="Describe corrections, missing details, or updates you'd like to see..."
-                      value={pageFeedbackDrafts[currentPageId] ?? ''}
-                      onChange={(event) => handleFeedbackChange(currentPageId, event.target.value)}
-                    />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleRefreshPage(currentPageId)}
-                        disabled={pagesInProgress.has(currentPageId)}
-                        className="px-4 py-2 text-xs font-medium rounded-md border border-transparent bg-[var(--accent-primary)] text-white hover:bg-[var(--highlight)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {pagesInProgress.has(currentPageId) ? (
-                          <span className="flex items-center gap-2">
-                            <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-transparent animate-spin"></span>
-                            Refreshing…
-                          </span>
-                        ) : (
-                          'Refresh Page'
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleClearPageFeedback(currentPageId)}
-                        className="px-4 py-2 text-xs font-medium rounded-md border border-[var(--border-color)] text-[var(--muted)] hover:bg-[var(--background)] transition-colors"
-                      >
-                          Clear Feedback
-                        </button>
-                      </div>
-                      {pageRefreshMessages[currentPageId] && (
-                        <div
-                          className={`mt-2 text-xs ${
-                            pageRefreshMessages[currentPageId]?.type === 'error'
-                              ? 'text-[var(--highlight)]'
-                              : 'text-green-600 dark:text-green-400'
-                          }`}
-                        >
-                          {pageRefreshMessages[currentPageId]?.text}
-                        </div>
-                      )}
+                  {/* Show refresh success/error message */}
+                  {pageRefreshMessages[currentPageId] && (
+                    <div
+                      className={`mb-4 p-3 rounded-md text-xs ${pageRefreshMessages[currentPageId]?.type === 'error'
+                        ? 'bg-[var(--highlight)]/10 border border-[var(--highlight)]/30 text-[var(--highlight)]'
+                        : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+                        }`}
+                    >
+                      {pageRefreshMessages[currentPageId]?.text}
                     </div>
-                  </details>
+                  )}
 
                   <div className="prose prose-sm md:prose-base lg:prose-lg max-w-none">
                     <Markdown
                       content={generatedPages[currentPageId].content}
+                      repoUrl={effectiveRepoInfo.repoUrl || undefined}
+                      defaultBranch={defaultBranch}
+                      wikiPages={wikiStructure.pages.map(p => ({ id: p.id, title: p.title }))}
+                      onPageSelect={handlePageSelect}
                     />
                   </div>
 
@@ -2094,6 +2134,42 @@ const [isModelSelectionModalOpen, setIsModelSelectionModalOpen] = useState(false
         showWikiType={true}
         repositoryType="github"
       />
+
+      {pageRefreshModalOpen && (
+        <PageRefreshModal
+          isOpen={true}
+          onClose={() => {
+            setPageRefreshModalOpen(null);
+            // Clear any messages when closing
+            if (pageRefreshModalOpen) {
+              setPageRefreshMessages(prev => {
+                const next = { ...prev };
+                delete next[pageRefreshModalOpen];
+                return next;
+              });
+            }
+          }}
+          onRefresh={(feedback, provider, model, isCustomModel, customModel) => {
+            if (pageRefreshModalOpen) {
+              handleRefreshPage(
+                pageRefreshModalOpen,
+                feedback,
+                provider,
+                model,
+                isCustomModel,
+                customModel
+              );
+              setPageRefreshModalOpen(null);
+            }
+          }}
+          isRefreshing={pageRefreshModalOpen ? pagesInProgress.has(pageRefreshModalOpen) : false}
+          currentFeedback={pageRefreshModalOpen ? (pageFeedbackDrafts[pageRefreshModalOpen] ?? '') : ''}
+          provider={selectedProviderState}
+          model={selectedModelState}
+          isCustomModel={isCustomSelectedModelState}
+          customModel={customSelectedModelState}
+        />
+      )}
     </div>
   );
 }

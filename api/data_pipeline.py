@@ -8,11 +8,13 @@ import tiktoken
 import logging
 import base64
 import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.db import LocalDB
 from api.config import configs, DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES
 from api.ollama_patch import OllamaDocumentProcessor
-from urllib.parse import urlparse, urlunparse, quote
+from urllib.parse import urlparse, urlunparse
 import requests
 from requests.exceptions import RequestException
 
@@ -23,6 +25,24 @@ logger = logging.getLogger(__name__)
 
 # Maximum token limit for OpenAI embedding models
 MAX_EMBEDDING_TOKENS = 8192
+
+
+# Cache encoding objects to avoid repeated initialization
+_encoding_cache = {}
+
+
+def _get_encoding(embedder_type: str):
+    """Get or create cached encoding object."""
+    if embedder_type not in _encoding_cache:
+        if embedder_type == "ollama":
+            _encoding_cache[embedder_type] = tiktoken.get_encoding("cl100k_base")
+        elif embedder_type == "google":
+            _encoding_cache[embedder_type] = tiktoken.get_encoding("cl100k_base")
+        else:  # OpenAI or default
+            _encoding_cache[embedder_type] = tiktoken.encoding_for_model(
+                "text-embedding-3-small"
+            )
+    return _encoding_cache[embedder_type]
 
 
 def count_tokens(
@@ -52,23 +72,58 @@ def count_tokens(
 
             embedder_type = get_embedder_type()
 
-        # Choose encoding based on embedder type
-        if embedder_type == "ollama":
-            # Ollama typically uses cl100k_base encoding
-            encoding = tiktoken.get_encoding("cl100k_base")
-        elif embedder_type == "google":
-            # Google uses similar tokenization to GPT models for rough estimation
-            encoding = tiktoken.get_encoding("cl100k_base")
-        else:  # OpenAI or default
-            # Use OpenAI embedding model encoding
-            encoding = tiktoken.encoding_for_model("text-embedding-3-small")
-
+        encoding = _get_encoding(embedder_type)
         return len(encoding.encode(text))
     except Exception as e:
         # Fallback to a simple approximation if tiktoken fails
         logger.warning(f"Error counting tokens with tiktoken: {e}")
         # Rough approximation: 4 characters per token
         return len(text) // 4
+
+
+def count_tokens_batch(
+    texts: List[str], embedder_type: str = None, num_threads: Optional[int] = None
+) -> List[int]:
+    """
+    Count tokens for multiple texts in parallel using tiktoken batch operations.
+
+    Args:
+        texts (List[str]): List of texts to count tokens for.
+        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+                                     If None, will be determined from configuration.
+        num_threads (int, optional): Number of threads for parallel processing.
+                                    If None, uses default (typically CPU count).
+
+    Returns:
+        List[int]: List of token counts corresponding to input texts.
+    """
+    if not texts:
+        return []
+
+    try:
+        # Determine embedder type if not specified
+        if embedder_type is None:
+            from api.config import get_embedder_type
+
+            embedder_type = get_embedder_type()
+
+        encoding = _get_encoding(embedder_type)
+
+        # Use batch encoding with threading for better performance
+        if num_threads is None:
+            # Default to number of CPU cores, but cap at 8 for I/O bound operations
+            num_threads = min(os.cpu_count() or 4, 8)
+
+        # Use encode_batch for parallel processing
+        encoded_batch = encoding.encode_batch(texts, num_threads=num_threads)
+        return [len(tokens) for tokens in encoded_batch]
+
+    except Exception as e:
+        # Fallback to sequential processing if batch fails
+        logger.warning(
+            f"Error in batch token counting: {e}, falling back to sequential"
+        )
+        return [count_tokens(text, embedder_type) for text in texts]
 
 
 def download_repo(
@@ -218,7 +273,7 @@ def read_all_documents(
         final_included_dirs = set(included_dirs) if included_dirs else set()
         final_included_files = set(included_files) if included_files else set()
 
-        logger.info(f"Using inclusion mode")
+        logger.info("Using inclusion mode")
         logger.info(f"Included directories: {list(final_included_dirs)}")
         logger.info(f"Included files: {list(final_included_files)}")
 
@@ -253,7 +308,7 @@ def read_all_documents(
         included_dirs = []
         included_files = []
 
-        logger.info(f"Using exclusion mode")
+        logger.info("Using exclusion mode")
         logger.info(f"Excluded directories: {excluded_dirs}")
         logger.info(f"Excluded files: {excluded_files}")
 
@@ -334,62 +389,69 @@ def read_all_documents(
 
             return not is_excluded
 
-    # Process code files first
-    for ext in code_extensions:
-        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
-        for file_path in files:
-            # Check if file should be processed based on inclusion/exclusion rules
-            if not should_process_file(
-                file_path,
-                use_inclusion_mode,
-                included_dirs,
-                included_files,
-                excluded_dirs,
-                excluded_files,
-            ):
-                continue
+    def read_single_file(
+        file_path: str, ext: str, is_code: bool, path: str, embedder_type: str
+    ) -> Optional[Document]:
+        """
+        Read a single file and return a Document object if successful.
 
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    relative_path = os.path.relpath(file_path, path)
+        Args:
+            file_path: Full path to the file
+            ext: File extension
+            is_code: Whether this is a code file
+            path: Base path for relative path calculation
+            embedder_type: Embedder type for token counting
 
+        Returns:
+            Document object or None if file should be skipped
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                relative_path = os.path.relpath(file_path, path)
+
+                if is_code:
                     # Determine if this is an implementation file
                     is_implementation = (
                         not relative_path.startswith("test_")
                         and not relative_path.startswith("app_")
                         and "test" not in relative_path.lower()
                     )
+                    max_tokens = MAX_EMBEDDING_TOKENS * 10
+                else:
+                    is_implementation = False
+                    max_tokens = MAX_EMBEDDING_TOKENS
 
-                    # Check token count
-                    token_count = count_tokens(content, embedder_type)
-                    if token_count > MAX_EMBEDDING_TOKENS * 10:
-                        logger.warning(
-                            f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit"
-                        )
-                        continue
-
-                    doc = Document(
-                        text=content,
-                        meta_data={
-                            "file_path": relative_path,
-                            "type": ext[1:],
-                            "is_code": True,
-                            "is_implementation": is_implementation,
-                            "title": relative_path,
-                            "token_count": token_count,
-                        },
+                # Check token count
+                token_count = count_tokens(content, embedder_type)
+                if token_count > max_tokens:
+                    logger.warning(
+                        f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit"
                     )
-                    documents.append(doc)
-            except Exception as e:
-                logger.error(f"Error reading {file_path}: {e}")
+                    return None
 
-    # Then process documentation files
-    for ext in doc_extensions:
+                doc = Document(
+                    text=content,
+                    meta_data={
+                        "file_path": relative_path,
+                        "type": ext[1:],
+                        "is_code": is_code,
+                        "is_implementation": is_implementation,
+                        "title": relative_path,
+                        "token_count": token_count,
+                    },
+                )
+                return doc
+        except Exception as e:
+            logger.error(f"Error reading {file_path}: {e}")
+            return None
+
+    # Collect all files to process
+    all_files = []
+    for ext in code_extensions:
         files = glob.glob(f"{path}/**/*{ext}", recursive=True)
         for file_path in files:
-            # Check if file should be processed based on inclusion/exclusion rules
-            if not should_process_file(
+            if should_process_file(
                 file_path,
                 use_inclusion_mode,
                 included_dirs,
@@ -397,35 +459,47 @@ def read_all_documents(
                 excluded_dirs,
                 excluded_files,
             ):
-                continue
+                all_files.append((file_path, ext, True))
 
+    for ext in doc_extensions:
+        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
+        for file_path in files:
+            if should_process_file(
+                file_path,
+                use_inclusion_mode,
+                included_dirs,
+                included_files,
+                excluded_dirs,
+                excluded_files,
+            ):
+                all_files.append((file_path, ext, False))
+
+    logger.info(f"Found {len(all_files)} files to process, reading in parallel...")
+
+    # Process files in parallel using ThreadPoolExecutor
+    # Use a reasonable number of workers (I/O bound, so can use more than CPU count)
+    max_workers = min(
+        os.cpu_count() * 2 or 8, 16
+    )  # Cap at 16 to avoid too many open files
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all file reading tasks
+        future_to_file = {
+            executor.submit(
+                read_single_file, file_path, ext, is_code, path, embedder_type
+            ): (file_path, ext, is_code)
+            for file_path, ext, is_code in all_files
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_file):
+            file_path, ext, is_code = future_to_file[future]
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    relative_path = os.path.relpath(file_path, path)
-
-                    # Check token count
-                    token_count = count_tokens(content, embedder_type)
-                    if token_count > MAX_EMBEDDING_TOKENS:
-                        logger.warning(
-                            f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit"
-                        )
-                        continue
-
-                    doc = Document(
-                        text=content,
-                        meta_data={
-                            "file_path": relative_path,
-                            "type": ext[1:],
-                            "is_code": False,
-                            "is_implementation": False,
-                            "title": relative_path,
-                            "token_count": token_count,
-                        },
-                    )
+                doc = future.result()
+                if doc is not None:
                     documents.append(doc)
             except Exception as e:
-                logger.error(f"Error reading {file_path}: {e}")
+                logger.error(f"Error processing {file_path}: {e}")
 
     logger.info(f"Found {len(documents)} documents")
     return documents
@@ -465,7 +539,15 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
         embedder_transformer = OllamaDocumentProcessor(embedder=embedder)
     else:
         # Use batch processing for OpenAI and Google embedders
+        # Increase batch size for better performance (OpenAI supports up to 2048)
         batch_size = embedder_config.get("batch_size", 500)
+        # Optimize batch size: OpenAI supports up to 2048, but use 2000 for safety margin
+        # Google supports up to 100, so keep that limit
+        if embedder_type == "openai":
+            batch_size = min(batch_size, 2000) if batch_size < 2000 else batch_size
+        elif embedder_type == "google":
+            batch_size = min(batch_size, 100) if batch_size > 100 else batch_size
+
         embedder_transformer = ToEmbeddings(embedder=embedder, batch_size=batch_size)
 
     data_transformer = adal.Sequential(
@@ -755,6 +837,7 @@ class DatabaseManager:
     ) -> List[Document]:
         """
         Prepare the indexed database for the repository.
+        Uses incremental updates when possible to speed up subsequent runs.
 
         Args:
             embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama').
@@ -772,22 +855,159 @@ class DatabaseManager:
         # Handle backward compatibility
         if embedder_type is None and is_ollama_embedder is not None:
             embedder_type = "ollama" if is_ollama_embedder else None
-        # check the database
+
+        # Check the database
         if self.repo_paths and os.path.exists(self.repo_paths["save_db_file"]):
             logger.info("Loading existing database...")
             try:
                 self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
-                documents = self.db.get_transformed_data(key="split_and_embed")
-                if documents:
+                existing_documents = self.db.get_transformed_data(key="split_and_embed")
+                if existing_documents:
                     logger.info(
-                        f"Loaded {len(documents)} documents from existing database"
+                        f"Loaded {len(existing_documents)} documents from existing database"
                     )
-                    return documents
+
+                    # Try incremental update: check file modification times
+                    try:
+                        # Build a map of existing documents by file path
+                        existing_by_path = {}
+                        for doc in existing_documents:
+                            file_path = doc.meta_data.get("file_path")
+                            if file_path:
+                                existing_by_path[file_path] = doc
+
+                        # Read all current documents
+                        current_documents = read_all_documents(
+                            self.repo_paths["save_repo_dir"],
+                            embedder_type=embedder_type,
+                            excluded_dirs=excluded_dirs,
+                            excluded_files=excluded_files,
+                            included_dirs=included_dirs,
+                            included_files=included_files,
+                        )
+
+                        # Check which files have changed
+                        changed_files = []
+                        new_files = []
+                        unchanged_files = []
+
+                        for doc in current_documents:
+                            file_path = doc.meta_data.get("file_path")
+                            if not file_path:
+                                new_files.append(doc)
+                                continue
+
+                            full_path = os.path.join(
+                                self.repo_paths["save_repo_dir"], file_path
+                            )
+
+                            if file_path in existing_by_path:
+                                # Check if file has been modified
+                                existing_doc = existing_by_path[file_path]
+                                existing_mtime = existing_doc.meta_data.get(
+                                    "file_mtime"
+                                )
+
+                                try:
+                                    current_mtime = os.path.getmtime(full_path)
+                                    if (
+                                        existing_mtime is None
+                                        or abs(current_mtime - existing_mtime) > 1.0
+                                    ):
+                                        # File has changed (1 second tolerance for filesystem precision)
+                                        changed_files.append(doc)
+                                        doc.meta_data["file_mtime"] = current_mtime
+                                    else:
+                                        # File unchanged, reuse existing document
+                                        unchanged_files.append(existing_doc)
+                                        doc.meta_data["file_mtime"] = current_mtime
+                                except OSError:
+                                    # File might have been deleted or moved, treat as changed
+                                    changed_files.append(doc)
+                            else:
+                                # New file
+                                try:
+                                    full_path = os.path.join(
+                                        self.repo_paths["save_repo_dir"], file_path
+                                    )
+                                    doc.meta_data["file_mtime"] = os.path.getmtime(
+                                        full_path
+                                    )
+                                except OSError:
+                                    pass
+                                new_files.append(doc)
+
+                        # If there are changes, do incremental update
+                        if changed_files or new_files:
+                            logger.info(
+                                f"Incremental update: {len(changed_files)} changed, "
+                                f"{len(new_files)} new, {len(unchanged_files)} unchanged files"
+                            )
+
+                            # Only process changed and new files
+                            files_to_process = changed_files + new_files
+
+                            if files_to_process:
+                                # Transform only changed/new documents
+                                data_transformer = prepare_data_pipeline(
+                                    embedder_type, is_ollama_embedder
+                                )
+                                temp_db = LocalDB()
+                                temp_db.register_transformer(
+                                    transformer=data_transformer, key="split_and_embed"
+                                )
+                                temp_db.load(files_to_process)
+                                temp_db.transform(key="split_and_embed")
+
+                                # Get transformed documents
+                                transformed_new = temp_db.get_transformed_data(
+                                    key="split_and_embed"
+                                )
+
+                                # Combine unchanged and new/updated documents
+                                all_documents = unchanged_files + transformed_new
+
+                                # Rebuild database with all documents
+                                self.db = LocalDB()
+                                self.db.register_transformer(
+                                    transformer=data_transformer, key="split_and_embed"
+                                )
+                                self.db.load(all_documents)
+                                self.db.transform(key="split_and_embed")
+                                self.db.save_state(
+                                    filepath=self.repo_paths["save_db_file"]
+                                )
+
+                                logger.info(
+                                    f"Incremental update complete: {len(all_documents)} total documents "
+                                    f"({len(unchanged_files)} reused, {len(transformed_new)} processed)"
+                                )
+
+                                return self.db.get_transformed_data(
+                                    key="split_and_embed"
+                                )
+                            else:
+                                # No changes, return existing documents
+                                return existing_documents
+                        else:
+                            logger.info(
+                                "No file changes detected, using cached database"
+                            )
+                            return existing_documents
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Incremental update failed: {e}, falling back to full rebuild"
+                        )
+                        # Fall through to full rebuild
+
+                    # If incremental update didn't work, return existing documents
+                    return existing_documents
             except Exception as e:
                 logger.error(f"Error loading existing database: {e}")
                 # Continue to create a new database
 
-        # prepare the database
+        # prepare the database (full rebuild)
         logger.info("Creating new database...")
         documents = read_all_documents(
             self.repo_paths["save_repo_dir"],
@@ -797,6 +1017,19 @@ class DatabaseManager:
             included_dirs=included_dirs,
             included_files=included_files,
         )
+
+        # Add file modification times to metadata for future incremental updates
+        for doc in documents:
+            file_path = doc.meta_data.get("file_path")
+            if file_path:
+                try:
+                    full_path = os.path.join(
+                        self.repo_paths["save_repo_dir"], file_path
+                    )
+                    doc.meta_data["file_mtime"] = os.path.getmtime(full_path)
+                except OSError:
+                    pass
+
         self.db = transform_documents_and_save_to_db(
             documents, self.repo_paths["save_db_file"], embedder_type=embedder_type
         )

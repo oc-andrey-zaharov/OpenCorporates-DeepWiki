@@ -5,30 +5,90 @@
 
 :root {
   /* Light mode color palette */
-  --background: #F8F7F6; /* Solid background color */
-  --foreground: #333333; /* Soft black for text */
+  --background: #F8F7F6;
+  /* Solid background color */
+  --foreground: #333333;
+  /* Soft black for text */
   --shadow-color: rgba(0, 0, 0, 0.05);
-  --accent-primary: #B8605D; /* Reddish terracotta */
-  --accent-secondary: #d7c4bb; /* Soft beige (Kinari) */
-  --border-color: #d3d3d3; /* Light gray for dashed borders */
-  --card-bg: #fffaf0; /* Slightly warmer than background */
-  --highlight: #e8927c; /* Soft coral (Akane) */
-  --muted: #a59e8c; /* Soft gray-brown (Nezumi) */
-  --link-color: #9D4F4C; /* Slightly darker terracotta for links */
+  --accent-primary: #B8605D;
+  /* Reddish terracotta */
+  --accent-secondary: #d7c4bb;
+  /* Soft beige (Kinari) */
+  --border-color: #d3d3d3;
+  /* Light gray for dashed borders */
+  --card-bg: #fffaf0;
+  /* Slightly warmer than background */
+  --highlight: #e8927c;
+  /* Soft coral (Akane) */
+  --muted: #a59e8c;
+  /* Soft gray-brown (Nezumi) */
+  --link-color: #9D4F4C;
+  /* Slightly darker terracotta for links */
+  --surface-muted: #f2ece4;
+  --surface-strong: #ede3d9;
+  --code-bg: #f5ede3;
+  --code-header-bg: #eee2d7;
+  --code-border: #d7c4bb;
+  --code-text: #3e2f2d;
+  --code-comment: #9a8a7e;
+  --code-punctuation: #80665b;
+  --code-keyword: #8c3f3b;
+  --code-function: #6f4f3e;
+  --code-string: #a35c4c;
+  --code-number: #b0654f;
+  --code-operator: #7d4c44;
+  --code-tag: #8e4c3f;
+  --code-attr: #75543f;
+  --code-selection: rgba(184, 96, 93, 0.16);
+  --code-highlight: rgba(184, 96, 93, 0.08);
+  --code-inline-bg: rgba(184, 96, 93, 0.12);
+  --code-inline-text: #8c3f3d;
+  --diagram-bg: #f9f3ea;
+  --diagram-border: #d7c4bb;
 }
 
 html[data-theme='dark'] {
   /* Dark mode color palette */
-  --background: #101010; /* Dark background */
-  --foreground: #f0f0f0; /* Soft white */
+  --background: #101010;
+  /* Dark background */
+  --foreground: #f0f0f0;
+  /* Soft white */
   --shadow-color: rgba(0, 0, 0, 0.2);
-  --accent-primary: #C87370; /* Lighter terracotta for dark mode */
-  --accent-secondary: #5d4037; /* Warm brown */
-  --border-color: #404040; /* Dark gray for dashed borders */
-  --card-bg: #222222; /* Slightly lighter than background */
-  --highlight: #e57373; /* Soft red */
-  --muted: #8c8c8c; /* Muted gray */
-  --link-color: #D8958F; /* Lighter terracotta for dark mode links */
+  --accent-primary: #C87370;
+  /* Lighter terracotta for dark mode */
+  --accent-secondary: #5d4037;
+  /* Warm brown */
+  --border-color: #404040;
+  /* Dark gray for dashed borders */
+  --card-bg: #222222;
+  /* Slightly lighter than background */
+  --highlight: #e57373;
+  /* Soft red */
+  --muted: #8c8c8c;
+  /* Muted gray */
+  --link-color: #D8958F;
+  /* Lighter terracotta for dark mode links */
+  --surface-muted: #181818;
+  --surface-strong: #202020;
+  --code-bg: #1c1b1a;
+  --code-header-bg: #262524;
+  --code-border: #3a322e;
+  --code-text: #f6ece4;
+  --code-comment: #bfa79a;
+  --code-punctuation: #f4cbb4;
+  --code-keyword: #f7bfa7;
+  --code-function: #f6d3a3;
+  --code-string: #f2ad90;
+  --code-number: #f4b69b;
+  --code-operator: #ef9f8a;
+  --code-tag: #f3b199;
+  --code-attr: #deb291;
+  --code-selection: rgba(200, 115, 112, 0.26);
+  --code-highlight: rgba(200, 115, 112, 0.18);
+  --code-inline-bg: rgba(200, 115, 112, 0.2);
+  --code-inline-text: #f2c6c3;
+  --diagram-bg: #151515;
+  --diagram-border: #3a322e;
 }
 
 /* Fix for unreadable <select> options in Chrome's dark mode */
@@ -44,7 +104,8 @@ html[data-theme='dark'] {
 }
 
 /* Apply background to both html and body to ensure full coverage */
-html, body {
+html,
+body {
   background: var(--background);
   color: var(--foreground);
 }
@@ -69,12 +130,19 @@ body {
 }
 
 /* Apply to common container classes */
-.container, .main, .content {
+.container,
+.main,
+.content {
   background: var(--background);
 }
 
 /* Base background for major containers while still allowing utility overrides */
-body, html, #root, #__next, [data-theme="light"], [data-theme="dark"] {
+body,
+html,
+#root,
+#__next,
+[data-theme="light"],
+[data-theme="dark"] {
   background-color: var(--background);
   background: var(--background);
 }
@@ -94,16 +162,20 @@ body .paper-texture:not(button):not(.bg-\[var\(--accent-primary\)\]):not(.bg-\[v
   0% {
     transform: translateX(-100%);
   }
+
   100% {
-    transform: translateX(100%);
+    transform: translateX(200%);
   }
 }
 
 @keyframes floatPulse {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0);
     opacity: 0.85;
   }
+
   50% {
     transform: translateY(-6px);
     opacity: 1;
@@ -131,4 +203,10 @@ body .paper-texture:not(button):not(.bg-\[var\(--accent-primary\)\]):not(.bg-\[v
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+/* Ensure Mermaid diagrams have transparent backgrounds */
+svg {
+  background: transparent !important;
+  background-color: transparent !important;
 }

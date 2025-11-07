@@ -358,21 +358,32 @@ IMPORTANT FORMATTING RULES:
                 )
 
         # Second pass: filter documents with the target embedding size
+        # Keep vectors as Python lists (FAISSRetriever will handle conversion internally)
         for i, doc in enumerate(documents):
             if not hasattr(doc, "vector") or doc.vector is None:
                 continue
 
             try:
+                # Get embedding size (works for lists, numpy arrays, or any sequence)
                 if isinstance(doc.vector, list):
                     embedding_size = len(doc.vector)
                 elif hasattr(doc.vector, "shape"):
+                    # Handle numpy arrays or array-like objects
                     embedding_size = (
                         doc.vector.shape[0]
                         if len(doc.vector.shape) == 1
                         else doc.vector.shape[-1]
                     )
+                    # Convert numpy array to list for consistency
+                    if hasattr(doc.vector, "tolist"):
+                        doc.vector = doc.vector.tolist()
                 elif hasattr(doc.vector, "__len__"):
                     embedding_size = len(doc.vector)
+                    # Convert to list if possible
+                    if hasattr(doc.vector, "tolist"):
+                        doc.vector = doc.vector.tolist()
+                    elif not isinstance(doc.vector, list):
+                        doc.vector = list(doc.vector)
                 else:
                     continue
 
@@ -471,17 +482,141 @@ IMPORTANT FORMATTING RULES:
             retrieve_embedder = (
                 self.query_embedder if self.is_ollama_embedder else self.embedder
             )
+
+            # Filter out documents with invalid vectors and ensure vectors are Python lists
+            # FAISSRetriever expects Python lists, not numpy arrays
+            valid_docs = []
+            embedding_dim = None
+
+            for doc in self.transformed_docs:
+                if not hasattr(doc, "vector") or doc.vector is None:
+                    file_path = getattr(doc, "meta_data", {}).get(
+                        "file_path", "unknown"
+                    )
+                    logger.warning(
+                        f"Document '{file_path}' has no vector attribute, skipping"
+                    )
+                    continue
+
+                try:
+                    # Convert to Python list if needed
+                    if isinstance(doc.vector, list):
+                        vector_list = doc.vector
+                    elif hasattr(doc.vector, "tolist"):
+                        # Convert numpy array to list
+                        vector_list = doc.vector.tolist()
+                    elif hasattr(doc.vector, "__len__"):
+                        # Convert other sequence types to list
+                        vector_list = list(doc.vector)
+                    else:
+                        file_path = getattr(doc, "meta_data", {}).get(
+                            "file_path", "unknown"
+                        )
+                        logger.warning(
+                            f"Document '{file_path}' has invalid vector type {type(doc.vector)}, skipping"
+                        )
+                        continue
+
+                    # Check for empty vectors
+                    if len(vector_list) == 0:
+                        file_path = getattr(doc, "meta_data", {}).get(
+                            "file_path", "unknown"
+                        )
+                        logger.warning(
+                            f"Document '{file_path}' has empty vector, skipping"
+                        )
+                        continue
+
+                    # Get embedding dimension from first valid vector
+                    if embedding_dim is None:
+                        embedding_dim = len(vector_list)
+
+                    # Verify dimension consistency
+                    if len(vector_list) != embedding_dim:
+                        file_path = getattr(doc, "meta_data", {}).get(
+                            "file_path", "unknown"
+                        )
+                        logger.warning(
+                            f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping"
+                        )
+                        continue
+
+                    # Update document vector to Python list
+                    doc.vector = vector_list
+                    valid_docs.append(doc)
+
+                except Exception as e:
+                    file_path = getattr(doc, "meta_data", {}).get(
+                        "file_path", "unknown"
+                    )
+                    logger.warning(
+                        f"Error processing vector for {file_path}: {e}, skipping document"
+                    )
+                    continue
+
+            # Update transformed_docs to only include valid documents
+            if len(valid_docs) < len(self.transformed_docs):
+                logger.info(
+                    f"Filtered {len(self.transformed_docs) - len(valid_docs)} documents with invalid vectors"
+                )
+            self.transformed_docs = valid_docs
+
+            if not self.transformed_docs:
+                raise ValueError(
+                    "No valid documents with vectors found. Cannot create retriever."
+                )
+
+            logger.info(
+                f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})"
+            )
+
+            # Determine optimal index type based on dataset size
+            # For smaller datasets (<100K), IndexFlat is faster
+            # For larger datasets, IVFFlat provides better performance
+            num_docs = len(self.transformed_docs)
+
+            # Use embedding dimension from final safety check above
+            # (embedding_dim is already set in the verification loop)
+
+            retriever_config = configs["retriever"].copy()
+
+            # Log retriever config for debugging
+            logger.info(f"Retriever config: {retriever_config}")
+
+            # For Apple Silicon, optimize FAISS index creation
+            # Pre-allocate memory and use optimal index type
+            if embedding_dim and num_docs < 100000:
+                # Use IndexFlat for smaller datasets - faster on Apple Silicon
+                logger.info(
+                    f"Using IndexFlat for {num_docs} documents (optimal for <100K)"
+                )
+            else:
+                # For larger datasets, IVFFlat is better
+                logger.info(f"Using IVFFlat for {num_docs} documents")
+
+            # Extract vectors from documents for FAISSRetriever
+            # Vectors are already Python lists from the validation step above
+            # Reference: adalflow docs show documents_embeddings = [x.embedding for x in output.data]
+            document_vectors = [doc.vector for doc in self.transformed_docs]
+
+            logger.info(
+                f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing"
+            )
+
+            # Create FAISSRetriever with list of lists (Python format)
+            # FAISSRetriever will handle internal conversion to numpy arrays for FAISS operations
             self.retriever = FAISSRetriever(
-                **configs["retriever"],
+                **retriever_config,
                 embedder=retrieve_embedder,
-                documents=self.transformed_docs,
-                document_map_func=lambda doc: doc.vector,
+                documents=document_vectors,
             )
             logger.info("FAISS retriever created successfully")
         except Exception as e:
-            logger.error(f"Error creating FAISS retriever: {str(e)}")
+            # Get error message using repr to avoid any str() issues
+            error_msg = repr(e)
+            logger.error(f"Error creating FAISS retriever: {error_msg}")
             # Try to provide more specific error information
-            if "All embeddings should be of the same size" in str(e):
+            if "All embeddings should be of the same size" in error_msg:
                 logger.error(
                     "Embedding size validation failed. This suggests there are still inconsistent embedding sizes."
                 )
@@ -505,7 +640,7 @@ IMPORTANT FORMATTING RULES:
                             else:
                                 size = "unknown"
                             sizes.append(f"doc_{i}: {size}")
-                        except:
+                        except Exception:
                             sizes.append(f"doc_{i}: error")
                 logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
             raise

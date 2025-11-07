@@ -1,4 +1,4 @@
-.PHONY: help install install/frontend install/backend dev dev/frontend dev/backend dev/bun stop clean
+.PHONY: help install install/frontend install/backend dev dev/frontend dev/backend dev/bun stop clean cli
 
 # Default target
 help:
@@ -19,6 +19,10 @@ help:
 	@echo "Maintenance:"
 	@echo "  make stop             - Stop all running servers"
 	@echo "  make clean            - Clean build artifacts and caches"
+	@echo ""
+	@echo "CLI:"
+	@echo "  make cli              - Run DeepWiki CLI (pass arguments after '--')"
+	@echo "                        Example: make cli -- wiki list"
 	@echo ""
 
 # Install all dependencies
@@ -91,3 +95,7 @@ clean:
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@echo "✓ Cleaned successfully"
+
+# Run CLI tool
+cli:
+	@cd api && ./deepwiki $(ARGS)

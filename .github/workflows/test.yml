@@ -1,0 +1,66 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, cli_migration ]
+  pull_request:
+    branches: [ main, cli_migration ]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 2.0.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: api/.venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('api/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        working-directory: api
+        run: poetry install --no-interaction --no-ansi
+
+      - name: Install dependencies (if cache hit)
+        if: steps.cached-poetry-dependencies.outputs.cache-hit == 'true'
+        working-directory: api
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Run linting with ruff
+        working-directory: api
+        run: |
+          poetry run ruff check api/ || true
+          poetry run ruff format --check api/ || true
+
+      - name: Run type checking with mypy
+        working-directory: api
+        run: poetry run mypy api/ --ignore-missing-imports || true
+
+      - name: Run tests with pytest
+        working-directory: api
+        run: poetry run pytest tests/ -v
+
+      - name: Test CLI import
+        working-directory: api
+        run: poetry run python -c "import api.cli.main; print('CLI imports OK')"
+

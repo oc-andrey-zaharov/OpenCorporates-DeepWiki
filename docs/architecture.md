@@ -6,34 +6,33 @@ This document gives a quick overview of the technologies in use and how the main
 
 | Layer | Technology | Notes |
 | ----- | ---------- | ----- |
-| Frontend | Next.js 15 (App Router) + React 18 | Turbopack dev server, Tailwind CSS, next-themes for theming |
-| State & Data Fetching | React hooks, custom contexts | Processed project cache |
-| Visualization | Mermaid via dynamic component | Renders flow and sequence diagrams client-side |
-| Backend | FastAPI (Python 3.12) | Provides REST & streaming endpoints for wiki generation |
+| CLI | Python Click | Command-line interface for wiki generation |
+| Backend | FastAPI (Python 3.11+) | Optional REST API server for shared resources |
 | Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `api/rag.py` |
 | AI Providers | Google Gemini, OpenAI, OpenRouter, Azure OpenAI, Ollama | Configurable via `api/config` and environment variables |
 | Persistence | Local cache (filesystem) | Stores generated wiki artifacts for reuse |
 | Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
-| Tooling | Bun/Node for frontend, Poetry for backend, Docker & Makefile | Simplifies local development and deployment |
+| Tooling | Poetry for backend, Docker & Makefile | Simplifies local development and deployment |
 
 ## High-Level Component View
 
 ```mermaid
 graph TD;
-  User[(User Browser)];
-  Frontend[Next.js Frontend<br/>App Router];
-  Backend[FastAPI Backend<br/>Uvicorn];
+  User[(User)];
+  CLI[DeepWiki CLI<br/>Standalone Mode];
+  Server[FastAPI Server<br/>Optional];
   GitProviders[(Git Providers<br/>GitHub)];
   LLMs[(LLM Providers<br/>Gemini / OpenAI / etc.)];
   Cache[(Local Cache<br/>Artifacts & Metadata)];
 
-  User -->|HTTPS| Frontend;
-  Frontend -->|fetch api| Backend;
-  Backend -->|Repo content| GitProviders;
-  Backend -->|Prompts and embeddings| LLMs;
-  Backend -->|Read and Write| Cache;
-  Backend -->|Streamed wiki content| Frontend;
-  Frontend -->|Rendered wiki and diagrams| User;
+  User -->|CLI Commands| CLI;
+  CLI -->|Direct Access| GitProviders;
+  CLI -->|Prompts and embeddings| LLMs;
+  CLI -->|Read and Write| Cache;
+  CLI -.->|Optional| Server;
+  Server -->|Repo content| GitProviders;
+  Server -->|Prompts and embeddings| LLMs;
+  Server -->|Read and Write| Cache;
 ```
 
 ## Wiki Generation Flow
@@ -41,25 +40,124 @@ graph TD;
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant F as Next.js Frontend
-  participant A as FastAPI API
+  participant C as CLI
   participant G as Git Provider
   participant L as LLM Provider
 
-  U->>F: Submit repository URL & options
-  F->>A: POST /api/wiki/generate
-  A->>G: Fetch repository metadata & files
-  A->>L: Request embeddings / completions
-  L-->>A: Stream responses
-  A-->>F: Stream wiki sections
-  F-->>U: Render wiki, diagrams, and chat interface
+  U->>C: deepwiki wiki generate
+  C->>G: Fetch repository content
+  G-->>C: Repository files
+  C->>C: Prepare RAG (embeddings)
+  C->>L: Generate wiki structure
+  L-->>C: Wiki structure
+  C->>L: Generate page content (streaming)
+  L-->>C: Page content chunks
+  C->>C: Cache wiki artifacts
+  C-->>U: Wiki generation complete
 ```
 
-## Deployment & Local Development
+## Architecture Modes
 
-- **Local Dev**: `make dev` (or `npm run dev` / `api/main.py`) runs Next.js with Turbopack on port 3000 and FastAPI on port 8001.
-- **Environment**: `.env` controls API keys and backend configuration; GitHub token is configured via `GITHUB_TOKEN` environment variable.
-- **Authentication**: GitHub authentication uses `GITHUB_TOKEN` from `.env` file. Users can optionally provide tokens in the UI for repo-specific access.
-- **Containerization**: `docker-compose.yml` orchestrates the frontend and backend services; `Dockerfile` and `Dockerfile-ollama-local` target different runtime setups.
+### Standalone Mode (Default)
 
-For deeper backend details, see `api/README.md`. Frontend components live under `src/app` and `src/components`.
+The CLI runs in standalone mode by default - no server required:
+
+- Direct access to Git providers
+- Direct access to LLM providers
+- Local cache management
+- No network dependencies (except Git and LLM APIs)
+
+### Server Mode (Optional)
+
+When configured, the CLI can connect to a FastAPI server:
+
+- Shared embedding cache
+- Centralized wiki generation service
+- Multiple users accessing same repositories
+- Faster subsequent runs (cached embeddings)
+
+To enable server mode:
+```bash
+deepwiki config set use_server true
+deepwiki config set server_url http://localhost:8001
+```
+
+## Component Details
+
+### CLI (`api/cli/`)
+
+The CLI provides commands for wiki generation and management:
+
+- `generate` - Generate wiki for a repository
+- `export` - Export cached wiki to markdown/JSON
+- `delete` - Delete cached wiki
+- `list` - List all cached wikis
+- `config` - Manage configuration
+
+### Core Logic (`api/core/`)
+
+Core business logic shared between CLI and server:
+
+- `chat.py` - Chat completion logic with streaming
+- `github.py` - GitHub API integration
+- `wiki_generator.py` - Wiki generation orchestration (if exists)
+
+### RAG Pipeline (`api/rag.py`)
+
+The RAG (Retrieval-Augmented Generation) pipeline:
+
+1. Fetches repository content
+2. Generates embeddings for code files
+3. Stores embeddings in vector store (FAISS)
+4. Retrieves relevant context for prompts
+5. Generates wiki content using LLM
+
+### Model Clients
+
+Support for multiple AI providers:
+
+- `openai_client.py` - OpenAI API client
+- `bedrock_client.py` - AWS Bedrock client
+- `openrouter_client.py` - OpenRouter client
+- `azureai_client.py` - Azure OpenAI client
+- `google_embedder_client.py` - Google embedding client
+- `dashscope_client.py` - Alibaba Cloud DashScope client
+
+### Optional Services
+
+#### FastAPI Server (`api/server.py`)
+
+Optional HTTP API server providing:
+
+- REST endpoints for wiki generation
+- Shared cache management
+- Streaming chat completions
+- GitHub repository structure fetching
+
+#### WebSocket Server (`api/websocket_wiki.py`)
+
+Optional WebSocket server for:
+
+- Real-time wiki generation updates
+- Progress monitoring
+- Team dashboard integration
+
+## Data Flow
+
+1. **Repository Fetching**: CLI or server fetches repository content from Git provider
+2. **Embedding Generation**: Code files are processed and embedded using configured embedder
+3. **Vector Store**: Embeddings stored in FAISS for fast similarity search
+4. **Wiki Structure Generation**: LLM generates wiki structure based on repository analysis
+5. **Page Content Generation**: LLM generates individual page content with streaming
+6. **Caching**: Generated wiki artifacts cached locally for reuse
+7. **Export**: Cached wikis can be exported to markdown or JSON
+
+## Configuration
+
+Configuration is managed through:
+
+- Environment variables (`.env` file)
+- CLI configuration (`~/.deepwiki/config.json`)
+- JSON config files (`api/config/`)
+
+See README.md for detailed configuration options.

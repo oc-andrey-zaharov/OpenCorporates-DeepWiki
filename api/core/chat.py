@@ -1,0 +1,700 @@
+"""
+Chat completion core functionality.
+
+This module provides synchronous chat completion with streaming support
+that can be used by both CLI and server.
+"""
+
+import asyncio
+import logging
+import os
+from typing import Dict, Generator, List, Optional
+
+import google.generativeai as genai
+from adalflow.components.model_client.ollama_client import OllamaClient
+from adalflow.core.types import ModelType
+
+from api.config import (
+    get_model_config,
+)
+from api.services.data_pipeline import count_tokens, get_file_content
+from api.clients.openai_client import OpenAIClient
+from api.clients.openrouter_client import OpenRouterClient
+from api.clients.bedrock_client import BedrockClient
+from api.clients.azureai_client import AzureAIClient
+from api.services.rag import RAG
+from api.prompts import (
+    DEEP_RESEARCH_FIRST_ITERATION_PROMPT,
+    DEEP_RESEARCH_FINAL_ITERATION_PROMPT,
+    DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT,
+    SIMPLE_CHAT_SYSTEM_PROMPT,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _is_truthy(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED"))
+
+
+def _extract_chat_completion_text(completion) -> Optional[str]:
+    try:
+        choices = getattr(completion, "choices", [])
+        if choices:
+            first_choice = choices[0]
+            message = getattr(first_choice, "message", None)
+            if message and hasattr(message, "content"):
+                return message.content
+            delta = getattr(first_choice, "delta", None)
+            if delta and hasattr(delta, "content"):
+                return delta.content
+        return getattr(completion, "content", None)
+    except Exception as exc:
+        logger.warning(f"Failed to extract text from completion: {exc}")
+        return None
+
+
+def _async_to_sync_generator(async_gen):
+    """
+    Convert an async generator to a sync generator.
+    Uses a new event loop and runs the async generator in a background task.
+    """
+    import queue
+    import threading
+
+    q = queue.Queue()
+    exception = None
+
+    def run_async():
+        nonlocal exception
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+
+            async def consume():
+                try:
+                    async for item in async_gen:
+                        q.put(("item", item))
+                except Exception as e:
+                    q.put(("error", e))
+                finally:
+                    q.put(("done", None))
+
+            loop.run_until_complete(consume())
+        except Exception as e:
+            exception = e
+            q.put(("error", e))
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=run_async, daemon=True)
+    thread.start()
+
+    while True:
+        try:
+            msg_type, value = q.get(timeout=0.1)
+            if msg_type == "item":
+                yield value
+            elif msg_type == "error":
+                raise value
+            elif msg_type == "done":
+                break
+        except queue.Empty:
+            if not thread.is_alive():
+                if exception:
+                    raise exception
+                break
+            continue
+
+
+def generate_chat_completion_core(
+    repo_url: str,
+    messages: List[Dict[str, str]],
+    provider: str,
+    model: str,
+    repo_type: str = "github",
+    token: Optional[str] = None,
+    excluded_dirs: Optional[List[str]] = None,
+    excluded_files: Optional[List[str]] = None,
+    included_dirs: Optional[List[str]] = None,
+    included_files: Optional[List[str]] = None,
+    file_path: Optional[str] = None,
+) -> Generator[str, None, None]:
+    """
+    Core chat completion logic with streaming.
+
+    This function provides synchronous streaming chat completion that can be used
+    by both CLI (standalone mode) and server. It yields chunks as they arrive.
+
+    Args:
+        repo_url: Repository URL
+        messages: List of message dicts with 'role' and 'content' keys
+        provider: Model provider (google, openai, openrouter, ollama, bedrock, azure)
+        model: Model name
+        repo_type: Repository type (default: "github")
+        token: Optional access token for private repositories
+        excluded_dirs: Optional list of directories to exclude
+        excluded_files: Optional list of file patterns to exclude
+        included_dirs: Optional list of directories to include exclusively
+        included_files: Optional list of file patterns to include exclusively
+        file_path: Optional path to a file in the repository to include in the prompt
+
+    Yields:
+        str: Text chunks as they arrive from the model
+
+    Raises:
+        ValueError: If RAG preparation fails
+        Exception: For other errors during processing
+    """
+    # Check if request contains very large input
+    input_too_large = False
+    if messages and len(messages) > 0:
+        last_message = messages[-1]
+        if isinstance(last_message, dict) and last_message.get("content"):
+            tokens = count_tokens(last_message["content"], provider == "ollama")
+            logger.info(f"Request size: {tokens} tokens")
+            if tokens > 8000:
+                logger.warning(
+                    f"Request exceeds recommended token limit ({tokens} > 7500)"
+                )
+                input_too_large = True
+
+    # Create a new RAG instance for this request
+    try:
+        request_rag = RAG(provider=provider, model=model)
+
+        # Prepare RAG retriever
+        request_rag.prepare_retriever(
+            repo_url,
+            repo_type,
+            token,
+            excluded_dirs,
+            excluded_files,
+            included_dirs,
+            included_files,
+        )
+        logger.info(f"Retriever prepared for {repo_url}")
+    except ValueError as e:
+        if "No valid documents with embeddings found" in str(e):
+            logger.error(f"No valid embeddings found: {str(e)}")
+            raise ValueError(
+                "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content."
+            )
+        else:
+            logger.error(f"ValueError preparing retriever: {str(e)}")
+            raise ValueError(f"Error preparing retriever: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error preparing retriever: {str(e)}")
+        # Check for specific embedding-related errors
+        if "All embeddings should be of the same size" in str(e):
+            raise ValueError(
+                "Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again."
+            )
+        else:
+            raise ValueError(f"Error preparing retriever: {str(e)}")
+
+    # Validate request
+    if not messages or len(messages) == 0:
+        raise ValueError("No messages provided")
+
+    last_message = messages[-1]
+    if isinstance(last_message, dict) and last_message.get("role") != "user":
+        raise ValueError("Last message must be from the user")
+
+    # Process previous messages to build conversation history
+    for i in range(0, len(messages) - 1, 2):
+        if i + 1 < len(messages):
+            user_msg = messages[i]
+            assistant_msg = messages[i + 1]
+
+            if (
+                isinstance(user_msg, dict)
+                and isinstance(assistant_msg, dict)
+                and user_msg.get("role") == "user"
+                and assistant_msg.get("role") == "assistant"
+            ):
+                request_rag.memory.add_dialog_turn(
+                    user_query=user_msg.get("content", ""),
+                    assistant_response=assistant_msg.get("content", ""),
+                )
+
+    # Check if this is a Deep Research request
+    is_deep_research = False
+    research_iteration = 1
+
+    # Process messages to detect Deep Research requests
+    for msg in messages:
+        if (
+            isinstance(msg, dict)
+            and msg.get("content")
+            and "[DEEP RESEARCH]" in msg.get("content", "")
+        ):
+            is_deep_research = True
+            # Only remove the tag from the last message
+            if msg == messages[-1]:
+                # Remove the Deep Research tag
+                msg["content"] = msg["content"].replace("[DEEP RESEARCH]", "").strip()
+
+    # Count research iterations if this is a Deep Research request
+    if is_deep_research:
+        research_iteration = (
+            sum(
+                1
+                for msg in messages
+                if isinstance(msg, dict) and msg.get("role") == "assistant"
+            )
+            + 1
+        )
+        logger.info(f"Deep Research request detected - iteration {research_iteration}")
+
+        # Check if this is a continuation request
+        if (
+            "continue" in last_message.get("content", "").lower()
+            and "research" in last_message.get("content", "").lower()
+        ):
+            # Find the original topic from the first user message
+            original_topic = None
+            for msg in messages:
+                if (
+                    isinstance(msg, dict)
+                    and msg.get("role") == "user"
+                    and "continue" not in msg.get("content", "").lower()
+                ):
+                    original_topic = (
+                        msg.get("content", "").replace("[DEEP RESEARCH]", "").strip()
+                    )
+                    logger.info(f"Found original research topic: {original_topic}")
+                    break
+
+            if original_topic:
+                # Replace the continuation message with the original topic
+                last_message["content"] = original_topic
+                logger.info(f"Using original topic for research: {original_topic}")
+
+    # Get the query from the last message
+    query = (
+        last_message.get("content", "")
+        if isinstance(last_message, dict)
+        else str(last_message)
+    )
+
+    # Only retrieve documents if input is not too large
+    context_text = ""
+    retrieved_documents = None
+
+    if not input_too_large:
+        try:
+            # If file_path exists, modify the query for RAG to focus on the file
+            rag_query = query
+            if file_path:
+                # Use the file path to get relevant context about the file
+                rag_query = f"Contexts related to {file_path}"
+                logger.info(f"Modified RAG query to focus on file: {file_path}")
+
+            # Try to perform RAG retrieval
+            try:
+                # This will use the actual RAG implementation
+                retrieved_documents = request_rag(rag_query)
+
+                if retrieved_documents and retrieved_documents[0].documents:
+                    # Format context for the prompt in a more structured way
+                    documents = retrieved_documents[0].documents
+                    logger.info(f"Retrieved {len(documents)} documents")
+
+                    # Group documents by file path
+                    docs_by_file = {}
+                    for doc in documents:
+                        file_path_doc = doc.meta_data.get("file_path", "unknown")
+                        if file_path_doc not in docs_by_file:
+                            docs_by_file[file_path_doc] = []
+                        docs_by_file[file_path_doc].append(doc)
+
+                    # Format context text with file path grouping
+                    context_parts = []
+                    for file_path_doc, docs in docs_by_file.items():
+                        # Add file header with metadata
+                        header = f"## File Path: {file_path_doc}\n\n"
+                        # Add document content
+                        content = "\n\n".join([doc.text for doc in docs])
+
+                        context_parts.append(f"{header}{content}")
+
+                    # Join all parts with clear separation
+                    context_text = "\n\n" + "-" * 10 + "\n\n".join(context_parts)
+                else:
+                    logger.warning("No documents retrieved from RAG")
+            except Exception as e:
+                logger.error(f"Error in RAG retrieval: {str(e)}")
+                # Continue without RAG if there's an error
+
+        except Exception as e:
+            logger.error(f"Error retrieving documents: {str(e)}")
+            context_text = ""
+
+    # Get repository information
+    repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
+
+    # Create system prompt
+    if is_deep_research:
+        # Check if this is the first iteration
+        is_first_iteration = research_iteration == 1
+
+        # Check if this is the final iteration
+        is_final_iteration = research_iteration >= 5
+
+        if is_first_iteration:
+            system_prompt = DEEP_RESEARCH_FIRST_ITERATION_PROMPT.format(
+                repo_type=repo_type,
+                repo_url=repo_url,
+                repo_name=repo_name,
+            )
+        elif is_final_iteration:
+            system_prompt = DEEP_RESEARCH_FINAL_ITERATION_PROMPT.format(
+                repo_type=repo_type,
+                repo_url=repo_url,
+                repo_name=repo_name,
+                research_iteration=research_iteration,
+            )
+        else:
+            system_prompt = DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT.format(
+                repo_type=repo_type,
+                repo_url=repo_url,
+                repo_name=repo_name,
+                research_iteration=research_iteration,
+            )
+    else:
+        system_prompt = SIMPLE_CHAT_SYSTEM_PROMPT.format(
+            repo_type=repo_type,
+            repo_url=repo_url,
+            repo_name=repo_name,
+        )
+
+    # Fetch file content if provided
+    file_content = ""
+    if file_path:
+        try:
+            file_content = get_file_content(repo_url, file_path, repo_type, token)
+            logger.info(f"Successfully retrieved content for file: {file_path}")
+        except Exception as e:
+            logger.error(f"Error retrieving file content: {str(e)}")
+            # Continue without file content if there's an error
+
+    # Format conversation history
+    conversation_history = ""
+    for turn_id, turn in request_rag.memory().items():
+        if (
+            not isinstance(turn_id, int)
+            and hasattr(turn, "user_query")
+            and hasattr(turn, "assistant_response")
+        ):
+            conversation_history += f"<turn>\n<user>{turn.user_query.query_str}</user>\n<assistant>{turn.assistant_response.response_str}</assistant>\n</turn>\n"
+
+    # Create the prompt with context
+    prompt = f"/no_think {system_prompt}\n\n"
+
+    if conversation_history:
+        prompt += (
+            f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
+        )
+
+    # Check if file_path is provided and fetch file content if it exists
+    if file_content:
+        # Add file content to the prompt after conversation history
+        prompt += f'<currentFileContent path="{file_path}">\n{file_content}\n</currentFileContent>\n\n'
+
+    # Only include context if it's not empty
+    CONTEXT_START = "<START_OF_CONTEXT>"
+    CONTEXT_END = "<END_OF_CONTEXT>"
+    if context_text.strip():
+        prompt += f"{CONTEXT_START}\n{context_text}\n{CONTEXT_END}\n\n"
+    else:
+        # Add a note that we're skipping RAG due to size constraints or because it's the isolated API
+        logger.info("No context available from RAG")
+        prompt += "<note>Answering without retrieval augmentation.</note>\n\n"
+
+    prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
+
+    model_config = get_model_config(provider, model)["model_kwargs"]
+
+    # Create async generator function for streaming
+    async def _async_stream():
+        try:
+            if provider == "ollama":
+                prompt_with_no_think = prompt + " /no_think"
+                model_client = OllamaClient()
+                model_kwargs = {
+                    "model": model_config["model"],
+                    "stream": True,
+                    "options": {
+                        "temperature": model_config["temperature"],
+                        "top_p": model_config["top_p"],
+                        "num_ctx": model_config["num_ctx"],
+                    },
+                }
+                api_kwargs = model_client.convert_inputs_to_api_kwargs(
+                    input=prompt_with_no_think,
+                    model_kwargs=model_kwargs,
+                    model_type=ModelType.LLM,
+                )
+                response = await model_client.acall(
+                    api_kwargs=api_kwargs, model_type=ModelType.LLM
+                )
+                async for chunk in response:
+                    text = (
+                        getattr(chunk, "response", None)
+                        or getattr(chunk, "text", None)
+                        or str(chunk)
+                    )
+                    if (
+                        text
+                        and not text.startswith("model=")
+                        and not text.startswith("created_at=")
+                    ):
+                        text = text.replace("<think>", "").replace("</think>", "")
+                        yield text
+            elif provider == "openrouter":
+                try:
+                    logger.info(f"Using OpenRouter with model: {model}")
+                    model_client = OpenRouterClient()
+                    model_kwargs = {
+                        "model": model,
+                        "stream": True,
+                        "temperature": model_config["temperature"],
+                    }
+                    if "top_p" in model_config:
+                        model_kwargs["top_p"] = model_config["top_p"]
+                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
+                        input=prompt,
+                        model_kwargs=model_kwargs,
+                        model_type=ModelType.LLM,
+                    )
+                    logger.info("Making OpenRouter API call")
+                    response = await model_client.acall(
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                    )
+                    async for chunk in response:
+                        yield chunk
+                except Exception as e_openrouter:
+                    logger.error(f"Error with OpenRouter API: {str(e_openrouter)}")
+                    yield f"\nError with OpenRouter API: {str(e_openrouter)}\n\nPlease check that you have set the OPENROUTER_API_KEY environment variable with a valid API key."
+            elif provider == "openai":
+                try:
+                    logger.info(f"Using Openai protocol with model: {model}")
+                    model_client = OpenAIClient()
+                    stream_requested = OPENAI_STREAMING_ENABLED
+                    model_kwargs = {
+                        "model": model,
+                        "stream": stream_requested,
+                        "temperature": model_config["temperature"],
+                    }
+                    if "top_p" in model_config:
+                        model_kwargs["top_p"] = model_config["top_p"]
+                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
+                        input=prompt,
+                        model_kwargs=model_kwargs,
+                        model_type=ModelType.LLM,
+                    )
+                    logger.info("Making Openai API call")
+                    response = await model_client.acall(
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                    )
+                    if model_kwargs.get("stream", True):
+                        async for chunk in response:
+                            choices = getattr(chunk, "choices", [])
+                            if len(choices) > 0:
+                                delta = getattr(choices[0], "delta", None)
+                                if delta is not None:
+                                    text = getattr(delta, "content", None)
+                                    if text is not None:
+                                        yield text
+                    else:
+                        completion_text = _extract_chat_completion_text(response)
+                        if completion_text:
+                            logger.debug(
+                                "OpenAI non-stream response (first 200 chars): %s",
+                                completion_text[:200],
+                            )
+                            yield completion_text
+                        else:
+                            logger.warning(
+                                "OpenAI non-stream response empty; yielding raw completion"
+                            )
+                            yield str(response)
+                except Exception as e_openai:
+                    error_text = str(e_openai)
+                    streaming_attempted = model_kwargs.get("stream", True)
+                    if (
+                        streaming_attempted
+                        and "unsupported_value" in error_text
+                        and "stream" in error_text
+                    ):
+                        logger.warning(
+                            "OpenAI streaming not permitted for this model; retrying without stream"
+                        )
+                        try:
+                            non_stream_model_kwargs = {
+                                **model_kwargs,
+                                "stream": False,
+                            }
+                            fallback_api_kwargs = (
+                                model_client.convert_inputs_to_api_kwargs(
+                                    input=prompt,
+                                    model_kwargs=non_stream_model_kwargs,
+                                    model_type=ModelType.LLM,
+                                )
+                            )
+                            completion = await model_client.acall(
+                                api_kwargs=fallback_api_kwargs,
+                                model_type=ModelType.LLM,
+                            )
+                            completion_text = _extract_chat_completion_text(completion)
+                            if completion_text:
+                                logger.debug(
+                                    "OpenAI fallback non-stream response (first 200 chars): %s",
+                                    completion_text[:200],
+                                )
+                                yield completion_text
+                                return
+                            logger.warning(
+                                "OpenAI fallback non-stream response empty; yielding raw completion"
+                            )
+                            yield str(completion)
+                            return
+                        except Exception as fallback_error:
+                            logger.error(
+                                f"Error with Openai API non-stream fallback: {str(fallback_error)}"
+                            )
+                            yield (
+                                f"\nError with Openai API fallback: {str(fallback_error)}\n\n"
+                                "Please check that you have set the OPENAI_API_KEY environment variable with a valid API key."
+                            )
+                            return
+                    logger.error(f"Error with Openai API: {error_text}")
+                    yield f"\nError with Openai API: {error_text}\n\nPlease check that you have set the OPENAI_API_KEY environment variable with a valid API key."
+            elif provider == "bedrock":
+                try:
+                    logger.info(f"Using AWS Bedrock with model: {model}")
+                    model_client = BedrockClient()
+                    model_kwargs = {
+                        "model": model,
+                        "temperature": model_config["temperature"],
+                        "top_p": model_config["top_p"],
+                    }
+                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
+                        input=prompt,
+                        model_kwargs=model_kwargs,
+                        model_type=ModelType.LLM,
+                    )
+                    logger.info("Making AWS Bedrock API call")
+                    response = await model_client.acall(
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                    )
+                    if isinstance(response, str):
+                        yield response
+                    else:
+                        yield str(response)
+                except Exception as e_bedrock:
+                    logger.error(f"Error with AWS Bedrock API: {str(e_bedrock)}")
+                    yield f"\nError with AWS Bedrock API: {str(e_bedrock)}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
+            elif provider == "azure":
+                try:
+                    logger.info(f"Using Azure AI with model: {model}")
+                    model_client = AzureAIClient()
+                    model_kwargs = {
+                        "model": model,
+                        "stream": True,
+                        "temperature": model_config["temperature"],
+                        "top_p": model_config["top_p"],
+                    }
+                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
+                        input=prompt,
+                        model_kwargs=model_kwargs,
+                        model_type=ModelType.LLM,
+                    )
+                    logger.info("Making Azure AI API call")
+                    response = await model_client.acall(
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                    )
+                    async for chunk in response:
+                        choices = getattr(chunk, "choices", [])
+                        if len(choices) > 0:
+                            delta = getattr(choices[0], "delta", None)
+                            if delta is not None:
+                                text = getattr(delta, "content", None)
+                                if text is not None:
+                                    yield text
+                except Exception as e_azure:
+                    logger.error(f"Error with Azure AI API: {str(e_azure)}")
+                    yield f"\nError with Azure AI API: {str(e_azure)}\n\nPlease check that you have set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_VERSION environment variables with valid values."
+            else:
+                # Google Generative AI
+                model_client = genai.GenerativeModel(
+                    model_name=model_config["model"],
+                    generation_config={
+                        "temperature": model_config["temperature"],
+                        "top_p": model_config["top_p"],
+                        "top_k": model_config["top_k"],
+                    },
+                )
+                response = model_client.generate_content(prompt, stream=True)
+                for chunk in response:
+                    if hasattr(chunk, "text"):
+                        yield chunk.text
+
+        except Exception as e_outer:
+            logger.error(f"Error in streaming response: {str(e_outer)}")
+            error_message = str(e_outer)
+
+            # Check for token limit errors
+            if (
+                "maximum context length" in error_message
+                or "token limit" in error_message
+                or "too many tokens" in error_message
+            ):
+                # If we hit a token limit error, try again without context
+                logger.warning("Token limit exceeded, retrying without context")
+                try:
+                    # Create a simplified prompt without context
+                    simplified_prompt = f"/no_think {system_prompt}\n\n"
+                    if conversation_history:
+                        simplified_prompt += f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
+
+                    # Include file content in the fallback prompt if it was retrieved
+                    if file_path and file_content:
+                        simplified_prompt += f'<currentFileContent path="{file_path}">\n{file_content}\n</currentFileContent>\n\n'
+
+                    simplified_prompt += "<note>Answering without retrieval augmentation due to input size constraints.</note>\n\n"
+                    simplified_prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
+
+                    # Handle fallback for each provider (simplified version)
+                    if provider == "google":
+                        fallback_model = genai.GenerativeModel(
+                            model_name=model_config["model"],
+                            generation_config={
+                                "temperature": model_config.get("temperature", 0.7),
+                                "top_p": model_config.get("top_p", 0.8),
+                                "top_k": model_config.get("top_k", 40),
+                            },
+                        )
+                        fallback_response = fallback_model.generate_content(
+                            simplified_prompt, stream=True
+                        )
+                        for chunk in fallback_response:
+                            if hasattr(chunk, "text"):
+                                yield chunk.text
+                    else:
+                        yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
+                except Exception as e2:
+                    logger.error(f"Error in fallback streaming response: {str(e2)}")
+                    yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
+            else:
+                # For other errors, return the error message
+                yield f"\nError: {error_message}"
+
+    # Convert async generator to sync generator
+    yield from _async_to_sync_generator(_async_stream())

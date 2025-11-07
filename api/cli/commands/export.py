@@ -7,7 +7,8 @@ import json
 import click
 from datetime import datetime
 from api.cli.utils import get_cache_path, select_from_list, select_wiki_from_list
-from api.server import generate_markdown_export, generate_json_export, WikiPage
+from api.models import WikiPage
+from api.utils.export import generate_markdown_export, generate_json_export
 
 
 @click.command(name="export")

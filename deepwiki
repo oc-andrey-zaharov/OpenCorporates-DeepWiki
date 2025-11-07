@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+# DeepWiki CLI Wrapper Script
+# Automatically activates the Poetry environment and runs the deepwiki command
+
+# Get the directory where this script is located (project root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+API_DIR="$SCRIPT_DIR/api"
+
+# Check if api directory exists
+if [ ! -d "$API_DIR" ]; then
+    echo "Error: api directory not found at $API_DIR" >&2
+    exit 1
+fi
+
+# Change to the API directory where poetry.toml is located
+cd "$API_DIR" || exit 1
+
+# Run deepwiki through poetry
+poetry run deepwiki "$@"
+

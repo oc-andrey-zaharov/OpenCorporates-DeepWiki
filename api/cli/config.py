@@ -19,6 +19,11 @@ DEFAULT_CONFIG = {
     "default_model": "gemini-2.0-flash-exp",
     "wiki_type": "comprehensive",
     "file_filters": {"excluded_dirs": [], "excluded_files": []},
+    # Server mode settings
+    "use_server": False,  # Default to standalone
+    "server_url": "http://localhost:8001",
+    "server_timeout": 300,
+    "auto_fallback": True,  # Fallback to standalone if server unavailable
 }
 
 

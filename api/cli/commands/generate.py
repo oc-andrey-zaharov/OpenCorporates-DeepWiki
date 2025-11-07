@@ -20,8 +20,8 @@ from api.cli.utils import (
     prompt_text_input,
 )
 from api.cli.progress import ProgressManager
-from api.rag import RAG
-from api.server import WikiStructureModel, WikiPage, WikiCacheData
+from api.services.rag import RAG
+from api.models import WikiStructureModel, WikiPage, WikiCacheData
 from api.config import GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -537,27 +537,10 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
         # Prepare request
         messages = [{"role": "user", "content": prompt}]
 
-        # Make synchronous request to backend
-        import requests
-
-        response = requests.post(
-            "http://localhost:8001/chat/completions/stream",
-            json={
-                "repo_url": repo_url,
-                "type": "github",
-                "messages": messages,
-                "provider": provider,
-                "model": model,
-            },
-            stream=True,
-            timeout=300,
-        )
+        # Use unified wrapper function
+        from api.utils.chat import generate_chat_completion_streaming
 
         page_bar.update(50)  # Request sent
-
-        if not response.ok:
-            logger.error(f"Error generating page {page_title}: {response.status_code}")
-            return None
 
         # Collect streamed content with incremental progress updates
         content = ""
@@ -566,9 +549,16 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
         last_update_time = start_time
         last_progress = 50
 
-        for line in response.iter_content(chunk_size=1024, decode_unicode=True):
-            if line:
-                content += line.decode("utf-8") if isinstance(line, bytes) else line
+        try:
+            for chunk in generate_chat_completion_streaming(
+                repo_url=repo_url,
+                messages=messages,
+                provider=provider,
+                model=model,
+                repo_type="github",
+            ):
+                if chunk:
+                    content += chunk if isinstance(chunk, str) else str(chunk)
                 chunk_count += 1
                 current_time = time.time()
                 elapsed = current_time - start_time
@@ -600,22 +590,29 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
                             last_progress = page_bar.count
                             last_update_time = current_time
 
-        # Ensure we're at 90% when content is fully received
-        if page_bar.count < 90:
-            page_bar.update(90 - page_bar.count)
+            # Ensure we're at 90% when content is fully received
+            if page_bar.count < 90:
+                page_bar.update(90 - page_bar.count)
 
-        # Clean up content
-        content = content.strip()
-        if content.startswith("```markdown"):
-            content = content[len("```markdown") :].strip()
-        if content.endswith("```"):
-            content = content[:-3].strip()
+            # Clean up content
+            content = content.strip()
+            if content.startswith("```markdown"):
+                content = content[len("```markdown") :].strip()
+            if content.endswith("```"):
+                content = content[:-3].strip()
 
-        # Update page
-        page.content = content
+            # Update page
+            page.content = content
 
-        page_bar.update(100)  # Complete
-        progress_manager.complete_page(page_id)
+            page_bar.update(100)  # Complete
+            progress_manager.complete_page(page_id)
+        except Exception as e:
+            logger.error(f"Error generating page {page_title}: {e}")
+            return None
+
+        if not content:
+            logger.warning(f"No content generated for page {page_title}")
+            return None
 
         return page
 
@@ -640,7 +637,6 @@ def generate_wiki_structure(
     Returns:
         WikiStructureModel or None on error
     """
-    import requests
 
     # Calculate file count for page estimation
     file_count = len([line for line in file_tree.split("\n") if line.strip()])
@@ -736,28 +732,20 @@ IMPORTANT:
 4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters"""
 
     try:
-        response = requests.post(
-            "http://localhost:8001/chat/completions/stream",
-            json={
-                "repo_url": repo_url,
-                "type": repo_type,
-                "messages": [{"role": "user", "content": prompt}],
-                "provider": provider,
-                "model": model,
-            },
-            stream=True,
-            timeout=300,
-        )
+        # Use unified wrapper function
+        from api.utils.chat import generate_chat_completion_streaming
 
-        if not response.ok:
-            logger.error(f"Error generating structure: {response.status_code}")
-            return None
-
-        # Collect response
+        # Collect response from streaming generator
         xml_content = ""
-        for line in response.iter_content(chunk_size=1024, decode_unicode=True):
-            if line:
-                xml_content += line.decode("utf-8") if isinstance(line, bytes) else line
+        for chunk in generate_chat_completion_streaming(
+            repo_url=repo_url,
+            messages=[{"role": "user", "content": prompt}],
+            provider=provider,
+            model=model,
+            repo_type=repo_type,
+        ):
+            if chunk:
+                xml_content += chunk if isinstance(chunk, str) else str(chunk)
 
         # Parse XML
         import xml.etree.ElementTree as ET
@@ -944,24 +932,13 @@ def generate():
 
         try:
             if repo_type == "github":
-                import requests
+                from api.utils.github import get_github_repo_structure
 
-                params = {"owner": owner, "repo": repo_name}
-                if repo_url_or_path:
-                    params["repo_url"] = repo_url_or_path
-
-                response = requests.get(
-                    "http://localhost:8001/github/repo/structure",
-                    params=params,
-                    timeout=60,
+                data = get_github_repo_structure(
+                    owner=owner,
+                    repo=repo_name,
+                    repo_url=repo_url_or_path,
                 )
-
-                if not response.ok:
-                    raise Exception(
-                        f"Failed to fetch repository structure: {response.status_code}"
-                    )
-
-                data = response.json()
                 file_tree = data.get("file_tree", "")
                 readme = data.get("readme", "")
             else:
@@ -1044,7 +1021,7 @@ def generate():
         cache_file = cache_path / cache_filename
 
         # Prepare cache data
-        from api.server import RepoInfo
+        from api.models import RepoInfo
 
         repo_info = RepoInfo(
             owner=owner or "",

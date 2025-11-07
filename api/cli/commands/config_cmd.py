@@ -5,6 +5,12 @@ Configuration management commands.
 import click
 import json
 from api.cli.config import load_config, set_config_value, CONFIG_FILE
+from api.utils.mode import (
+    is_server_mode,
+    get_server_url,
+    check_server_health,
+    should_fallback,
+)
 
 
 @click.group(name="config")
@@ -25,6 +31,26 @@ def show_config():
 
     # Pretty print the configuration
     click.echo(json.dumps(config_data, indent=2))
+
+    # Show server mode status
+    click.echo("\n" + "-" * 50)
+    click.echo("Server Mode Status")
+    click.echo("-" * 50)
+    if is_server_mode():
+        server_url = get_server_url()
+        click.echo(f"Mode: Server (URL: {server_url})")
+        if check_server_health(server_url):
+            click.echo("Status: ✓ Server is available")
+        else:
+            click.echo("Status: ✗ Server is unavailable")
+            if should_fallback():
+                click.echo("Fallback: ✓ Auto-fallback enabled (will use standalone)")
+            else:
+                click.echo("Fallback: ✗ Auto-fallback disabled")
+    else:
+        click.echo("Mode: Standalone")
+        click.echo("Status: ✓ Ready (no server required)")
+
     click.echo("\n" + "=" * 50 + "\n")
 
 

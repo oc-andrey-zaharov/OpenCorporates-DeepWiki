@@ -15,8 +15,8 @@ RUN NODE_ENV=production npm run build
 
 FROM python:3.11-slim AS py_deps
 WORKDIR /api
-COPY api/pyproject.toml .
-COPY api/poetry.lock .
+COPY pyproject.toml .
+COPY poetry.lock .
 RUN python -m pip install poetry==2.0.1 --no-cache-dir && \
     poetry config virtualenvs.create true --local && \
     poetry config virtualenvs.in-project true --local && \
@@ -103,7 +103,7 @@ if [ -z "$OPENAI_API_KEY" ] || [ -z "$GOOGLE_API_KEY" ]; then\n\
 fi\n\
 \n\
 # Start the API server in the background with the configured port\n\
-python -m api.main --port ${PORT:-8001} &\n\
+python -m api.server.main --port ${PORT:-8001} &\n\
 PORT=3000 HOSTNAME=0.0.0.0 node server.js &\n\
 wait -n\n\
 exit $?' > /app/start.sh && chmod +x /app/start.sh

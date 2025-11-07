@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# DeepWiki CLI Wrapper Script
+# Automatically activates the Poetry environment and runs the deepwiki command
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Change to the API directory
+cd "$SCRIPT_DIR" || exit 1
+
+# Run deepwiki through poetry
+poetry run deepwiki "$@"
+

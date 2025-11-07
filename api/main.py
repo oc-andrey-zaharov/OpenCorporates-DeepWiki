@@ -52,7 +52,7 @@ def main():
 
     # Run the FastAPI app with uvicorn
     uvicorn.run(
-        "api.api:app",
+        "api.server:app",
         host="0.0.0.0",
         port=port,
         reload=is_development,

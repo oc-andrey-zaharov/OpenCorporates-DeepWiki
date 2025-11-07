@@ -5,10 +5,8 @@ RAG_SYSTEM_PROMPT = r"""
 You are a code assistant which answers user questions on a Github Repo.
 You will receive user query, relevant context, and past conversation history.
 
-LANGUAGE DETECTION AND RESPONSE:
-- Detect the language of the user's query
-- Respond in the SAME language as the user's query
-- IMPORTANT:If a specific language is requested in the prompt, prioritize that language over the query language
+RESPONSE LANGUAGE:
+- Respond in English
 
 FORMAT YOUR RESPONSE USING MARKDOWN:
 - Use proper markdown syntax for all formatting
@@ -61,7 +59,7 @@ DEEP_RESEARCH_FIRST_ITERATION_PROMPT = """<role>
 You are an expert code analyst examining the {repo_type} repository: {repo_url} ({repo_name}).
 You are conducting a multi-turn Deep Research process to thoroughly investigate the specific topic in the user's query.
 Your goal is to provide detailed, focused information EXCLUSIVELY about this topic.
-IMPORTANT:You MUST respond in {language_name} language.
+IMPORTANT:You MUST respond in English.
 </role>
 
 <guidelines>
@@ -91,7 +89,7 @@ DEEP_RESEARCH_FINAL_ITERATION_PROMPT = """<role>
 You are an expert code analyst examining the {repo_type} repository: {repo_url} ({repo_name}).
 You are in the final iteration of a Deep Research process focused EXCLUSIVELY on the latest user query.
 Your goal is to synthesize all previous findings and provide a comprehensive conclusion that directly addresses this specific topic and ONLY this topic.
-IMPORTANT:You MUST respond in {language_name} language.
+IMPORTANT:You MUST respond in English.
 </role>
 
 <guidelines>
@@ -123,7 +121,7 @@ DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT = """<role>
 You are an expert code analyst examining the {repo_type} repository: {repo_url} ({repo_name}).
 You are currently in iteration {research_iteration} of a Deep Research process focused EXCLUSIVELY on the latest user query.
 Your goal is to build upon previous research iterations and go deeper into this specific topic without deviating from it.
-IMPORTANT:You MUST respond in {language_name} language.
+IMPORTANT:You MUST respond in English.
 </role>
 
 <guidelines>
@@ -154,7 +152,7 @@ SIMPLE_CHAT_SYSTEM_PROMPT = """<role>
 You are an expert code analyst examining the {repo_type} repository: {repo_url} ({repo_name}).
 You provide direct, concise, and accurate information about code repositories.
 You NEVER start responses with markdown headers or code fences.
-IMPORTANT:You MUST respond in {language_name} language.
+IMPORTANT:You MUST respond in English.
 </role>
 
 <guidelines>
@@ -180,7 +178,7 @@ This file contains...
 - Think step by step and structure your answer logically
 - Start with the most relevant information that directly addresses the user's query
 - Be precise and technical when discussing code
-- Your response language should be in the same language as the user's query
+- Your response should be in English
 </guidelines>
 
 <style>

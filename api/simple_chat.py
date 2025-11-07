@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from api.config import (
     get_model_config,
-    configs,
     OPENROUTER_API_KEY,
     OPENAI_API_KEY,
     AWS_ACCESS_KEY_ID,
@@ -37,6 +36,7 @@ from api.logging_config import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
 
 def _is_truthy(value: Optional[str]) -> bool:
     if value is None:
@@ -62,6 +62,7 @@ def _extract_chat_completion_text(completion) -> Optional[str]:
     except Exception as exc:
         logger.warning(f"Failed to extract text from completion: {exc}")
         return None
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -310,9 +311,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                 # Try to perform RAG retrieval
                 try:
                     # This will use the actual RAG implementation
-                    retrieved_documents = request_rag(
-                        rag_query, language=request.language
-                    )
+                    retrieved_documents = request_rag(rag_query)
 
                     if retrieved_documents and retrieved_documents[0].documents:
                         # Format context for the prompt in a more structured way
@@ -356,10 +355,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
         # Determine repository type
         repo_type = request.type
 
-        # Get language information
-        language_code = request.language or configs["lang_config"]["default"]
-        supported_langs = configs["lang_config"]["supported_languages"]
-        language_name = supported_langs.get(language_code, "English")
+        # Language is always English
 
         # Create system prompt
         if is_deep_research:
@@ -374,7 +370,6 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     repo_type=repo_type,
                     repo_url=repo_url,
                     repo_name=repo_name,
-                    language_name=language_name,
                 )
             elif is_final_iteration:
                 system_prompt = DEEP_RESEARCH_FINAL_ITERATION_PROMPT.format(
@@ -382,7 +377,6 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     repo_url=repo_url,
                     repo_name=repo_name,
                     research_iteration=research_iteration,
-                    language_name=language_name,
                 )
             else:
                 system_prompt = DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT.format(
@@ -390,14 +384,12 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     repo_url=repo_url,
                     repo_name=repo_name,
                     research_iteration=research_iteration,
-                    language_name=language_name,
                 )
         else:
             system_prompt = SIMPLE_CHAT_SYSTEM_PROMPT.format(
                 repo_type=repo_type,
                 repo_url=repo_url,
                 repo_name=repo_name,
-                language_name=language_name,
             )
 
         # Fetch file content if provided
@@ -633,7 +625,11 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                     except Exception as e_openai:
                         error_text = str(e_openai)
                         streaming_attempted = model_kwargs.get("stream", True)
-                        if streaming_attempted and "unsupported_value" in error_text and "stream" in error_text:
+                        if (
+                            streaming_attempted
+                            and "unsupported_value" in error_text
+                            and "stream" in error_text
+                        ):
                             logger.warning(
                                 "OpenAI streaming not permitted for this model; retrying without stream"
                             )
@@ -928,7 +924,7 @@ async def chat_completions_stream(request: ChatCompletionRequest):
                                     yield chunk.text
                     except Exception as e2:
                         logger.error(f"Error in fallback streaming response: {str(e2)}")
-                        yield f"\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
+                        yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
                 else:
                     # For other errors, return the error message
                     yield f"\nError: {error_message}"

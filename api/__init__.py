@@ -1,3 +1,5 @@
-# Make the api package importable
+"""
+API package for OpenCorporates-DeepWiki.
+"""
 
-# api package
+__version__ = "1.0.0"

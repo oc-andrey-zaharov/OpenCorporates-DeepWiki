@@ -1,0 +1,1043 @@
+"""
+Wiki generation command.
+"""
+
+import os
+import sys
+import json
+import click
+import logging
+from typing import Dict, Optional, List
+
+from api.cli.config import load_config, get_provider_models
+from api.cli.utils import (
+    parse_repository_input,
+    get_cache_path,
+    ensure_cache_dir,
+    select_from_list,
+)
+from api.cli.progress import ProgressManager
+from api.rag import RAG
+from api.server import WikiStructureModel, WikiPage, WikiCacheData
+from api.config import GITHUB_TOKEN
+
+logger = logging.getLogger(__name__)
+
+
+def prompt_repository() -> tuple:
+    """
+    Prompt user for repository input.
+
+    Returns:
+        Tuple of (repo_type, repo_url_or_path, owner, repo_name)
+    """
+    click.echo("\n" + "=" * 60)
+    click.echo("Repository Selection")
+    click.echo("=" * 60)
+    click.echo("\nYou can provide:")
+    click.echo("  • GitHub URL: https://github.com/owner/repo")
+    click.echo("  • GitHub shorthand: owner/repo")
+    click.echo("  • Local directory path: /path/to/repo")
+
+    while True:
+        repo_input = click.prompt("\nEnter repository", type=str)
+
+        try:
+            repo_type, repo_url_or_path, owner, repo_name = parse_repository_input(
+                repo_input
+            )
+            click.echo(f"✓ Repository: {repo_name} (type: {repo_type})")
+            return repo_type, repo_url_or_path, owner, repo_name
+        except ValueError as e:
+            click.echo(f"✗ {e}", err=True)
+            if not click.confirm("Try again?", default=True):
+                raise click.Abort()
+
+
+def prompt_model_config(config: Dict) -> tuple:
+    """
+    Prompt user for model configuration.
+
+    Returns:
+        Tuple of (provider, model)
+    """
+    click.echo("\n" + "=" * 60)
+    click.echo("Model Configuration")
+    click.echo("=" * 60)
+
+    # Get available providers and models
+    provider_models = get_provider_models()
+
+    if not provider_models:
+        click.echo("✗ No model providers configured.", err=True)
+        raise click.Abort()
+
+    # Prompt for provider
+    default_provider = config.get("default_provider", "google")
+    providers = list(provider_models.keys())
+
+    provider = select_from_list(
+        "Select provider",
+        providers,
+        default=default_provider,
+    )
+
+    # Prompt for model
+    available_models = provider_models.get(provider, [])
+
+    default_model = config.get("default_model")
+    if default_model and default_model in available_models:
+        default_value = default_model
+    elif available_models:
+        default_value = available_models[0]
+    else:
+        default_value = None
+
+    if available_models:
+        # Use interactive selection with custom option
+        model = select_from_list(
+            f"Select model for {provider}",
+            available_models,
+            default=default_value,
+            allow_custom=True,
+        )
+    else:
+        # No predefined models, must enter custom
+        click.echo(f"\nNo predefined models configured for {provider}.")
+        model = click.prompt("Enter model name", type=str)
+
+    if not model:
+        click.echo("✗ Model name is required.", err=True)
+        raise click.Abort()
+
+    # Warn if custom model is used
+    if available_models and model not in available_models:
+        if not click.confirm(
+            f"⚠ '{model}' is not in the predefined list. Continue anyway?",
+            default=True,
+        ):
+            raise click.Abort()
+
+    click.echo(f"✓ Using {provider}/{model}")
+    return provider, model
+
+
+def prompt_wiki_type(config: Dict) -> bool:
+    """
+    Prompt user for wiki type.
+
+    Returns:
+        True for comprehensive, False for concise
+    """
+    default_type = config.get("wiki_type", "comprehensive")
+    default_comprehensive = default_type == "comprehensive"
+
+    click.echo("\n" + "=" * 60)
+    click.echo("Wiki Type")
+    click.echo("=" * 60)
+    click.echo("\n  • Comprehensive: More pages with detailed sections (recommended)")
+    click.echo("  • Concise: Fewer pages with essential information")
+
+    is_comprehensive = click.confirm(
+        "\nGenerate comprehensive wiki?", default=default_comprehensive
+    )
+
+    wiki_type = "comprehensive" if is_comprehensive else "concise"
+    click.echo(f"✓ Wiki type: {wiki_type}")
+    return is_comprehensive
+
+
+def prompt_file_filters() -> tuple:
+    """
+    Prompt user for optional file filters.
+
+    Returns:
+        Tuple of (excluded_dirs, excluded_files, included_dirs, included_files)
+    """
+    click.echo("\n" + "=" * 60)
+    click.echo("File Filters (Optional)")
+    click.echo("=" * 60)
+
+    use_filters = click.confirm("\nConfigure file filters?", default=False)
+
+    if not use_filters:
+        return None, None, None, None
+
+    click.echo("\nEnter patterns (comma-separated) or leave empty:")
+
+    excluded_dirs = click.prompt("Exclude directories", default="", show_default=False)
+    excluded_files = click.prompt("Exclude files", default="", show_default=False)
+    included_dirs = click.prompt(
+        "Include only directories", default="", show_default=False
+    )
+    included_files = click.prompt("Include only files", default="", show_default=False)
+
+    # Parse comma-separated values
+    excluded_dirs = (
+        [d.strip() for d in excluded_dirs.split(",") if d.strip()]
+        if excluded_dirs
+        else None
+    )
+    excluded_files = (
+        [f.strip() for f in excluded_files.split(",") if f.strip()]
+        if excluded_files
+        else None
+    )
+    included_dirs = (
+        [d.strip() for d in included_dirs.split(",") if d.strip()]
+        if included_dirs
+        else None
+    )
+    included_files = (
+        [f.strip() for f in included_files.split(",") if f.strip()]
+        if included_files
+        else None
+    )
+
+    return excluded_dirs, excluded_files, included_dirs, included_files
+
+
+def generate_page_content_sync(
+    page: WikiPage,
+    rag: RAG,
+    repo_url: str,
+    provider: str,
+    model: str,
+    progress_manager: ProgressManager,
+) -> Optional[WikiPage]:
+    """
+    Generate content for a single page (synchronous wrapper).
+
+    Returns:
+        Updated WikiPage with generated content or None on error
+    """
+    page_id = page.id
+    page_title = page.title
+
+    try:
+        # Add progress bar for this page
+        page_bar = progress_manager.add_page_progress(page_id, page_title)
+        page_bar.update(10)  # Starting
+
+        # Import required modules
+
+        # Create the prompt (matching web UI exactly for quality)
+        file_paths_list = "\n".join([f"- [{path}]" for path in page.filePaths])
+
+        prompt = f"""You are an expert technical writer and software architect.
+Your task is to generate a comprehensive and accurate technical wiki page in Markdown format about a specific feature, system, or module within a given software project.
+
+You will be given:
+1. The "{page_title}" for the page you need to create.
+2. A list of RELEVANT_SOURCE_FILES from the project that you MUST use as the sole basis for the content. You have access to the full content of these files. You MUST use AT LEAST 5 relevant source files for comprehensive coverage - if fewer are provided, search for additional related files in the codebase.
+
+CRITICAL STARTING INSTRUCTION:
+The very first thing on the page MUST be a `<details>` block listing ALL the RELEVANT_SOURCE_FILES you used to generate the content. There MUST be AT LEAST 5 source files listed - if fewer were provided, you MUST find additional related files to include.
+Format it exactly like this:
+<details>
+  <summary>Relevant source files</summary>
+
+  The following files were used as context for generating this wiki page:
+
+  {file_paths_list}
+  <!-- Add additional relevant files if fewer than 5 were provided -->
+</details>
+
+Immediately after the `<details>` block, the main title of the page should be a H1 Markdown heading: `# {page_title}`.
+
+Based ONLY on the content of the RELEVANT_SOURCE_FILES:
+
+1.  **Introduction:** Start with a concise introduction (1-2 paragraphs) explaining the purpose, scope, and high-level overview of "{page_title}" within the context of the overall project. If relevant, and if information is available in the provided files, link to other potential wiki pages using the format `[Link Text](#page-anchor-or-id)`.
+
+2.  **Detailed Sections:** Break down "{page_title}" into logical sections using H2 (`##`) and H3 (`###`) Markdown headings. For each section:
+*   Explain the architecture, components, data flow, or logic relevant to the section's focus, as evidenced in the source files.
+*   Identify key functions, classes, data structures, API endpoints, or configuration elements pertinent to that section.
+
+3.  **Mermaid Diagrams:**
+*   EXTENSIVELY use Mermaid diagrams (e.g., `flowchart TD`, `sequenceDiagram`, `classDiagram`, `erDiagram`, `graph TD`) to visually represent architectures, flows, relationships, and schemas found in the source files.
+*   Ensure diagrams are accurate and directly derived from information in the RELEVANT_SOURCE_FILES.
+*   Provide a brief explanation before or after each diagram to give context.
+
+**CRITICAL SYNTAX RULES FOR MERMAID DIAGRAMS:**
+
+**FLOWCHART REQUIREMENTS:**
+- ALWAYS use "flowchart TD" (never "graph TD") as the first directive
+- Place the directive on its own line, followed by a blank line
+- Use simple alphanumeric node IDs (e.g., A, B, C, node1, start)
+- Node labels MUST be enclosed in quotes: A["Label text"]
+- Labels should be 3-4 words maximum per line
+- Use <br/> for line breaks inside labels: A["First<br/>Second"]
+- Use simple arrow syntax: --> for simple flow, -. -> for dotted, -->|label| for labeled edges
+- **CRITICAL: Always use quotes around node labels that contain ANY of these: spaces, special characters (< > & " '), HTML tags (<br/>), parentheses ( ), slashes (/), colons (:), or multi-word text**
+- Examples: A["Start Process"], B["End<br/>Here"], C["API Call (v2.1)"], D["File/Directory"]
+- Keep node text SHORT to prevent rendering issues
+- Avoid special characters in node IDs (use only letters, numbers, underscore)
+- For subgraphs: Use subgraph id["Name"] ... end syntax
+
+**SEQUENCE DIAGRAM REQUIREMENTS:**
+- Start with "sequenceDiagram" as the first directive
+- Declare ALL participants at the beginning: participant id as Name
+- Use descriptive names but keep them concise (max 15 characters)
+- Simple participant IDs: A, B, C, or meaningful short names
+- Use correct arrow syntax:
+  * ->> for solid line with arrowhead (most common)
+  * -->> for dotted line with arrowhead
+  * -> for solid line without arrow
+  * --> for dotted line without arrow
+- Message syntax: A->>B: Message text (colon required, no special formatting needed)
+- Use "Note over participant1,participant2: Note text" for notes spanning multiple participants
+- Use "Note right of participant: Note text" for notes on the right side
+- Use "Note left of participant: Note text" for notes on the left side
+- Always put note text in quotes if it contains special characters
+- Notes cannot overlap with message arrows - place them between message exchanges
+- Use alt/else for conditional flows, NOT complex nested structures
+
+**COMMON ERRORS TO AVOID:**
+- NO complex edge labels with special syntax like A--|label|B (use A-->|label|B instead)
+- NO undefined participants in sequence diagrams
+- NO special characters (#, @, $, %, &) in node IDs
+- NO extremely long labels (break them with <br/>)
+- NO mixed quote styles (always use ")
+- NO missing end statements for subgraphs
+
+**MERMAID EXAMPLES:**
+
+Example 1 - Flowchart with subgraphs:
+```mermaid
+flowchart TD
+    subgraph datasources["Data Sources"]
+        lambda["AWS Lambda"]
+        spark["Spark Jobs"]
+        python["Python Apps"]
+    end
+
+    subgraph processing["Processing"]
+        client["OC Lineage<br/>Client"]
+        manifest["Manifest<br/>Generator"]
+    end
+
+    subgraph storage["Storage"]
+        console["Console"]
+        file["Local File"]
+        s3["AWS S3"]
+    end
+
+    lambda --> client
+    spark --> client
+    python --> client
+
+    client --> console
+    client --> file
+    client --> s3
+    manifest -.-> s3
+```
+
+Example 1.1 - Flowchart with subgraphs:
+```mermaid
+flowchart TD
+    A[Developer Modifies Code] --> B{"Pre-commit Hook<br/>Triggered"}
+    B -- Calls --> C["Cursor Agent<br/>(LLM)"]
+    C -- Proposes --> D["Doc Updates<br/>(docs/_suggested.patch)"]
+    D --> E{"Developer Reviews<br/>and Commits"}
+    E --> F[Push to Git Repository]
+    F --> G{"CI Pipeline<br/>Triggered"}
+    G -- Runs --> H[Staleness Check]
+    G -- Runs --> I["Doc Validation<br/>(validate_docs.py)"]
+    I -- On Merge to main --> J["Confluence Publishing<br/>(GitHub Action)"]
+    J --> K["Confluence Central Docs<br/>(Locked)"]
+    K -- Secure, Versioned --> L[Stakeholders]
+    H -. Comments if stale .-> E
+```
+Example 1.2 - Flowchart with subgraphs:
+```mermaid
+flowchart TD
+
+    A[LLM Agent] --> B{"Consult Documentation"}
+    B -- Rule 1 --> C["Reference Docs Before Assumptions"]
+    B -- Rule 2 --> D["Combine Doc Context + Code Comments"]
+    B -- Rule 3 --> E["Use Mermaid for Flows"]
+    B -- Rule 4 --> F["Follow DOCS_STANDARDS.md for Updates"]
+
+    subgraph "Documentation System"
+        G["/docs/ (Primary Location)"]
+        H["docs-central (Central Source)"]
+        I["Confluence (Publishing Target)"]
+    end
+
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+```
+
+Example 2 - Sequence diagram:
+```mermaid
+sequenceDiagram
+    autonumber
+    participant pipeline as Pipeline
+    participant client as OC Client
+    participant transport as Transport
+    participant storage as Storage
+
+    pipeline->>client: Job START/COMPLETE
+    client->>transport: Emit events
+
+    alt S3 Transport
+        transport->>storage: Write to S3
+    else File Transport
+        transport->>client: Write to file
+    end
+
+    Note over storage: Partitioned by date
+```
+
+Example 3 - Class diagram:
+```mermaid
+classDiagram
+    class Repository {{
+        +String name
+        +String url
+        +getStructure(): RepoStructure
+        +analyze(): AnalysisResult
+    }}
+
+    class WikiGenerator {{
+        +Repository repo
+        +Model model
+        +generateWiki(): Wiki
+        +generatePage(): WikiPage
+    }}
+
+    class WikiPage {{
+        +String id
+        +String title
+        +String content
+        +String[] filePaths
+        +generateContent(): String
+    }}
+
+    Repository --> WikiGenerator : generates
+    WikiGenerator --> WikiPage : creates
+    WikiPage --> Repository : analyzes
+```
+
+Example 4 - Entity-Relationship diagram:
+```mermaid
+erDiagram
+    PROJECT ||--o{{ WIKI : has
+    PROJECT ||--o{{ FILE : stores
+    WIKI ||--o{{ PAGE : contains
+    PAGE ||--o{{ PAGE_VERSION : versions
+    PAGE ||--o{{ PAGE_FILE : references
+    FILE ||--o{{ PAGE_FILE : referenced_by
+    PAGE ||--o{{ PAGE_LINK : links_from
+    PAGE ||--o{{ PAGE_LINK : links_to
+
+    PROJECT {{
+        uuid id PK
+        string name
+        string url
+        datetime created_at
+        datetime updated_at
+        string created_by
+        string updated_by
+    }}
+
+    WIKI {{
+        uuid id PK
+        uuid project_id FK
+        string title
+        string description
+        string type  "enum or label"
+        datetime created_at
+        datetime updated_at
+        string created_by
+        string updated_by
+    }}
+
+    PAGE {{
+        uuid id PK
+        uuid wiki_id FK
+        string title
+        string slug        "unique within wiki"
+        string content     "latest version/body"
+        string importance  "enum: low|medium|high or 1-5"
+        datetime created_at
+        datetime updated_at
+        string created_by
+        string updated_by
+    }}
+
+    FILE {{
+        uuid id PK
+        uuid project_id FK
+        string repo        "e.g. org/repo"
+        string ref_sha     "git commit SHA"
+        string path        "repo-relative path"
+        string mime_type
+        string type        "logical type, e.g. markdown/image"
+        datetime created_at
+        datetime updated_at
+        string created_by
+        string updated_by
+    }}
+
+    PAGE_FILE {{
+        uuid id PK
+        uuid page_id FK
+        uuid file_id FK
+        string role        "e.g. embedded|reference|attachment"
+        datetime created_at
+    }}
+
+    PAGE_LINK {{
+        uuid id PK
+        uuid src_page_id FK
+        uuid dst_page_id FK
+        string link_type   "e.g. sees|includes|related"
+        datetime created_at
+    }}
+
+    PAGE_VERSION {{
+        uuid id PK
+        uuid page_id FK
+        int version
+        string content
+        string editor
+        datetime created_at
+    }}
+```
+
+4.  **Code Examples:** Where appropriate, include brief code snippets (properly formatted in Markdown code blocks with language identifiers like ```python, ```javascript, etc.) extracted directly from the RELEVANT_SOURCE_FILES to illustrate key concepts, implementations, or usage patterns. Do not invent code; only use what is present in the source files.
+
+5.  **Technical Accuracy:** All information MUST be derived SOLELY from the source files. Do not invent, assume, or supplement with external knowledge. If a specific aspect is not covered in the provided files, either omit it or clearly state that the information is not available in the provided context.
+
+6.  **Clarity and Conciseness:** Use clear, professional, and concise technical language appropriate for developers and technical stakeholders. Avoid jargon unless it's standard within the project's context.
+
+7.  **Consistency:** Maintain consistent formatting, terminology, and style throughout the page.
+
+Generate the content in English. Do NOT wrap your response in markdown code fences. Do NOT provide any acknowledgements, disclaimers, apologies, or any other preface. JUST START with the `<details>` block as the very first line of your response."""
+
+        page_bar.update(30)  # Prompt ready
+
+        # Prepare request
+        messages = [{"role": "user", "content": prompt}]
+
+        # Make synchronous request to backend
+        import requests
+
+        response = requests.post(
+            "http://localhost:8001/chat/completions/stream",
+            json={
+                "repo_url": repo_url,
+                "type": "github",
+                "messages": messages,
+                "provider": provider,
+                "model": model,
+            },
+            stream=True,
+            timeout=300,
+        )
+
+        page_bar.update(50)  # Request sent
+
+        if not response.ok:
+            logger.error(f"Error generating page {page_title}: {response.status_code}")
+            return None
+
+        # Collect streamed content
+        content = ""
+        for line in response.iter_content(chunk_size=1024, decode_unicode=True):
+            if line:
+                content += line.decode("utf-8") if isinstance(line, bytes) else line
+
+        page_bar.update(90)  # Content received
+
+        # Clean up content
+        content = content.strip()
+        if content.startswith("```markdown"):
+            content = content[len("```markdown") :].strip()
+        if content.endswith("```"):
+            content = content[:-3].strip()
+
+        # Update page
+        page.content = content
+
+        page_bar.update(100)  # Complete
+        progress_manager.complete_page(page_id)
+
+        return page
+
+    except Exception as e:
+        logger.error(f"Error generating page {page_title}: {e}")
+        progress_manager.complete_page(page_id)
+        return None
+
+
+def generate_wiki_structure(
+    repo_url: str,
+    repo_type: str,
+    file_tree: str,
+    readme: str,
+    provider: str,
+    model: str,
+    is_comprehensive: bool,
+) -> Optional[WikiStructureModel]:
+    """
+    Generate wiki structure from repository.
+
+    Returns:
+        WikiStructureModel or None on error
+    """
+    import requests
+
+    # Calculate file count for page estimation
+    file_count = len([line for line in file_tree.split("\n") if line.strip()])
+
+    # Determine page count ranges
+    if file_count < 50:
+        min_pages = 6 if is_comprehensive else 4
+        max_pages = 8 if is_comprehensive else 6
+    elif file_count < 200:
+        min_pages = 8 if is_comprehensive else 5
+        max_pages = 12 if is_comprehensive else 7
+    elif file_count < 500:
+        min_pages = 10 if is_comprehensive else 6
+        max_pages = 15 if is_comprehensive else 9
+    else:
+        min_pages = 12 if is_comprehensive else 7
+        max_pages = 18 if is_comprehensive else 11
+
+    target_pages = (min_pages + max_pages) // 2
+
+    # Create structure prompt (matching frontend for quality)
+    prompt = f"""Analyze this repository and create a wiki structure for it.
+
+1. The complete file tree of the project:
+<file_tree>
+{file_tree}
+</file_tree>
+
+2. The README file of the project:
+<readme>
+{readme}
+</readme>
+
+I want to create a wiki for this repository. Determine the most logical structure for a wiki based on the repository's content.
+
+IMPORTANT: The wiki content will be generated in English.
+
+When designing the wiki structure, include pages that would benefit from visual diagrams, such as:
+- Architecture overviews
+- Data flow descriptions
+- Component relationships
+- Process workflows
+- State machines
+- Class hierarchies
+
+{"Create a structured wiki with the following main sections:" if is_comprehensive else "Create a concise wiki with essential pages covering:"}
+{"- Overview (general information about the project)" if is_comprehensive else ""}
+{"- System Architecture (how the system is designed)" if is_comprehensive else ""}
+{"- Core Features (key functionality)" if is_comprehensive else ""}
+{"- Data Management/Flow: If applicable, how data is stored, processed, accessed, and managed (e.g., database schema, data pipelines, state management)." if is_comprehensive else ""}
+{"- Frontend Components (UI elements, if applicable.)" if is_comprehensive else ""}
+{"- Backend Systems (server-side components)" if is_comprehensive else ""}
+{"- Model Integration (AI model connections)" if is_comprehensive else ""}
+{"- Deployment/Infrastructure (how to deploy, what's the infrastructure like)" if is_comprehensive else ""}
+{"- Extensibility and Customization: If the project architecture supports it, explain how to extend or customize its functionality (e.g., plugins, theming, custom modules, hooks)." if is_comprehensive else ""}
+
+{"Each section should contain relevant pages. For example, the 'Frontend Components' section might include pages for 'Home Page', 'Repository Wiki Page', 'Configuration Modal', etc." if is_comprehensive else ""}
+
+Return your analysis in the following XML format:
+
+<wiki_structure>
+  <title>[Overall title for the wiki]</title>
+  <description>[Brief description of the repository]</description>
+  <pages>
+    <page id="page-1">
+      <title>[Page title]</title>
+      <description>[Brief description of what this page will cover]</description>
+      <importance>high|medium|low</importance>
+      <relevant_files>
+        <file_path>[Path to a relevant file]</file_path>
+        <!-- More file paths as needed -->
+      </relevant_files>
+      <related_pages>
+        <related>page-2</related>
+        <!-- More related page IDs as needed -->
+      </related_pages>
+    </page>
+    <!-- More pages as needed -->
+  </pages>
+</wiki_structure>
+
+IMPORTANT FORMATTING INSTRUCTIONS:
+- Return ONLY the valid XML structure specified above
+- DO NOT wrap the XML in markdown code blocks (no ``` or ```xml)
+- DO NOT include any explanation text before or after the XML
+- Ensure the XML is properly formatted and valid
+- Start directly with <wiki_structure> and end with </wiki_structure>
+
+IMPORTANT:
+1. Create {min_pages}-{max_pages} pages (aim for {target_pages} pages) that would make a {"comprehensive" if is_comprehensive else "concise"} wiki for this repository. The repository contains {file_count} files, so adjust the number of pages accordingly - larger repositories may need more pages to cover all important aspects.
+2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
+3. The relevant_files should be actual files from the repository that would be used to generate that page
+4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters"""
+
+    try:
+        response = requests.post(
+            "http://localhost:8001/chat/completions/stream",
+            json={
+                "repo_url": repo_url,
+                "type": repo_type,
+                "messages": [{"role": "user", "content": prompt}],
+                "provider": provider,
+                "model": model,
+            },
+            stream=True,
+            timeout=300,
+        )
+
+        if not response.ok:
+            logger.error(f"Error generating structure: {response.status_code}")
+            return None
+
+        # Collect response
+        xml_content = ""
+        for line in response.iter_content(chunk_size=1024, decode_unicode=True):
+            if line:
+                xml_content += line.decode("utf-8") if isinstance(line, bytes) else line
+
+        # Parse XML
+        import xml.etree.ElementTree as ET
+
+        # Clean up response
+        xml_content = xml_content.strip()
+        if xml_content.startswith("```xml") or xml_content.startswith("```"):
+            xml_content = (
+                xml_content.split("\n", 1)[1] if "\n" in xml_content else xml_content
+            )
+        if xml_content.endswith("```"):
+            xml_content = (
+                xml_content.rsplit("\n", 1)[0] if "\n" in xml_content else xml_content
+            )
+
+        # Extract XML
+        import re
+
+        xml_match = re.search(
+            r"<wiki_structure>.*</wiki_structure>", xml_content, re.DOTALL
+        )
+        if not xml_match:
+            logger.error("No valid XML structure found in response")
+            return None
+
+        xml_text = xml_match.group(0)
+
+        # Clean XML: escape common problematic characters
+        import html
+
+        # First unescape any HTML entities
+        xml_text = html.unescape(xml_text)
+
+        # Escape ampersands that aren't part of entities
+        xml_text = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", xml_text)
+
+        # Parse XML
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError as e:
+            logger.error(f"XML parsing failed: {e}")
+            logger.debug(f"Failed XML content:\n{xml_text[:500]}...")
+            return None
+
+        title_el = root.find("title")
+        title = title_el.text if title_el is not None and title_el.text else "Wiki"
+        description_el = root.find("description")
+        description = (
+            description_el.text
+            if description_el is not None and description_el.text
+            else ""
+        )
+
+        # Parse pages
+        pages: List[WikiPage] = []
+        pages_el = root.find("pages")
+        if pages_el is not None:
+            for page_el in pages_el.findall("page"):
+                page_id = page_el.get("id", f"page-{len(pages) + 1}")
+                page_title_el = page_el.find("title")
+                page_title = (
+                    page_title_el.text
+                    if page_title_el is not None and page_title_el.text
+                    else "Untitled"
+                )
+                importance_el = page_el.find("importance")
+                importance_text = (
+                    importance_el.text
+                    if importance_el is not None and importance_el.text
+                    else "medium"
+                )
+                importance_lower = (
+                    importance_text.lower() if importance_text else "medium"
+                )
+                importance = (
+                    importance_lower
+                    if importance_lower in ["high", "medium", "low"]
+                    else "medium"
+                )
+
+                # File paths
+                file_paths = []
+                relevant_files_el = page_el.find("relevant_files")
+                if relevant_files_el is not None:
+                    for fp in relevant_files_el.findall("file_path"):
+                        if fp.text:
+                            file_paths.append(fp.text.strip())
+
+                # Related pages
+                related_pages = []
+                related_pages_el = page_el.find("related_pages")
+                if related_pages_el is not None:
+                    for rel in related_pages_el.findall("related"):
+                        if rel.text:
+                            related_pages.append(rel.text.strip())
+
+                pages.append(
+                    WikiPage(
+                        id=page_id,
+                        title=page_title,
+                        content="",
+                        filePaths=file_paths,
+                        importance=importance,
+                        relatedPages=related_pages,
+                    )
+                )
+
+        if not pages:
+            logger.error("No pages found in wiki structure")
+            return None
+
+        return WikiStructureModel(
+            id="wiki",
+            title=title,
+            description=description,
+            pages=pages,
+            sections=[],
+            rootSections=[],
+        )
+
+    except Exception as e:
+        logger.error(f"Error parsing wiki structure: {e}")
+        return None
+
+
+@click.command(name="generate")
+def generate():
+    """Generate a new wiki interactively."""
+
+    click.echo("\n" + "=" * 60)
+    click.echo("DeepWiki Generator")
+    click.echo("=" * 60)
+
+    # Load configuration
+    config = load_config()
+
+    try:
+        # Step 1: Repository selection
+        repo_type, repo_url_or_path, owner, repo_name = prompt_repository()
+
+        # Step 2: Model configuration
+        provider, model = prompt_model_config(config)
+
+        # Step 3: Wiki type
+        is_comprehensive = prompt_wiki_type(config)
+
+        # Step 4: File filters (optional)
+        excluded_dirs, excluded_files, included_dirs, included_files = (
+            prompt_file_filters()
+        )
+
+        # Initialize progress
+        progress = ProgressManager()
+        progress.set_status("Initializing")
+
+        click.echo("\n" + "=" * 60)
+        click.echo("Generating Wiki")
+        click.echo("=" * 60 + "\n")
+
+        # Step 5: Prepare RAG
+        progress.set_status("Preparing repository")
+        click.echo("Preparing repository analysis...")
+
+        try:
+            rag = RAG(provider=provider, model=model)
+            rag.prepare_retriever(
+                repo_url_or_path,
+                repo_type,
+                GITHUB_TOKEN,
+                excluded_dirs=excluded_dirs,
+                excluded_files=excluded_files,
+                included_dirs=included_dirs,
+                included_files=included_files,
+            )
+            click.echo("✓ Repository prepared")
+        except Exception as e:
+            click.echo(f"✗ Error preparing repository: {e}", err=True)
+            progress.close()
+            raise click.Abort()
+
+        # Step 6: Get repository structure
+        progress.set_status("Fetching repository structure")
+        click.echo("Fetching repository structure...")
+
+        try:
+            if repo_type == "github":
+                import requests
+
+                params = {"owner": owner, "repo": repo_name}
+                if repo_url_or_path:
+                    params["repo_url"] = repo_url_or_path
+
+                response = requests.get(
+                    "http://localhost:8001/github/repo/structure",
+                    params=params,
+                    timeout=60,
+                )
+
+                if not response.ok:
+                    raise Exception(
+                        f"Failed to fetch repository structure: {response.status_code}"
+                    )
+
+                data = response.json()
+                file_tree = data.get("file_tree", "")
+                readme = data.get("readme", "")
+            else:
+                # Local repository
+                import glob
+
+                files = []
+                for ext in [".py", ".js", ".ts", ".java", ".md"]:
+                    files.extend(
+                        glob.glob(f"{repo_url_or_path}/**/*{ext}", recursive=True)
+                    )
+                file_tree = "\n".join(
+                    [os.path.relpath(f, repo_url_or_path) for f in files]
+                )
+
+                # Try to read README
+                readme = ""
+                for readme_name in ["README.md", "readme.md", "README.txt"]:
+                    readme_path = os.path.join(repo_url_or_path, readme_name)
+                    if os.path.exists(readme_path):
+                        with open(readme_path, "r") as f:
+                            readme = f.read()
+                        break
+
+            click.echo("✓ Structure fetched")
+        except Exception as e:
+            click.echo(f"✗ Error fetching structure: {e}", err=True)
+            progress.close()
+            raise click.Abort()
+
+        # Step 7: Generate wiki structure
+        progress.set_status("Determining wiki structure")
+        click.echo("Determining wiki structure...")
+
+        wiki_structure = generate_wiki_structure(
+            repo_url_or_path,
+            repo_type,
+            file_tree,
+            readme,
+            provider,
+            model,
+            is_comprehensive,
+        )
+
+        if not wiki_structure:
+            click.echo("✗ Failed to generate wiki structure", err=True)
+            progress.close()
+            raise click.Abort()
+
+        click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
+
+        # Step 8: Generate page content
+        progress.set_status("Generating pages")
+        progress.init_overall_progress(len(wiki_structure.pages), "Generating Pages")
+
+        click.echo(f"\nGenerating {len(wiki_structure.pages)} pages...\n")
+
+        generated_pages = {}
+
+        # Generate pages sequentially for simplicity
+        # (Could be parallelized but that complicates progress display)
+        for page in wiki_structure.pages:
+            updated_page = generate_page_content_sync(
+                page, rag, repo_url_or_path, provider, model, progress
+            )
+            if updated_page:
+                generated_pages[page.id] = updated_page
+
+        progress.set_status("Saving cache")
+        click.echo("\n\nSaving to cache...")
+
+        # Step 9: Save to cache
+        ensure_cache_dir()
+        cache_path = get_cache_path()
+
+        # Create cache filename (keeping language suffix for backward compatibility)
+        cache_filename = (
+            f"deepwiki_cache_{repo_type}_{owner or 'local'}_{repo_name}_en.json"
+        )
+        cache_file = cache_path / cache_filename
+
+        # Prepare cache data
+        from api.server import RepoInfo
+
+        repo_info = RepoInfo(
+            owner=owner or "",
+            repo=repo_name,
+            type=repo_type,
+            repoUrl=repo_url_or_path if repo_type == "github" else None,
+            localPath=repo_url_or_path if repo_type == "local" else None,
+        )
+
+        cache_data = WikiCacheData(
+            wiki_structure=wiki_structure,
+            generated_pages={pid: p.model_dump() for pid, p in generated_pages.items()},
+            repo=repo_info,
+            provider=provider,
+            model=model,
+        )
+
+        # Save to file
+        with open(cache_file, "w") as f:
+            json.dump(cache_data.model_dump(), f, indent=2)
+
+        progress.close()
+
+        click.echo(f"✓ Cache saved to: {cache_file}")
+
+        # Summary
+        click.echo("\n" + "=" * 60)
+        click.echo("Generation Complete!")
+        click.echo("=" * 60)
+        click.echo(f"\nRepository: {repo_name}")
+        click.echo(
+            f"Pages generated: {len(generated_pages)}/{len(wiki_structure.pages)}"
+        )
+        click.echo(f"Cache file: {cache_file}")
+        click.echo("\nUse 'deepwiki export' to export the wiki to Markdown or JSON.")
+        click.echo("=" * 60 + "\n")
+
+    except click.Abort:
+        click.echo("\nOperation cancelled.")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        click.echo("\n\nOperation interrupted.")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        click.echo(f"\n✗ Unexpected error: {e}", err=True)
+        sys.exit(1)

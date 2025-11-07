@@ -645,7 +645,7 @@ IMPORTANT FORMATTING RULES:
                 logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
             raise
 
-    def call(self, query: str, language: str = "en") -> List:
+    def call(self, query: str) -> List:
         """
         Process a query using RAG.
 

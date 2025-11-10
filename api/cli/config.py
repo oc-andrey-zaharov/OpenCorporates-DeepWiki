@@ -2,6 +2,7 @@
 Configuration management for DeepWiki CLI.
 """
 
+import copy
 import json
 import logging
 from pathlib import Path
@@ -43,7 +44,7 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     Returns:
         New dictionary with merged values. Nested dicts are merged recursively.
     """
-    result = base.copy()
+    result = copy.deepcopy(base)
 
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):

@@ -132,7 +132,7 @@ def delete(yes: bool):
                     try:
                         error_data = response.json()
                         error_detail = error_data.get("detail", error_detail)
-                    except:
+                    except (ValueError, requests.exceptions.JSONDecodeError):
                         error_detail = response.text or response.reason
 
                     click.echo(f"\n✗ Error deleting wiki: {error_detail}", err=True)

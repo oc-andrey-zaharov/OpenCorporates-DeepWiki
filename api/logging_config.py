@@ -9,6 +9,17 @@ class IgnoreLogChangeDetectedFilter(logging.Filter):
         return "Detected file change in" not in record.getMessage()
 
 
+class IgnoreMLflowWarningFilter(logging.Filter):
+    """Filter to suppress MLflow availability warnings from adalflow."""
+
+    def filter(self, record: logging.LogRecord):
+        # Suppress warnings about MLflow not being available
+        if record.name == "adalflow.tracing.mlflow_integration":
+            if "MLflow not available" in record.getMessage():
+                return False
+        return True
+
+
 def setup_logging(format: str = None):
     """
     Configure logging for the application with log rotation.
@@ -39,7 +50,9 @@ def setup_logging(format: str = None):
     log_dir_resolved = log_dir.resolve()
     resolved_path = log_file_path.resolve()
     if not str(resolved_path).startswith(str(log_dir_resolved) + os.sep):
-        raise ValueError(f"LOG_FILE_PATH '{log_file_path}' is outside the trusted log directory '{log_dir_resolved}'")
+        raise ValueError(
+            f"LOG_FILE_PATH '{log_file_path}' is outside the trusted log directory '{log_dir_resolved}'"
+        )
 
     # Ensure parent directories exist
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,10 +71,15 @@ def setup_logging(format: str = None):
         backup_count = 5
 
     # Configure format
-    log_format = format or "%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"
+    log_format = (
+        format
+        or "%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"
+    )
 
     # Create handlers
-    file_handler = RotatingFileHandler(resolved_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
+    file_handler = RotatingFileHandler(
+        resolved_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
     console_handler = logging.StreamHandler()
 
     # Set format for both handlers
@@ -69,12 +87,20 @@ def setup_logging(format: str = None):
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
-    # Add filter to suppress "Detected file change" messages
+    # Add filters to suppress unwanted messages
     file_handler.addFilter(IgnoreLogChangeDetectedFilter())
     console_handler.addFilter(IgnoreLogChangeDetectedFilter())
+    file_handler.addFilter(IgnoreMLflowWarningFilter())
+    console_handler.addFilter(IgnoreMLflowWarningFilter())
+
+    # Also suppress MLflow warnings at the logger level
+    mlflow_logger = logging.getLogger("adalflow.tracing.mlflow_integration")
+    mlflow_logger.setLevel(logging.ERROR)  # Only show ERROR and above, suppress WARNING
 
     # Apply logging configuration
-    logging.basicConfig(level=log_level, handlers=[file_handler, console_handler], force=True)
+    logging.basicConfig(
+        level=log_level, handlers=[file_handler, console_handler], force=True
+    )
 
     # Log configuration info
     logger = logging.getLogger(__name__)

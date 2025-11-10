@@ -62,8 +62,6 @@ def generate_chat_completion_streaming(
         ConnectionError: If server mode enabled but server unavailable and auto_fallback is False
         Exception: For other errors during processing
     """
-    config = load_config()
-
     if is_server_mode():
         # Check server health first
         server_url = get_server_url()
@@ -208,11 +206,8 @@ def _generate_via_server(
             raise Exception(f"Server error: {response.status_code} - {response.text}")
 
         # Yield chunks as they arrive
-        for line in response.iter_content(chunk_size=1024, decode_unicode=True):
+        for line in response.iter_lines(decode_unicode=True):
             if line:
-                # Handle both bytes and string
-                if isinstance(line, bytes):
-                    line = line.decode("utf-8")
                 yield line
 
     except (ConnectionError, Timeout) as e:

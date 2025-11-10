@@ -28,7 +28,7 @@ class TestStandaloneMode:
 
         config = load_config()
         assert isinstance(config, dict)
-        # Verify default config structure
+        # Verify that default_provider exists either in loaded config or fallback DEFAULT_CONFIG
         assert "default_provider" in config or "default_provider" in DEFAULT_CONFIG
 
     @pytest.mark.skip(reason="Requires API keys and network access")
@@ -46,8 +46,8 @@ class TestStandaloneMode:
         # For now, it's a placeholder
         pass
 
-    def test_cache_operations(self):
-        """Test cache read/write operations."""
+    def test_cache_path_resolution(self):
+        """Test cache path is correctly resolved."""
         from api.cli.utils import get_cache_path
 
         # Mock get_adalflow_default_root_path to return a temporary directory

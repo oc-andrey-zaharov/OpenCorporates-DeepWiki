@@ -234,23 +234,24 @@ def generate_chat_completion_core(
                     # Group documents by file path
                     docs_by_file = {}
                     for doc in documents:
-                        file_path_doc = doc.meta_data.get("file_path", "unknown")
-                        if file_path_doc not in docs_by_file:
-                            docs_by_file[file_path_doc] = []
-                        docs_by_file[file_path_doc].append(doc)
+                        doc_file_path = doc.meta_data.get("file_path", "unknown")
+                        if doc_file_path not in docs_by_file:
+                            docs_by_file[doc_file_path] = []
+                        docs_by_file[doc_file_path].append(doc)
 
                     # Format context text with file path grouping
                     context_parts = []
-                    for file_path_doc, docs in docs_by_file.items():
+                    for doc_file_path, docs in docs_by_file.items():
                         # Add file header with metadata
-                        header = f"## File Path: {file_path_doc}\n\n"
+                        header = f"## File Path: {doc_file_path}\n\n"
                         # Add document content
                         content = "\n\n".join([doc.text for doc in docs])
 
                         context_parts.append(f"{header}{content}")
 
                     # Join all parts with clear separation
-                    context_text = "\n\n" + "-" * 10 + "\n\n".join(context_parts)
+                    separator = "\n\n" + "-" * 10 + "\n\n"
+                    context_text = separator.join(context_parts)
                 else:
                     logger.warning("No documents retrieved from RAG")
             except Exception as e:

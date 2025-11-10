@@ -74,7 +74,7 @@ def get_github_repo_structure_standalone(
     default_branch = "main"
     try:
         repo_info_response = requests.get(
-            f"{api_base}/repos/{owner}/{repo}", headers=headers
+            f"{api_base}/repos/{owner}/{repo}", headers=headers, timeout=30
         )
 
         if repo_info_response.ok:
@@ -100,7 +100,7 @@ def get_github_repo_structure_standalone(
             api_url = f"{api_base}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
             logger.info(f"Fetching repository structure from branch: {branch}")
 
-            response = requests.get(api_url, headers=headers)
+            response = requests.get(api_url, headers=headers, timeout=30)
 
             if response.ok:
                 tree_data = response.json()
@@ -129,7 +129,7 @@ def get_github_repo_structure_standalone(
     readme_content = ""
     try:
         readme_response = requests.get(
-            f"{api_base}/repos/{owner}/{repo}/readme", headers=headers
+            f"{api_base}/repos/{owner}/{repo}/readme", headers=headers, timeout=30
         )
 
         if readme_response.ok:

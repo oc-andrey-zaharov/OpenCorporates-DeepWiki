@@ -36,20 +36,37 @@ def show_config():
     click.echo("\n" + "-" * 50)
     click.echo("Server Mode Status")
     click.echo("-" * 50)
-    if is_server_mode():
-        server_url = get_server_url()
-        click.echo(f"Mode: Server (URL: {server_url})")
-        if check_server_health(server_url):
-            click.echo("Status: ✓ Server is available")
+    try:
+        if is_server_mode():
+            server_url = get_server_url()
+            click.echo(f"Mode: Server (URL: {server_url})")
+            try:
+                if check_server_health(server_url):
+                    click.echo("Status: ✓ Server is available")
+                else:
+                    click.echo("Status: ✗ Server is unavailable")
+                    try:
+                        if should_fallback():
+                            click.echo(
+                                "Fallback: ✓ Auto-fallback enabled (will use standalone)"
+                            )
+                        else:
+                            click.echo("Fallback: ✗ Auto-fallback disabled")
+                    except Exception as e:
+                        click.echo(
+                            f"Fallback: ✗ Error checking fallback: {e}", err=True
+                        )
+            except Exception as e:
+                click.echo(f"Status: ✗ Error checking server health: {e}", err=True)
+                click.echo(
+                    "Note: Server health check failed. Configuration may still be valid."
+                )
         else:
-            click.echo("Status: ✗ Server is unavailable")
-            if should_fallback():
-                click.echo("Fallback: ✓ Auto-fallback enabled (will use standalone)")
-            else:
-                click.echo("Fallback: ✗ Auto-fallback disabled")
-    else:
-        click.echo("Mode: Standalone")
-        click.echo("Status: ✓ Ready (no server required)")
+            click.echo("Mode: Standalone")
+            click.echo("Status: ✓ Ready (no server required)")
+    except Exception as e:
+        click.echo(f"Error checking server mode: {e}", err=True)
+        click.echo("Note: Some configuration details may be unavailable.")
 
     click.echo("\n" + "=" * 50 + "\n")
 

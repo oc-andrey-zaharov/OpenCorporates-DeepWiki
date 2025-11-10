@@ -122,8 +122,16 @@ def get_github_repo_structure_via_server(
             try:
                 error_data = response.json()
                 error_detail = error_data.get("error", error_detail)
-            except:
-                error_detail = response.text or response.reason
+            except (
+                ValueError,
+                requests.exceptions.JSONDecodeError,
+                AttributeError,
+            ) as e:
+                error_detail = (
+                    getattr(response, "text", None)
+                    or getattr(response, "reason", None)
+                    or str(e)
+                )
 
             raise Exception(f"Server error: {response.status_code} - {error_detail}")
 

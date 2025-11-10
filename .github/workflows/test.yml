@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [ main, cli_migration ]
+    branches: [main, cli_migration]
   pull_request:
-    branches: [ main, cli_migration ]
+    branches: [main, cli_migration]
 
 jobs:
   test:
@@ -49,12 +49,12 @@ jobs:
       - name: Run linting with ruff
         working-directory: api
         run: |
-          poetry run ruff check api/ || true
-          poetry run ruff format --check api/ || true
+          poetry run ruff check api/
+          poetry run ruff format --check api/
 
       - name: Run type checking with mypy
         working-directory: api
-        run: poetry run mypy api/ --ignore-missing-imports || true
+        run: poetry run mypy api/ --ignore-missing-imports
 
       - name: Run tests with pytest
         working-directory: api
@@ -63,4 +63,3 @@ jobs:
       - name: Test CLI import
         working-directory: api
         run: poetry run python -c "import api.cli.main; print('CLI imports OK')"
-

@@ -23,22 +23,29 @@ class TestFallbackScenarios:
             assert callable(check_server_health)
             assert callable(should_fallback)
 
-            # Test that we can mock the function
+            # Test that fallback occurs when server is unavailable
             with patch.object(mode, "check_server_health", return_value=False):
-                result = mode.check_server_health()
-                assert result is False
+                result = mode.should_fallback()
+                assert result is True, (
+                    "should_fallback should return True when server is unavailable"
+                )
         except ImportError as e:
             # Module may not exist yet (from Phase 3)
             pytest.skip(f"Mode utilities not yet implemented: {e}")
 
     def test_auto_fallback_config(self):
         """Test auto_fallback configuration option."""
-        from api.cli.config import load_config
+        try:
+            from api.cli.config import load_config
 
-        config = load_config()
-        # Verify config structure allows auto_fallback
-        # May not be present in current config, that's OK
-        assert isinstance(config, dict)
+            config = load_config()
+            # Verify config structure allows auto_fallback
+            assert isinstance(config, dict)
+            # If auto_fallback is present, verify it's a boolean
+            if "auto_fallback" in config:
+                assert isinstance(config["auto_fallback"], bool)
+        except ImportError as e:
+            pytest.skip(f"Config module not yet implemented: {e}")
 
     @pytest.mark.skip(reason="Requires server mode implementation")
     def test_error_when_fallback_disabled(self):

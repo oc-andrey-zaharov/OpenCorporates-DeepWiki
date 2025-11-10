@@ -7,7 +7,7 @@ license = {text = "MIT License"}
 [tool.poetry]
 name = "opencorporates-deepwiki-api"
 version = "1.0.0"
-description = "Backend API and CLI for OpenCorporates-DeepWiki"
+description = "CLI tool and optional API server for OpenCorporates-DeepWiki, providing smart code analysis and AI-powered documentation generation."
 authors = ["OpenCorporates DeepWiki Team"]
 packages = [{include = "api", from = ".."}]
 

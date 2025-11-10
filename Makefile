@@ -49,14 +49,39 @@ install/backend:
 dev: dev/backend
 
 # Start backend only
+# Runs server in background and saves PID to .deepwiki-server.pid for safe termination
 dev/backend:
 	@echo "Starting backend server on port 8001..."
-	@poetry run python -m api.server.main
+	@poetry run python -m api.server.main & \
+		SERVER_PID=$$!; \
+		echo $$SERVER_PID > .deepwiki-server.pid; \
+		echo "✓ Server started (PID: $$SERVER_PID, saved to .deepwiki-server.pid)"; \
+		echo "  Use 'make stop' to stop the server"
 
 # Stop backend server
+# Uses PID file to safely terminate only the expected backend process.
+# If PID file is missing or stale, falls back to port-based termination.
 stop:
 	@echo "Stopping backend server..."
-	@-lsof -ti:8001 | xargs kill -9 2>/dev/null || true
+	@if [ -f .deepwiki-server.pid ]; then \
+		PID=$$(cat .deepwiki-server.pid); \
+		if ps -p $$PID > /dev/null 2>&1; then \
+			# Verify it's the expected process (check command contains python and api.server.main) \
+			CMD=$$(ps -p $$PID -o command= 2>/dev/null || echo ""); \
+			if echo "$$CMD" | grep -q "api.server.main"; then \
+				kill -9 $$PID 2>/dev/null && echo "✓ Stopped server (PID: $$PID)" || echo "✗ Failed to stop server"; \
+			else \
+				echo "⚠ PID file exists but process doesn't match expected backend. Using port-based fallback."; \
+				-lsof -ti:8001 | xargs kill -9 2>/dev/null || true; \
+			fi; \
+		else \
+			echo "⚠ PID file exists but process not found (may have already stopped). Cleaning up PID file."; \
+		fi; \
+		rm -f .deepwiki-server.pid; \
+	else \
+		echo "⚠ PID file not found. Using port-based termination (may affect other services on port 8001)."; \
+		-lsof -ti:8001 | xargs kill -9 2>/dev/null || echo "No process found on port 8001"; \
+	fi
 	@echo "✓ Server stopped"
 
 # Clean build artifacts and caches

@@ -12,7 +12,6 @@ from api.clients.openrouter_client import OpenRouterClient
 from api.clients.bedrock_client import BedrockClient
 from api.clients.google_embedder_client import GoogleEmbedderClient
 from api.clients.azureai_client import AzureAIClient
-from api.clients.dashscope_client import DashscopeClient
 from adalflow import GoogleGenAIClient, OllamaClient
 
 # Get API keys from environment variables
@@ -58,7 +57,6 @@ CLIENT_CLASSES = {
     "OllamaClient": OllamaClient,
     "BedrockClient": BedrockClient,
     "AzureAIClient": AzureAIClient,
-    "DashscopeClient": DashscopeClient,
 }
 
 
@@ -140,7 +138,6 @@ def load_generator_config():
                 "ollama",
                 "bedrock",
                 "azure",
-                "dashscope",
             ]:
                 default_map = {
                     "google": GoogleGenAIClient,
@@ -149,7 +146,6 @@ def load_generator_config():
                     "ollama": OllamaClient,
                     "bedrock": BedrockClient,
                     "azure": AzureAIClient,
-                    "dashscope": DashscopeClient,
                 }
                 provider_config["model_client"] = default_map[provider_id]
             else:

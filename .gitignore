@@ -26,6 +26,7 @@ wheels/
 # testing
 /coverage
 .pytest_cache/
+.mypy_cache/
 
 # misc
 .DS_Store

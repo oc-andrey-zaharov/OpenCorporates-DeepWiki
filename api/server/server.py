@@ -280,16 +280,6 @@ async def get_github_repo_structure(
         )
 
 
-# Import the simplified chat implementation
-from api.server.simple_chat import chat_completions_stream
-from api.server.websocket_wiki import handle_websocket_chat
-
-# Add the chat_completions_stream endpoint to the main app
-app.add_api_route("/chat/completions/stream", chat_completions_stream, methods=["POST"])
-
-# Add the WebSocket endpoint
-app.add_websocket_route("/ws/chat", handle_websocket_chat)
-
 # --- Wiki Cache Helper Functions ---
 
 WIKI_CACHE_DIR = os.path.join(get_adalflow_default_root_path(), "wikicache")

@@ -23,12 +23,7 @@ from api.clients.openrouter_client import OpenRouterClient
 from api.clients.bedrock_client import BedrockClient
 from api.clients.azureai_client import AzureAIClient
 from api.services.rag import RAG
-from api.prompts import (
-    DEEP_RESEARCH_FIRST_ITERATION_PROMPT,
-    DEEP_RESEARCH_FINAL_ITERATION_PROMPT,
-    DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT,
-    SIMPLE_CHAT_SYSTEM_PROMPT,
-)
+from api.prompts import SIMPLE_CHAT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -206,76 +201,6 @@ def generate_chat_completion_core(
     if isinstance(last_message, dict) and last_message.get("role") != "user":
         raise ValueError("Last message must be from the user")
 
-    # Process previous messages to build conversation history
-    for i in range(0, len(messages) - 1, 2):
-        if i + 1 < len(messages):
-            user_msg = messages[i]
-            assistant_msg = messages[i + 1]
-
-            if (
-                isinstance(user_msg, dict)
-                and isinstance(assistant_msg, dict)
-                and user_msg.get("role") == "user"
-                and assistant_msg.get("role") == "assistant"
-            ):
-                request_rag.memory.add_dialog_turn(
-                    user_query=user_msg.get("content", ""),
-                    assistant_response=assistant_msg.get("content", ""),
-                )
-
-    # Check if this is a Deep Research request
-    is_deep_research = False
-    research_iteration = 1
-
-    # Process messages to detect Deep Research requests
-    for msg in messages:
-        if (
-            isinstance(msg, dict)
-            and msg.get("content")
-            and "[DEEP RESEARCH]" in msg.get("content", "")
-        ):
-            is_deep_research = True
-            # Only remove the tag from the last message
-            if msg == messages[-1]:
-                # Remove the Deep Research tag
-                msg["content"] = msg["content"].replace("[DEEP RESEARCH]", "").strip()
-
-    # Count research iterations if this is a Deep Research request
-    if is_deep_research:
-        research_iteration = (
-            sum(
-                1
-                for msg in messages
-                if isinstance(msg, dict) and msg.get("role") == "assistant"
-            )
-            + 1
-        )
-        logger.info(f"Deep Research request detected - iteration {research_iteration}")
-
-        # Check if this is a continuation request
-        if (
-            "continue" in last_message.get("content", "").lower()
-            and "research" in last_message.get("content", "").lower()
-        ):
-            # Find the original topic from the first user message
-            original_topic = None
-            for msg in messages:
-                if (
-                    isinstance(msg, dict)
-                    and msg.get("role") == "user"
-                    and "continue" not in msg.get("content", "").lower()
-                ):
-                    original_topic = (
-                        msg.get("content", "").replace("[DEEP RESEARCH]", "").strip()
-                    )
-                    logger.info(f"Found original research topic: {original_topic}")
-                    break
-
-            if original_topic:
-                # Replace the continuation message with the original topic
-                last_message["content"] = original_topic
-                logger.info(f"Using original topic for research: {original_topic}")
-
     # Get the query from the last message
     query = (
         last_message.get("content", "")
@@ -339,40 +264,12 @@ def generate_chat_completion_core(
     # Get repository information
     repo_name = repo_url.split("/")[-1] if "/" in repo_url else repo_url
 
-    # Create system prompt
-    if is_deep_research:
-        # Check if this is the first iteration
-        is_first_iteration = research_iteration == 1
-
-        # Check if this is the final iteration
-        is_final_iteration = research_iteration >= 5
-
-        if is_first_iteration:
-            system_prompt = DEEP_RESEARCH_FIRST_ITERATION_PROMPT.format(
-                repo_type=repo_type,
-                repo_url=repo_url,
-                repo_name=repo_name,
-            )
-        elif is_final_iteration:
-            system_prompt = DEEP_RESEARCH_FINAL_ITERATION_PROMPT.format(
-                repo_type=repo_type,
-                repo_url=repo_url,
-                repo_name=repo_name,
-                research_iteration=research_iteration,
-            )
-        else:
-            system_prompt = DEEP_RESEARCH_INTERMEDIATE_ITERATION_PROMPT.format(
-                repo_type=repo_type,
-                repo_url=repo_url,
-                repo_name=repo_name,
-                research_iteration=research_iteration,
-            )
-    else:
-        system_prompt = SIMPLE_CHAT_SYSTEM_PROMPT.format(
-            repo_type=repo_type,
-            repo_url=repo_url,
-            repo_name=repo_name,
-        )
+    # Create system prompt for wiki generation
+    system_prompt = SIMPLE_CHAT_SYSTEM_PROMPT.format(
+        repo_type=repo_type,
+        repo_url=repo_url,
+        repo_name=repo_name,
+    )
 
     # Fetch file content if provided
     file_content = ""
@@ -384,27 +281,12 @@ def generate_chat_completion_core(
             logger.error(f"Error retrieving file content: {str(e)}")
             # Continue without file content if there's an error
 
-    # Format conversation history
-    conversation_history = ""
-    for turn_id, turn in request_rag.memory().items():
-        if (
-            not isinstance(turn_id, int)
-            and hasattr(turn, "user_query")
-            and hasattr(turn, "assistant_response")
-        ):
-            conversation_history += f"<turn>\n<user>{turn.user_query.query_str}</user>\n<assistant>{turn.assistant_response.response_str}</assistant>\n</turn>\n"
-
     # Create the prompt with context
     prompt = f"/no_think {system_prompt}\n\n"
 
-    if conversation_history:
-        prompt += (
-            f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
-        )
-
     # Check if file_path is provided and fetch file content if it exists
     if file_content:
-        # Add file content to the prompt after conversation history
+        # Add file content to the prompt
         prompt += f'<currentFileContent path="{file_path}">\n{file_content}\n</currentFileContent>\n\n'
 
     # Only include context if it's not empty
@@ -661,8 +543,6 @@ def generate_chat_completion_core(
                 try:
                     # Create a simplified prompt without context
                     simplified_prompt = f"/no_think {system_prompt}\n\n"
-                    if conversation_history:
-                        simplified_prompt += f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
 
                     # Include file content in the fallback prompt if it was retrieved
                     if file_path and file_content:

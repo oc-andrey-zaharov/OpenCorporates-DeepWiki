@@ -1,4 +1,4 @@
-.PHONY: help install install/backend dev dev/backend stop clean cli test test/unit test/integration test/api
+.PHONY: help install install/backend dev dev/backend stop clean cli test test/unit test/integration
 
 # Default target
 help:
@@ -21,7 +21,6 @@ help:
 	@echo "  make test             - Run all tests"
 	@echo "  make test/unit        - Run unit tests only"
 	@echo "  make test/integration - Run integration tests only"
-	@echo "  make test/api         - Run API tests only"
 	@echo ""
 	@echo "CLI:"
 	@echo "  make cli [COMMAND]    - Run DeepWiki CLI command"
@@ -109,11 +108,6 @@ test/unit:
 test/integration:
 	@echo "Running integration tests..."
 	@poetry run pytest tests/integration -v
-
-# Run API tests only
-test/api:
-	@echo "Running API tests..."
-	@poetry run pytest tests/api -v
 
 # Run CLI tool
 cli:

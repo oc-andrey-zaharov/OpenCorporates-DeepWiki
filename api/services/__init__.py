@@ -9,6 +9,7 @@ from api.services.data_pipeline import (
     get_file_content,
     prepare_data_pipeline,
 )
+from api.services.wiki_context import WikiGenerationContext
 
 __all__ = [
     "RAG",
@@ -16,4 +17,5 @@ __all__ = [
     "count_tokens",
     "get_file_content",
     "prepare_data_pipeline",
+    "WikiGenerationContext",
 ]

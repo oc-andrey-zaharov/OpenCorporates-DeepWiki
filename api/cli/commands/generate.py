@@ -22,7 +22,7 @@ from api.cli.utils import (
     prompt_text_input,
 )
 from api.cli.progress import ProgressManager
-from api.services.rag import RAG
+from api.services.wiki_context import WikiGenerationContext
 from api.models import WikiStructureModel, WikiPage, WikiCacheData
 from api.config import GITHUB_TOKEN
 
@@ -215,10 +215,8 @@ def prompt_file_filters() -> tuple:
 
 def generate_page_content_sync(
     page: WikiPage,
-    rag: RAG,
+    generation_context: WikiGenerationContext,
     repo_url: str,
-    provider: str,
-    model: str,
     progress_manager: ProgressManager,
 ) -> Optional[WikiPage]:
     """
@@ -539,9 +537,6 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
         # Prepare request
         messages = [{"role": "user", "content": prompt}]
 
-        # Use unified wrapper function
-        from api.utils.chat import generate_chat_completion_streaming
-
         page_bar.update(50)  # Request sent
 
         # Collect streamed content with incremental progress updates
@@ -552,13 +547,8 @@ Generate the content in English. Do NOT wrap your response in markdown code fenc
         last_progress = 50
 
         try:
-            for chunk in generate_chat_completion_streaming(
-                repo_url=repo_url,
-                messages=messages,
-                provider=provider,
-                model=model,
-                repo_type="github",
-            ):
+            stream = generation_context.stream_completion(messages=messages)
+            for chunk in stream:
                 if chunk:
                     content += chunk if isinstance(chunk, str) else str(chunk)
                 chunk_count += 1
@@ -632,6 +622,7 @@ def generate_wiki_structure(
     provider: str,
     model: str,
     is_comprehensive: bool,
+    generation_context: Optional[WikiGenerationContext] = None,
 ) -> Optional[WikiStructureModel]:
     """
     Generate wiki structure from repository.
@@ -734,18 +725,24 @@ IMPORTANT:
 4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters"""
 
     try:
-        # Use unified wrapper function
-        from api.utils.chat import generate_chat_completion_streaming
-
         # Collect response from streaming generator
         xml_content = ""
-        for chunk in generate_chat_completion_streaming(
-            repo_url=repo_url,
-            messages=[{"role": "user", "content": prompt}],
-            provider=provider,
-            model=model,
-            repo_type=repo_type,
-        ):
+        if generation_context:
+            stream = generation_context.stream_completion(
+                messages=[{"role": "user", "content": prompt}]
+            )
+        else:
+            from api.utils.chat import generate_chat_completion_streaming
+
+            stream = generate_chat_completion_streaming(
+                repo_url=repo_url,
+                messages=[{"role": "user", "content": prompt}],
+                provider=provider,
+                model=model,
+                repo_type=repo_type,
+            )
+
+        for chunk in stream:
             if chunk:
                 xml_content += chunk if isinstance(chunk, str) else str(chunk)
 
@@ -1086,11 +1083,12 @@ def generate():
         click.echo("Preparing repository analysis...")
 
         try:
-            rag = RAG(provider=provider, model=model)
-            rag.prepare_retriever(
-                repo_url_or_path,
-                repo_type,
-                GITHUB_TOKEN,
+            generation_context = WikiGenerationContext.prepare(
+                repo_url=repo_url_or_path,
+                repo_type=repo_type,
+                provider=provider,
+                model=model,
+                token=GITHUB_TOKEN,
                 excluded_dirs=excluded_dirs,
                 excluded_files=excluded_files,
                 included_dirs=included_dirs,
@@ -1157,6 +1155,7 @@ def generate():
             provider,
             model,
             is_comprehensive,
+            generation_context,
         )
 
         if not wiki_structure:
@@ -1178,7 +1177,7 @@ def generate():
         # (Could be parallelized but that complicates progress display)
         for page in wiki_structure.pages:
             updated_page = generate_page_content_sync(
-                page, rag, repo_url_or_path, provider, model, progress
+                page, generation_context, repo_url_or_path, progress
             )
             if updated_page:
                 generated_pages[page.id] = updated_page

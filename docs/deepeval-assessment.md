@@ -345,7 +345,6 @@ def evaluate_chat_response(
 
 - `tests/unit/` - Unit tests
 - `tests/integration/` - Integration tests
-- `tests/api/` - API tests
 
 **Add DeepEval Tests:**
 

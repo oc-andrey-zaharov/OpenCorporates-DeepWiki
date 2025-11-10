@@ -72,7 +72,7 @@ def show_config():
 
 
 @config.command(name="set")
-@click.argument("key")
+@click.argument("key", shell_complete=complete_config_keys)
 @click.argument("value")
 def set_config(key: str, value: str):
     """

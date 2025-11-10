@@ -167,6 +167,72 @@ deepwiki config set default_model gemini-2.0-flash-exp
 deepwiki config set wiki_type comprehensive
 ```
 
+### Shell Completion
+
+DeepWiki CLI supports shell completion for Bash, Zsh, and Fish shells, providing autocomplete for commands, options, and arguments.
+
+#### Setup Instructions
+
+First, find the correct completion variable name by running:
+```bash
+deepwiki --help | head -1
+```
+
+The completion variable is typically `_<COMMAND>_COMPLETE` where `<COMMAND>` is your command name in uppercase. For `deepwiki`, it should be `_DEEPWIKI_COMPLETE`.
+
+**Bash (>= 4.4):**
+
+Add to your `~/.bashrc`:
+```bash
+eval "$(_DEEPWIKI_COMPLETE=bash_source deepwiki)"
+```
+
+Then reload your shell:
+```bash
+source ~/.bashrc
+```
+
+**Zsh:**
+
+Add to your `~/.zshrc`:
+```zsh
+eval "$(_DEEPWIKI_COMPLETE=zsh_source deepwiki)"
+```
+
+Then reload your shell:
+```zsh
+source ~/.zshrc
+```
+
+**Fish:**
+
+Add to your `~/.config/fish/config.fish`:
+```fish
+_DEEPWIKI_COMPLETE=fish_source deepwiki | source
+```
+
+Or save to a file for automatic loading:
+```fish
+_DEEPWIKI_COMPLETE=fish_source deepwiki > ~/.config/fish/completions/deepwiki.fish
+```
+
+**Note:** If `_DEEPWIKI_COMPLETE` doesn't work, try checking what Click generates by running:
+```bash
+_DEEPWIKI_COMPLETE=bash_source deepwiki
+```
+
+This will show you the completion script. The variable name format may vary slightly depending on your Click version.
+
+#### Completion Features
+
+- **Commands**: Autocomplete for `generate`, `export`, `list`, `delete`, `config`, etc.
+- **Options**: Autocomplete for flags like `--format`, `--output`, `--verbose`
+- **Config Keys**: Autocomplete for configuration keys in `config set` command
+- **File Paths**: File path completion for `--output` and other path options
+- **Choices**: Autocomplete for predefined choices (e.g., `--format` with `markdown`/`json`)
+
+After setup, restart your shell or reload your configuration file. Then try typing `deepwiki ` and press Tab to see completion in action!
+
 ### Standalone Mode (Default)
 
 The CLI works in standalone mode by default - no server required:
@@ -352,60 +418,32 @@ poetry run pytest tests/unit -v
 poetry run pytest tests/integration -v
 ```
 
-#### API Tests Only
-```bash
-poetry run pytest tests/api -v
-```
-
 ### Test Structure
 
 ```
 tests/
 ├── unit/                 # Unit tests - test individual components in isolation
-├── integration/          # Integration tests - test component interactions
-└── api/                  # API tests - test HTTP endpoints
+└── integration/          # Integration tests - test component interactions
 ```
 
-### Test Requirements
-
-For API tests, ensure the FastAPI server is running:
-
-```bash
-poetry run python -m api.server.main
-```
-
-Some tests require API keys in your `.env` file:
-- `GOOGLE_API_KEY` - Required for Google AI embedder tests
-- `OPENAI_API_KEY` - Required for some integration tests
-- `DEEPWIKI_EMBEDDER_TYPE` - Set to 'google' for Google embedder tests
+Integration tests require valid API keys in `.env`:
+- `GOOGLE_API_KEY`
+- `OPENAI_API_KEY`
+- `DEEPWIKI_EMBEDDER_TYPE` (set to `google` for Google embedder tests)
 
 ## API Endpoints
 
-### GET /
+The optional FastAPI server exposes light-weight utilities that complement the CLI:
 
-Returns basic API information and available endpoints.
-
-### POST /chat/completions/stream
-
-Streams an AI-generated response about a GitHub repository.
-
-**Request Body:**
-
-```json
-{
-  "repo_url": "https://github.com/username/repo",
-  "messages": [
-    {
-      "role": "user",
-      "content": "What does this repository do?"
-    }
-  ],
-  "filePath": "optional/path/to/file.py"
-}
-```
-
-**Response:**
-A streaming response with the generated text.
+- `GET /` — Basic server info + health.
+- `GET /models/config` — Returns configured model providers/models.
+- `GET /local_repo/structure` — Builds a file tree + README for a local path.
+- `GET /github/repo/structure` — Same as above but fetches directly from GitHub using the configured token.
+- `GET /api/wiki_cache` — Retrieve cached wiki metadata.
+- `POST /api/wiki_cache` — Persist wiki cache entries.
+- `DELETE /api/wiki_cache` — Remove a cache entry.
+- `GET /api/processed_projects` — List cached projects for dashboards.
+- `POST /export/wiki` — Convert cached pages to Markdown or JSON for download.
 
 ## License
 

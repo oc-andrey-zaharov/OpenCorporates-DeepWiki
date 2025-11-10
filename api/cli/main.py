@@ -82,5 +82,56 @@ cli.add_command(config_cmd.config)
 cli.add_command(delete.delete)
 
 
+def main():
+    """Main entry point with custom error handling."""
+    # Check if first non-option argument is a valid command
+    args = sys.argv[1:]
+    global_options = ["--help", "-h", "--version", "--verbose", "-v"]
+
+    # Find the first non-option argument (potential command)
+    command_name = None
+    for arg in args:
+        if arg not in global_options and not arg.startswith("-"):
+            command_name = arg
+            break
+
+    # If we found a potential command, check if it's valid
+    if command_name and command_name not in cli.commands:
+        # Invalid command - show error and help
+        click.echo(f"Error: No such command '{command_name}'.", err=True)
+        click.echo()
+        # Show help
+        try:
+            ctx = click.Context(cli, info_name="deepwiki")
+            click.echo(ctx.get_help())
+        except Exception:
+            # Fallback if context creation fails - show commands manually
+            click.echo("Usage: deepwiki [OPTIONS] COMMAND [ARGS]...")
+            click.echo("\nCommands:")
+            for cmd_name, cmd in cli.commands.items():
+                help_str = cmd.get_short_help_str() or cmd.help or ""
+                click.echo(f"  {cmd_name:10}  {help_str}")
+        sys.exit(2)
+
+    # Use Click's normal invocation
+    try:
+        cli()
+    except click.exceptions.ClickException as e:
+        # Handle Click exceptions
+        e.show()
+        sys.exit(e.exit_code)
+    except SystemExit:
+        # Re-raise SystemExit (used by Click for normal exits)
+        raise
+    except Exception as e:
+        # Handle unexpected errors
+        click.echo(f"Unexpected error: {e}", err=True)
+        if logger.isEnabledFor(logging.DEBUG):
+            import traceback
+
+            traceback.print_exc()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    cli()
+    main()

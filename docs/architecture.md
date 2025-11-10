@@ -129,10 +129,9 @@ Support for multiple AI providers:
 
 Optional HTTP API server providing:
 
-- REST endpoints for wiki generation
 - Shared cache management
-- Streaming chat completions
-- GitHub repository structure fetching
+- GitHub/local repository structure fetching
+- Export utilities (Markdown/JSON)
 
 #### WebSocket Server (`api/websocket_wiki.py`)
 

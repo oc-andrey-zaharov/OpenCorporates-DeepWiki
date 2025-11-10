@@ -15,7 +15,8 @@ This document outlines the migration plan to extract the backend and CLI compone
 1. **Backend API Server** (`api/server.py`, `api/main.py`)
    - FastAPI application providing REST endpoints
    - Serves both CLI and frontend needs
-   - Endpoints include: wiki cache management, repository structure fetching, chat completions
+   - Endpoints include: wiki cache management, repository structure fetching, export utilities  
+     _(Chat completions now run entirely inside the CLI.)_
 
 2. **CLI** (`api/cli/`)
    - Command-line interface for wiki generation
@@ -60,16 +61,11 @@ from api.server import generate_markdown_export, generate_json_export
 The CLI currently makes HTTP requests to `http://localhost:8001` for:
 
 1. **Wiki Structure Generation** (`generate.py:739-750`)
-   - Endpoint: `POST /chat/completions/stream`
-   - Purpose: Generate wiki structure from repository analysis
-   - **Uses Streaming**: Yes (for progress feedback)
-   - **Action Required**: Extract streaming logic into standalone function
+   - ✅ Now calls `api.core.chat.generate_chat_completion_core()` directly (no HTTP dependency)
+   - Streams tokens locally for progress feedback.
 
 2. **Page Content Generation** (`generate.py:543-554`)
-   - Endpoint: `POST /chat/completions/stream`
-   - Purpose: Generate individual wiki page content
-   - **Uses Streaming**: Yes (for real-time updates)
-   - **Action Required**: Extract streaming logic into standalone function
+   - ✅ Same as above—direct call into core chat logic with streaming.
 
 3. **GitHub Repository Structure** (`generate.py:953-957`)
    - Endpoint: `GET /github/repo/structure`
@@ -107,7 +103,7 @@ The frontend uses Next.js API routes that proxy to Python backend:
    - **Action Required**: Remove entirely
 
 3. **Direct Backend Calls** (in React components)
-   - Calls to `/chat/completions/stream`, `/github/repo/structure`, etc.
+   - Calls to `/github/repo/structure`, `/api/wiki_cache`, etc.
    - **Action Required**: Remove entirely
 
 ### Additional Components to Address
@@ -258,26 +254,14 @@ The frontend uses Next.js API routes that proxy to Python backend:
    - Add retry logic with exponential backoff
    - Clear error messages with troubleshooting steps
 
-3. **Create Unified Wrapper Functions in `api/utils/chat.py`**
+3. **Expose a Lightweight Wrapper in `api/utils/chat.py`**
 
    ```python
-   def generate_chat_completion_streaming(
-       repo_url: str,
-       messages: List[Dict],
-       provider: str,
-       model: str,
-       **kwargs
-   ) -> Generator[str, None, None]:
-       """
-       Unified streaming chat completion.
-       Routes to standalone or server based on config.
-       Yields chunks as they arrive.
-       """
-       if is_server_mode():
-           return _generate_via_server(...)
-       else:
-           return _generate_standalone(...)
+   def generate_chat_completion_streaming(...):
+       """Thin helper that simply yields from generate_chat_completion_core."""
    ```
+
+   This keeps CLI code clean while ensuring all streaming flows are serviced by the core module instead of an HTTP hop.
 
 4. **Create Unified GitHub Function in `api/utils/github.py`**
 
@@ -438,7 +422,7 @@ The frontend uses Next.js API routes that proxy to Python backend:
 **Phase 3**:
 
 - `api/utils/mode.py` - Mode detection and server health checking
-- `api/utils/chat.py` - Unified chat completion wrapper (routes to core or server)
+- `api/utils/chat.py` - Thin chat helper that simply proxies to the core generator
 - `api/utils/github.py` - Unified GitHub wrapper (routes to core or server)
 
 ### Files to Modify
@@ -458,7 +442,7 @@ The frontend uses Next.js API routes that proxy to Python backend:
 **Phase 3**:
 
 - `api/cli/config.py` - Add server mode configuration defaults
-- `api/cli/commands/generate.py` - Use unified wrapper functions
+- `api/cli/commands/generate.py` - Use shared helpers for chat + GitHub access
 - `api/cli/commands/delete.py` - Add config-aware cache deletion with fallback
 - `api/cli/commands/config_cmd.py` - Add server configuration commands
 - All CLI commands - Add error handling for server unavailability
@@ -533,11 +517,8 @@ def generate_chat_completion_core(
 ```
 
 ```python
-# api/utils/chat.py (new file - unified wrapper)
-from typing import Generator, Dict, List, Optional
-import requests
-from api.cli.config import load_config
-from api.utils.mode import is_server_mode, get_server_url, check_server_health
+# api/utils/chat.py (thin wrapper)
+from typing import Dict, Generator, List, Optional
 from api.core.chat import generate_chat_completion_core
 
 def generate_chat_completion_streaming(
@@ -545,83 +526,16 @@ def generate_chat_completion_streaming(
     messages: List[Dict[str, str]],
     provider: str,
     model: str,
-    **kwargs
+    **kwargs,
 ) -> Generator[str, None, None]:
-    """
-    Unified streaming chat completion.
-    Routes to standalone or server mode based on config.
-    Yields chunks as they arrive for progress feedback.
-    """
-    config = load_config()
-    
-    if config.get("use_server", False):
-        # Check server health first
-        if not check_server_health():
-            if config.get("auto_fallback", True):
-                print("⚠️  Server unavailable, falling back to standalone mode")
-                yield from _generate_standalone(repo_url, messages, provider, model, **kwargs)
-            else:
-                raise ConnectionError(
-                    "Server mode enabled but server unavailable. "
-                    "Set 'auto_fallback: true' or start server."
-                )
-        else:
-            yield from _generate_via_server(repo_url, messages, provider, model, **kwargs)
-    else:
-        yield from _generate_standalone(repo_url, messages, provider, model, **kwargs)
-
-
-def _generate_standalone(
-    repo_url: str,
-    messages: List[Dict],
-    provider: str,
-    model: str,
-    **kwargs
-) -> Generator[str, None, None]:
-    """
-    Standalone mode: direct call to core function.
-    Preserves streaming behavior.
-    """
+    """Simple helper so CLI code stays tidy."""
     yield from generate_chat_completion_core(
-        repo_url, messages, provider, model, **kwargs
+        repo_url=repo_url,
+        messages=messages,
+        provider=provider,
+        model=model,
+        **kwargs,
     )
-
-
-def _generate_via_server(
-    repo_url: str,
-    messages: List[Dict],
-    provider: str,
-    model: str,
-    **kwargs
-) -> Generator[str, None, None]:
-    """
-    Server mode: HTTP request with streaming.
-    Yields chunks as received from server.
-    """
-    config = load_config()
-    server_url = config.get("server_url", "http://localhost:8001")
-    timeout = config.get("server_timeout", 300)
-    
-    response = requests.post(
-        f"{server_url}/chat/completions/stream",
-        json={
-            "repo_url": repo_url,
-            "messages": messages,
-            "provider": provider,
-            "model": model,
-            **kwargs
-        },
-        stream=True,
-        timeout=timeout,
-    )
-    
-    if not response.ok:
-        raise Exception(f"Server error: {response.status_code} - {response.text}")
-    
-    # Yield chunks as they arrive
-    for line in response.iter_lines(decode_unicode=True):
-        if line:
-            yield line
 ```
 
 ### GitHub Structure Extraction (Hybrid Mode)

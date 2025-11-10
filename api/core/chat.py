@@ -119,6 +119,7 @@ def generate_chat_completion_core(
     included_dirs: Optional[List[str]] = None,
     included_files: Optional[List[str]] = None,
     file_path: Optional[str] = None,
+    prepared_rag: Optional[RAG] = None,
 ) -> Generator[str, None, None]:
     """
     Core chat completion logic with streaming.
@@ -159,39 +160,42 @@ def generate_chat_completion_core(
                 )
                 input_too_large = True
 
-    # Create a new RAG instance for this request
-    try:
-        request_rag = RAG(provider=provider, model=model)
+    # Create or reuse a RAG instance for this request
+    if prepared_rag is not None:
+        request_rag = prepared_rag
+    else:
+        try:
+            request_rag = RAG(provider=provider, model=model)
 
-        # Prepare RAG retriever
-        request_rag.prepare_retriever(
-            repo_url,
-            repo_type,
-            token,
-            excluded_dirs,
-            excluded_files,
-            included_dirs,
-            included_files,
-        )
-        logger.info(f"Retriever prepared for {repo_url}")
-    except ValueError as e:
-        if "No valid documents with embeddings found" in str(e):
-            logger.error(f"No valid embeddings found: {str(e)}")
-            raise ValueError(
-                "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content."
+            # Prepare RAG retriever
+            request_rag.prepare_retriever(
+                repo_url,
+                repo_type,
+                token,
+                excluded_dirs,
+                excluded_files,
+                included_dirs,
+                included_files,
             )
-        else:
-            logger.error(f"ValueError preparing retriever: {str(e)}")
-            raise ValueError(f"Error preparing retriever: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error preparing retriever: {str(e)}")
-        # Check for specific embedding-related errors
-        if "All embeddings should be of the same size" in str(e):
-            raise ValueError(
-                "Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again."
-            )
-        else:
-            raise ValueError(f"Error preparing retriever: {str(e)}")
+            logger.info(f"Retriever prepared for {repo_url}")
+        except ValueError as e:
+            if "No valid documents with embeddings found" in str(e):
+                logger.error(f"No valid embeddings found: {str(e)}")
+                raise ValueError(
+                    "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content."
+                )
+            else:
+                logger.error(f"ValueError preparing retriever: {str(e)}")
+                raise ValueError(f"Error preparing retriever: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error preparing retriever: {str(e)}")
+            # Check for specific embedding-related errors
+            if "All embeddings should be of the same size" in str(e):
+                raise ValueError(
+                    "Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again."
+                )
+            else:
+                raise ValueError(f"Error preparing retriever: {str(e)}")
 
     # Validate request
     if not messages or len(messages) == 0:

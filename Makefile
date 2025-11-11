@@ -44,7 +44,7 @@ install: install/backend
 install/backend:
 	@echo "Installing backend dependencies..."
 	@if command -v poetry >/dev/null 2>&1; then \
-		poetry install; \
+		. bin/aws-repo-credentials.sh && poetry install; \
 	else \
 		echo "Error: Poetry is not installed. Please install Poetry v2 first."; \
 		echo "Visit: https://python-poetry.org/docs/#installation"; \
@@ -136,13 +136,13 @@ format:
 # Build package with poetry
 build:
 	@echo "Building package with poetry..."
-	@poetry build
+	@. bin/aws-repo-credentials.sh && poetry build
 	@echo "✓ Build complete"
 
 # Deploy package to ocpyupload repository
 deploy:
 	@echo "Publishing package to ocpyupload repository..."
-	@poetry publish --repository ocpyupload
+	@. bin/aws-repo-credentials.sh && poetry publish --repository ocpyupload
 	@echo "✓ Deployment complete"
 
 # Catch-all target to prevent Make from treating CLI arguments as targets

@@ -42,7 +42,7 @@ class TestDeepMerge:
         """Test simple dictionary merge."""
         base = {"a": 1, "b": 2}
         override = {"b": 3, "c": 4}
-        result = config._deep_merge(base, override)  # noqa: SLF001
+        result = config._deep_merge(base, override)
         assert result == {"a": 1, "b": 3, "c": 4}
         # Original should not be modified
         assert base == {"a": 1, "b": 2}
@@ -51,28 +51,28 @@ class TestDeepMerge:
         """Test nested dictionary merge."""
         base = {"a": {"x": 1, "y": 2}, "b": 3}
         override = {"a": {"y": 20, "z": 30}, "b": 4}
-        result = config._deep_merge(base, override)  # noqa: SLF001
+        result = config._deep_merge(base, override)
         assert result == {"a": {"x": 1, "y": 20, "z": 30}, "b": 4}
 
     def test_deep_merge_override_with_non_dict(self) -> None:
         """Test that non-dict values override dict values."""
         base = {"a": {"x": 1}}
         override = {"a": "string"}
-        result = config._deep_merge(base, override)  # noqa: SLF001
+        result = config._deep_merge(base, override)
         assert result == {"a": "string"}
 
     def test_deep_merge_empty_base(self) -> None:
         """Test merge with empty base."""
         base = {}
         override = {"a": 1, "b": 2}
-        result = config._deep_merge(base, override)  # noqa: SLF001
+        result = config._deep_merge(base, override)
         assert result == {"a": 1, "b": 2}
 
     def test_deep_merge_empty_override(self) -> None:
         """Test merge with empty override."""
         base = {"a": 1, "b": 2}
         override = {}
-        result = config._deep_merge(base, override)  # noqa: SLF001
+        result = config._deep_merge(base, override)
         assert result == {"a": 1, "b": 2}
 
 

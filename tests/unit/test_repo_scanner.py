@@ -43,11 +43,11 @@ def test_collect_repository_files_prefers_git_ls_files(tmp_path: Path) -> None:
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run([git_path, "init"], cwd=repo, check=True, capture_output=True)  # noqa: S603
+    subprocess.run([git_path, "init"], cwd=repo, check=True, capture_output=True)
 
     tracked = repo / "tracked.py"
     tracked.write_text("print('tracked')", encoding="utf-8")
-    subprocess.run([git_path, "add", tracked.name], cwd=repo, check=True)  # noqa: S603
+    subprocess.run([git_path, "add", tracked.name], cwd=repo, check=True)
     subprocess.run(
         [git_path, "commit", "-m", "add tracked"],
         cwd=repo,

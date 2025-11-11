@@ -568,9 +568,9 @@ def generate_wiki_structure(
                 messages=[{"role": "user", "content": prompt}],
             )
         else:
-            from api.utils.chat import generate_chat_completion_streaming
+            from api.utils.completion import generate_wiki_content_streaming
 
-            stream = generate_chat_completion_streaming(
+            stream = generate_wiki_content_streaming(
                 repo_url=repo_url,
                 messages=[{"role": "user", "content": prompt}],
                 provider=provider,
@@ -587,6 +587,12 @@ def generate_wiki_structure(
 
         # Clean up response
         xml_content = xml_content.strip()
+
+        # Log first and last 500 chars for debugging
+        logger.debug(f"Raw response length: {len(xml_content)}")
+        logger.debug(f"First 500 chars: {xml_content[:500]}")
+        logger.debug(f"Last 500 chars: {xml_content[-500:]}")
+
         if xml_content.startswith(("```xml", "```")):
             xml_content = (
                 xml_content.split("\n", 1)[1] if "\n" in xml_content else xml_content
@@ -596,19 +602,82 @@ def generate_wiki_structure(
                 xml_content.rsplit("\n", 1)[0] if "\n" in xml_content else xml_content
             )
 
-        # Extract XML
+        # Extract XML - try multiple patterns
         import re
 
+        # Try exact match first
         xml_match = re.search(
-            r"<wiki_structure>.*</wiki_structure>",
+            r"<wiki_structure>.*?</wiki_structure>",
             xml_content,
             re.DOTALL,
         )
+
+        # If not found, try without the closing tag (in case it's incomplete)
+        if not xml_match:
+            xml_match = re.search(
+                r"<wiki_structure>.*",
+                xml_content,
+                re.DOTALL,
+            )
+            if xml_match:
+                logger.warning(
+                    "Found opening <wiki_structure> tag but no closing tag - response may be incomplete",
+                )
+
+        # If still not found, try case-insensitive
+        if not xml_match:
+            xml_match = re.search(
+                r"<wiki_structure>.*?</wiki_structure>",
+                xml_content,
+                re.DOTALL | re.IGNORECASE,
+            )
+
         if not xml_match:
             logger.error("No valid XML structure found in response")
+            logger.error(f"Response length: {len(xml_content)} characters")
+            logger.error(f"Response preview (first 1000 chars):\n{xml_content[:1000]}")
+            logger.error(f"Response preview (last 1000 chars):\n{xml_content[-1000:]}")
+
+            # Check if response contains any XML-like content
+            if "<" in xml_content and ">" in xml_content:
+                logger.error(
+                    "Response contains XML-like content but no <wiki_structure> tag found",
+                )
+                # Try to find any XML tags to help debug
+                xml_tags = re.findall(r"<[^>]+>", xml_content[:500])
+                if xml_tags:
+                    logger.error(f"Found XML tags in response: {xml_tags[:10]}")
+            else:
+                logger.error("Response does not appear to contain XML at all")
+                # Check if it's just plain text
+                if len(xml_content) > 0:
+                    logger.error(
+                        f"Response appears to be plain text. First 200 chars: {xml_content[:200]}",
+                    )
+
+            # Save full response to a file for debugging
+            import os
+            import tempfile
+
+            debug_file = os.path.join(
+                tempfile.gettempdir(),
+                f"deepwiki_debug_response_{os.getpid()}.txt",
+            )
+            try:
+                with open(debug_file, "w", encoding="utf-8") as f:
+                    f.write(xml_content)
+                logger.error(f"Full response saved to: {debug_file}")
+            except Exception as e:
+                logger.error(f"Failed to save debug file: {e}")
+
             return None
 
         xml_text = xml_match.group(0)
+
+        # If we found an incomplete match (no closing tag), try to complete it
+        if not xml_text.strip().endswith("</wiki_structure>"):
+            logger.warning("XML structure appears incomplete, attempting to close it")
+            xml_text += "\n</wiki_structure>"
 
         # Clean XML: escape common problematic characters
         import html

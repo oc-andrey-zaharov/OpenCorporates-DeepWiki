@@ -7,6 +7,7 @@ when server is unavailable or misconfigured.
 from unittest.mock import patch
 
 import pytest
+from requests.exceptions import ConnectionError
 
 
 class TestFallbackScenarios:
@@ -47,10 +48,51 @@ class TestFallbackScenarios:
         except ImportError as e:
             pytest.skip(f"Config module not yet implemented: {e}")
 
-    @pytest.mark.skip(reason="Requires server mode implementation")
     def test_error_when_fallback_disabled(self) -> None:
         """Test that error is raised when fallback is disabled and server unavailable."""
-        # This would test error handling when:
-        # - use_server = True
-        # - auto_fallback = False
-        # - Server is unavailable
+        # Use lazy import to avoid circular import issues
+        try:
+            import importlib
+            import sys
+
+            # Try to import the module
+            if "api.utils.github" in sys.modules:
+                # If already imported, reload it
+                github_module = importlib.reload(sys.modules["api.utils.github"])
+            else:
+                github_module = importlib.import_module("api.utils.github")
+
+            get_github_repo_structure = github_module.get_github_repo_structure
+
+            # Test error handling when:
+            # - use_server = True
+            # - auto_fallback = False
+            # - Server is unavailable
+            with (
+                patch("api.utils.github.is_server_mode", return_value=True),
+                patch("api.utils.github.should_fallback", return_value=False),
+                patch(
+                    "api.utils.github.check_server_health_with_retry",
+                    return_value=False,
+                ),
+            ):
+                # Should raise requests.exceptions.ConnectionError when server unavailable and fallback disabled
+                with pytest.raises(ConnectionError) as exc_info:
+                    get_github_repo_structure("owner", "repo")
+
+                error_message = str(exc_info.value)
+                assert "Server mode enabled but server unavailable" in error_message
+                assert (
+                    "auto_fallback" in error_message.lower()
+                    or "fallback" in error_message.lower()
+                )
+        except (ImportError, AttributeError) as e:
+            error_msg = str(e)
+            if "circular import" in error_msg.lower():
+                pytest.skip(
+                    "Circular import detected. This test will run once the import issue is resolved.",
+                )
+            else:
+                pytest.skip(
+                    f"Mode utilities or github utilities not yet implemented: {e}",
+                )

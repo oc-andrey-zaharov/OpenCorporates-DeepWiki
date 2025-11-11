@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -135,7 +135,7 @@ def list_existing_wikis(
                 repo=meta["repo"],
                 language=meta["language"],
                 version=int(meta["version"]),
-                modified=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+                modified=datetime.fromtimestamp(stats.st_mtime, tz=UTC),
                 size=stats.st_size,
             ),
         )

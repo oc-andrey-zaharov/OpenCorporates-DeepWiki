@@ -11,7 +11,6 @@ import requests
 class TestServerMode:
     """Test server mode functionality."""
 
-    @pytest.mark.skip(reason="Requires running server")
     def test_server_health_check(self) -> None:
         """Test server health check endpoint.
 
@@ -21,10 +20,15 @@ class TestServerMode:
         try:
             response = requests.get("http://localhost:8001/health", timeout=5)
             assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "healthy"
+            assert "timestamp" in data
+            assert data["service"] == "deepwiki-api"
         except requests.exceptions.ConnectionError:
-            pytest.skip("Server not running")
+            pytest.skip(
+                "Server not running on localhost:8001. Start with 'make dev/backend'",
+            )
 
-    @pytest.mark.skip(reason="Requires running server and API keys")
     def test_wiki_generation_via_server(self) -> None:
         """Test wiki generation via server endpoint.
 
@@ -35,6 +39,17 @@ class TestServerMode:
 
         Run manually with server started.
         """
+        # Check if server is running
+        try:
+            response = requests.get("http://localhost:8001/health", timeout=5)
+            if response.status_code != 200:
+                pytest.skip("Server not healthy. Start with 'make dev/backend'")
+        except requests.exceptions.ConnectionError:
+            pytest.skip(
+                "Server not running on localhost:8001. Start with 'make dev/backend'",
+            )
+
+        # TODO: Implement actual wiki generation test via server endpoint
         # This would test actual wiki generation via server
 
     def test_server_mode_config(self) -> None:

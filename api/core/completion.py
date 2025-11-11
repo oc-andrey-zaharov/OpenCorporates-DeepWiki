@@ -90,7 +90,7 @@ def _async_to_sync_generator(async_gen):
 
     while True:
         try:
-            msg_type, value = q.get(timeout=0.1)
+            msg_type, value = q.get(timeout=1.0)  # Increased timeout to 1 second
             if msg_type == "item":
                 yield value
             elif msg_type == "error":
@@ -101,6 +101,8 @@ def _async_to_sync_generator(async_gen):
             if not thread.is_alive():
                 if exception:
                     raise exception
+                # Thread died without sending done signal - might be an issue
+                logger.warning("Async generator thread ended without completion signal")
                 break
             continue
 
@@ -151,7 +153,9 @@ def generate_wiki_content(
     if messages and len(messages) > 0:
         last_message = messages[-1]
         if isinstance(last_message, dict) and last_message.get("content"):
-            tokens = count_tokens(last_message["content"], provider == "ollama")
+            # Map provider to embedder_type for token counting
+            embedder_type = "ollama" if provider == "ollama" else None
+            tokens = count_tokens(last_message["content"], embedder_type=embedder_type)
             logger.info(f"Request size: {tokens} tokens")
             if tokens > 8000:
                 logger.warning(
@@ -311,6 +315,7 @@ def generate_wiki_content(
     async def _async_stream():
         try:
             if provider == "ollama":
+                logger.info(f"Using Ollama with model: {model_config['model']}")
                 prompt_with_no_think = prompt + " /no_think"
                 model_client = OllamaClient()
                 model_kwargs = {
@@ -327,23 +332,69 @@ def generate_wiki_content(
                     model_kwargs=model_kwargs,
                     model_type=ModelType.LLM,
                 )
+                logger.debug(f"Ollama API kwargs: {api_kwargs}")
                 response = await model_client.acall(
                     api_kwargs=api_kwargs,
                     model_type=ModelType.LLM,
                 )
+                logger.debug("Ollama response received, starting to stream chunks")
+                chunk_count = 0
                 async for chunk in response:
-                    text = (
-                        getattr(chunk, "response", None)
-                        or getattr(chunk, "text", None)
-                        or str(chunk)
-                    )
-                    if (
-                        text
-                        and not text.startswith("model=")
-                        and not text.startswith("created_at=")
-                    ):
+                    chunk_count += 1
+                    # Try multiple ways to extract text from chunk
+                    text = None
+
+                    # Check for dict-like access first (most common)
+                    if isinstance(chunk, dict):
+                        if "message" in chunk:
+                            msg = chunk["message"]
+                            if isinstance(msg, dict) and "content" in msg:
+                                text = msg["content"]
+                            elif hasattr(msg, "content"):
+                                text = msg.content
+                        elif "response" in chunk:
+                            text = chunk["response"]
+                        elif "text" in chunk:
+                            text = chunk["text"]
+                    # Check for message.content attribute (Ollama Python library format)
+                    elif hasattr(chunk, "message"):
+                        msg = chunk.message
+                        if hasattr(msg, "content"):
+                            text = msg.content
+                        elif isinstance(msg, dict) and "content" in msg:
+                            text = msg["content"]
+                    # Check for direct attributes
+                    else:
+                        text = (
+                            getattr(chunk, "response", None)
+                            or getattr(chunk, "text", None)
+                            or (str(chunk) if chunk else None)
+                        )
+
+                    # Log first few chunks for debugging
+                    if chunk_count <= 3:
+                        logger.debug(
+                            f"Ollama chunk #{chunk_count}: type={type(chunk)}, text={text[:50] if text else None}",
+                        )
+
+                    # Filter out metadata and empty chunks
+                    if text and isinstance(text, str):
+                        # Skip metadata lines
+                        if text.startswith(("model=", "created_at=")):
+                            continue
+                        # Clean up reasoning tags
                         text = text.replace("<think>", "").replace("</think>", "")
-                        yield text
+                        if text.strip():  # Only yield non-empty text
+                            yield text
+                    elif text is None and chunk_count % 100 == 0:
+                        # Log periodically if we're getting None chunks
+                        logger.warning(
+                            f"Received None text chunk at count {chunk_count}, chunk type: {type(chunk)}",
+                        )
+
+                logger.info(
+                    f"Ollama streaming completed, processed {chunk_count} chunks",
+                )
             elif provider == "openrouter":
                 try:
                     logger.info(f"Using OpenRouter with model: {model}")

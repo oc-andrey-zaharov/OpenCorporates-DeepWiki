@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from api.core.chat import generate_chat_completion_core
 from api.services.rag import RAG
 
 if TYPE_CHECKING:
@@ -71,7 +70,9 @@ class WikiGenerationContext:
         file_path: str | None = None,
     ) -> Generator[str]:
         """Yield completion chunks using the cached retriever."""
-        return generate_chat_completion_core(
+        from api.core.completion import generate_wiki_content
+
+        return generate_wiki_content(
             repo_url=self.repo_url,
             messages=messages,
             provider=self.provider,

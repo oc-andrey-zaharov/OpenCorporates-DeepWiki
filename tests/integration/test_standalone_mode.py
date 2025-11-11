@@ -31,7 +31,6 @@ class TestStandaloneMode:
         # Verify that default_provider exists either in loaded config or fallback DEFAULT_CONFIG
         assert "default_provider" in config or "default_provider" in DEFAULT_CONFIG
 
-    @pytest.mark.skip(reason="Requires API keys and network access")
     def test_wiki_generation_standalone(self) -> None:
         """Test wiki generation in standalone mode.
 
@@ -42,6 +41,25 @@ class TestStandaloneMode:
 
         Run manually with: pytest tests/integration/test_standalone_mode.py::TestStandaloneMode::test_wiki_generation_standalone -v
         """
+        # Check if API keys are available
+        import os
+
+        has_api_keys = any(
+            os.getenv(key)
+            for key in [
+                "OPENAI_API_KEY",
+                "GOOGLE_API_KEY",
+                "OPENROUTER_API_KEY",
+                "AWS_ACCESS_KEY_ID",
+            ]
+        )
+        if not has_api_keys:
+            pytest.skip(
+                "API keys not configured. Set OPENAI_API_KEY, GOOGLE_API_KEY, "
+                "OPENROUTER_API_KEY, or AWS_ACCESS_KEY_ID to run this test.",
+            )
+
+        # TODO: Implement actual wiki generation test
         # This would test actual wiki generation
         # For now, it's a placeholder
 
@@ -50,8 +68,12 @@ class TestStandaloneMode:
         from api.cli.utils import get_cache_path
 
         # Mock get_adalflow_default_root_path to return a temporary directory
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir,
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch(
+                "adalflow.utils.get_adalflow_default_root_path",
+                return_value=tmpdir,
+            ),
         ):
             cache_path = get_cache_path()
             # Verify the path is constructed correctly

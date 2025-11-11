@@ -59,10 +59,6 @@ def get_first_message_content(completion: ChatCompletion) -> str:
     return completion.choices[0].message.content
 
 
-# def _get_chat_completion_usage(completion: ChatCompletion) -> OpenAICompletionUsage:
-#     return completion.usage
-
-
 # A simple heuristic to estimate token count for estimating number of tokens in a Streaming response
 def estimate_token_count(text: str) -> int:
     """Estimate the token count of a given text.
@@ -173,7 +169,10 @@ class OpenAIClient(ModelClient):
         self._api_key = api_key
         self._env_api_key_name = env_api_key_name
         self._env_base_url_name = env_base_url_name
-        self.base_url = base_url or os.getenv(self._env_base_url_name, "https://api.openai.com/v1")
+        self.base_url = base_url or os.getenv(
+            self._env_base_url_name,
+            "https://api.openai.com/v1",
+        )
         self.sync_client = self.init_sync_client()
         self.async_client = None  # only initialize if the async call is called
         self.chat_completion_parser = (
@@ -198,18 +197,6 @@ class OpenAIClient(ModelClient):
             )
         return AsyncOpenAI(api_key=api_key, base_url=self.base_url)
 
-    # def _parse_chat_completion(self, completion: ChatCompletion) -> "GeneratorOutput":
-    #     # TODO: raw output it is better to save the whole completion as a source of truth instead of just the message
-    #     try:
-    #         data = self.chat_completion_parser(completion)
-    #         usage = self.track_completion_usage(completion)
-    #         return GeneratorOutput(
-    #             data=data, error=None, raw_response=str(data), usage=usage
-    #         )
-    #     except Exception as e:
-    #         log.error(f"Error parsing the completion: {e}")
-    #         return GeneratorOutput(data=None, error=str(e), raw_response=completion)
-
     def parse_chat_completion(
         self,
         completion: ChatCompletion | Generator[ChatCompletionChunk],
@@ -225,7 +212,10 @@ class OpenAIClient(ModelClient):
         try:
             usage = self.track_completion_usage(completion)
             return GeneratorOutput(
-                data=None, error=None, raw_response=data, usage=usage,
+                data=None,
+                error=None,
+                raw_response=data,
+                usage=usage,
             )
         except Exception as e:
             log.exception(f"Error tracking the completion usage: {e}")
@@ -235,7 +225,6 @@ class OpenAIClient(ModelClient):
         self,
         completion: ChatCompletion | Generator[ChatCompletionChunk],
     ) -> CompletionUsage:
-
         try:
             usage: CompletionUsage = CompletionUsage(
                 completion_tokens=completion.usage.completion_tokens,
@@ -246,11 +235,14 @@ class OpenAIClient(ModelClient):
         except Exception as e:
             log.exception(f"Error tracking the completion usage: {e}")
             return CompletionUsage(
-                completion_tokens=None, prompt_tokens=None, total_tokens=None,
+                completion_tokens=None,
+                prompt_tokens=None,
+                total_tokens=None,
             )
 
     def parse_embedding_response(
-        self, response: CreateEmbeddingResponse,
+        self,
+        response: CreateEmbeddingResponse,
     ) -> EmbedderOutput:
         r"""Parse the embedding response to a structure Adalflow components can understand.
 
@@ -356,11 +348,13 @@ class OpenAIClient(ModelClient):
             # Set defaults for DALL-E 3 if not specified
             final_model_kwargs["size"] = final_model_kwargs.get("size", "1024x1024")
             final_model_kwargs["quality"] = final_model_kwargs.get(
-                "quality", "standard",
+                "quality",
+                "standard",
             )
             final_model_kwargs["n"] = final_model_kwargs.get("n", 1)
             final_model_kwargs["response_format"] = final_model_kwargs.get(
-                "response_format", "url",
+                "response_format",
+                "url",
             )
 
             # Handle image edits and variations
@@ -403,7 +397,11 @@ class OpenAIClient(ModelClient):
         ),
         max_time=5,
     )
-    def call(self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED):
+    def call(
+        self,
+        api_kwargs: dict | None = None,
+        model_type: ModelType = ModelType.UNDEFINED,
+    ):
         """Kwargs is the combined input and model_kwargs.  Support streaming call."""
         if api_kwargs is None:
             api_kwargs = {}
@@ -422,7 +420,9 @@ class OpenAIClient(ModelClient):
             streaming_kwargs["stream"] = True
 
             # Get streaming response
-            stream_response = self.sync_client.chat.completions.create(**streaming_kwargs)
+            stream_response = self.sync_client.chat.completions.create(
+                **streaming_kwargs,
+            )
 
             # Accumulate all content from the stream
             accumulated_content = ""
@@ -442,15 +442,20 @@ class OpenAIClient(ModelClient):
                             accumulated_content += text or ""
             # Return the mock completion object that will be processed by the chat_completion_parser
             return ChatCompletion(
-                id = id,
+                id=id,
                 model=model,
                 created=created,
                 object="chat.completion",
-                choices=[Choice(
-                    index=0,
-                    finish_reason="stop",
-                    message=ChatCompletionMessage(content=accumulated_content, role="assistant"),
-                )],
+                choices=[
+                    Choice(
+                        index=0,
+                        finish_reason="stop",
+                        message=ChatCompletionMessage(
+                            content=accumulated_content,
+                            role="assistant",
+                        ),
+                    ),
+                ],
             )
         if model_type == ModelType.IMAGE_GENERATION:
             # Determine which image API to call based on the presence of image/mask
@@ -479,7 +484,9 @@ class OpenAIClient(ModelClient):
         max_time=5,
     )
     async def acall(
-        self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED,
+        self,
+        api_kwargs: dict | None = None,
+        model_type: ModelType = ModelType.UNDEFINED,
     ):
         """Kwargs is the combined input and model_kwargs."""
         # store the api kwargs in the client
@@ -549,7 +556,9 @@ class OpenAIClient(ModelClient):
             raise ValueError(f"Error encoding image {image_path}: {e!s}")
 
     def _prepare_image_content(
-        self, image_source: str | dict[str, Any], detail: str = "auto",
+        self,
+        image_source: str | dict[str, Any],
+        detail: str = "auto",
     ) -> dict[str, Any]:
         """Prepare image content for API request.
 
@@ -582,8 +591,6 @@ if __name__ == "__main__":
     from adalflow.core import Generator
     from adalflow.utils import setup_env
 
-    # log = get_logger(level="DEBUG")
-
     setup_env()
     prompt_kwargs = {"input_str": "What is the meaning of life?"}
 
@@ -592,26 +599,3 @@ if __name__ == "__main__":
         model_kwargs={"model": "gpt-4o", "stream": False},
     )
     gen_response = gen(prompt_kwargs)
-
-    # for genout in gen_response.data:
-    #     print(f"genout: {genout}")
-
-    # test that to_dict and from_dict works
-    # model_client = OpenAIClient()
-    # model_client_dict = model_client.to_dict()
-    # from_dict_model_client = OpenAIClient.from_dict(model_client_dict)
-    # assert model_client_dict == from_dict_model_client.to_dict()
-
-
-if __name__ == "__main__":
-    import adalflow as adal
-
-    # setup env or pass the api_key
-    from adalflow.utils import setup_env
-
-    setup_env()
-
-    openai_llm = adal.Generator(
-        model_client=OpenAIClient(), model_kwargs={"model": "gpt-4o"},
-    )
-    resopnse = openai_llm(prompt_kwargs={"input_str": "What is LLM?"})

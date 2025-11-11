@@ -1,12 +1,15 @@
 """List cached wikis command."""
 
 import json
-from datetime import datetime
+import logging
+from datetime import UTC, datetime
 
 import click
 
 from api.cli.utils import format_file_size, get_cache_path
 from api.utils.wiki_cache import parse_cache_filename
+
+logger = logging.getLogger(__name__)
 
 
 @click.command(name="list")
@@ -45,7 +48,7 @@ def list_wikis() -> None:
             # Get file stats
             stats = cache_file.stat()
             size = format_file_size(stats.st_size)
-            modified = datetime.fromtimestamp(stats.st_mtime)
+            modified = datetime.fromtimestamp(stats.st_mtime, tz=UTC)
 
             # Try to load the cache to get more info
             wiki_type = "-"
@@ -62,10 +65,10 @@ def list_wikis() -> None:
                         wiki_type = "concise"
                     else:
                         detected = data.get("wiki_type")
-                        if isinstance(detected, str) and detected.strip():
-                            wiki_type = detected.strip()
-            except Exception:
-                pass
+                    if isinstance(detected, str) and detected.strip():
+                        wiki_type = detected.strip()
+            except Exception as e:
+                logger.debug("Failed to load cache metadata from %s: %s", cache_file, e)
 
             wikis.append(
                 {

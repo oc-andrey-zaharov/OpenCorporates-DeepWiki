@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 import click
 
@@ -73,7 +73,9 @@ def prompt_repository() -> tuple:
 
     while True:
         repo_input = prompt_text_input(
-            "\nEnter repository", default="", show_default=False,
+            "\nEnter repository",
+            default="",
+            show_default=False,
         )
 
         try:
@@ -144,9 +146,13 @@ def prompt_model_config(config: dict) -> tuple:
         raise click.Abort
 
     # Warn if custom model is used
-    if available_models and model not in available_models and not confirm_action(
-        f"⚠ '{model}' is not in the predefined list. Continue anyway?",
-        default=True,
+    if (
+        available_models
+        and model not in available_models
+        and not confirm_action(
+            f"⚠ '{model}' is not in the predefined list. Continue anyway?",
+            default=True,
+        )
     ):
         raise click.Abort
 
@@ -199,16 +205,24 @@ def prompt_file_filters() -> tuple:
     click.echo("\nEnter patterns (comma-separated) or leave empty:")
 
     excluded_dirs_input = prompt_text_input(
-        "Exclude directories", default="", show_default=False,
+        "Exclude directories",
+        default="",
+        show_default=False,
     )
     excluded_files_input = prompt_text_input(
-        "Exclude files", default="", show_default=False,
+        "Exclude files",
+        default="",
+        show_default=False,
     )
     included_dirs_input = prompt_text_input(
-        "Include only directories", default="", show_default=False,
+        "Include only directories",
+        default="",
+        show_default=False,
     )
     included_files_input = prompt_text_input(
-        "Include only files", default="", show_default=False,
+        "Include only files",
+        default="",
+        show_default=False,
     )
 
     # Parse comma-separated values
@@ -282,7 +296,9 @@ def _display_change_summary(
     click.echo(f"  • {unchanged} files unchanged")
 
     if not affected_page_ids or not wiki_structure:
-        click.echo("Affected pages: none (you can still choose 'Update only affected pages' to pick pages manually)")
+        click.echo(
+            "Affected pages: none (you can still choose 'Update only affected pages' to pick pages manually)",
+        )
         return
 
     changed_set = set(summary.get("changed_files", []))
@@ -345,7 +361,8 @@ def _prompt_pages_to_regenerate(
         return []
 
     selected_labels = select_multiple_from_list(
-        "Select pages to regenerate (space to toggle)", options,
+        "Select pages to regenerate (space to toggle)",
+        options,
     )
 
     if not selected_labels:
@@ -362,7 +379,8 @@ def _collect_page_feedback(
         return {}
 
     if not confirm_action(
-        "Would you like to provide feedback for any selected pages?", default=False,
+        "Would you like to provide feedback for any selected pages?",
+        default=False,
     ):
         return {}
 
@@ -410,14 +428,8 @@ def generate_page_content_sync(
 
         prompt = build_wiki_page_prompt(page_title, file_paths_list)
 
-
         if extra_feedback:
-            prompt += (
-                "\nUser feedback and guidance:\n"
-                + extra_feedback.strip()
-                + "\n"
-            )
-
+            prompt += "\nUser feedback and guidance:\n" + extra_feedback.strip() + "\n"
 
         page_bar.update(30)  # Prompt ready
 
@@ -455,7 +467,9 @@ def generate_page_content_sync(
 
                     # Use the maximum of both to ensure progress moves
                     target_progress = max(
-                        time_progress, content_progress, last_progress,
+                        time_progress,
+                        content_progress,
+                        last_progress,
                     )
                     target_progress = min(target_progress, 90)
 
@@ -546,7 +560,6 @@ def generate_wiki_structure(
         file_count=file_count,
     )
 
-
     try:
         # Collect response from streaming generator
         xml_content = ""
@@ -587,7 +600,9 @@ def generate_wiki_structure(
         import re
 
         xml_match = re.search(
-            r"<wiki_structure>.*</wiki_structure>", xml_content, re.DOTALL,
+            r"<wiki_structure>.*</wiki_structure>",
+            xml_content,
+            re.DOTALL,
         )
         if not xml_match:
             logger.error("No valid XML structure found in response")
@@ -693,8 +708,6 @@ def generate_wiki_structure(
         return None
 
 
-
-
 def _read_local_readme(repo_path: str) -> str:
     for readme_name in ["README.md", "readme.md", "README.txt"]:
         readme_path = os.path.join(repo_path, readme_name)
@@ -722,7 +735,8 @@ def prepare_repository_state(
         file_tree = data.get("file_tree", "")
         readme = data.get("readme", "")
         snapshot = build_snapshot_from_tree(
-            data.get("tree_files"), reference=f"{owner}/{repo_name}",
+            data.get("tree_files"),
+            reference=f"{owner}/{repo_name}",
         )
         return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
 
@@ -732,8 +746,6 @@ def prepare_repository_state(
     readme = _read_local_readme(repo_url_or_path)
     snapshot = build_snapshot_from_local(repo_url_or_path, files)
     return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
-
-
 
 
 @click.command(name="generate")
@@ -763,7 +775,10 @@ def generate(force: bool) -> None:
         cache_path = get_cache_path()
         owner_key = owner or "local"
         existing_entries = list_existing_wikis(
-            cache_path, repo_type, owner_key, repo_name,
+            cache_path,
+            repo_type,
+            owner_key,
+            repo_name,
         )
 
         selected_cache_entry: CacheFileInfo | None = None
@@ -787,7 +802,10 @@ def generate(force: bool) -> None:
 
         try:
             repo_state = prepare_repository_state(
-                repo_type, repo_url_or_path, owner, repo_name,
+                repo_type,
+                repo_url_or_path,
+                owner,
+                repo_name,
             )
             click.echo("✓ Repository inspected")
         except Exception as e:
@@ -810,12 +828,12 @@ def generate(force: bool) -> None:
                 action = "overwrite"
             else:
                 change_summary = detect_repo_changes(
-                    repo_url_or_path, existing_cache, repo_state.snapshot,
+                    repo_url_or_path,
+                    existing_cache,
+                    repo_state.snapshot,
                 )
                 affected_pages = find_affected_pages(
-                    change_summary.get("changed_files", [])
-                    if change_summary
-                    else [],
+                    change_summary.get("changed_files", []) if change_summary else [],
                     existing_cache.wiki_structure,
                 )
                 if existing_cache and existing_cache.wiki_structure:
@@ -851,7 +869,8 @@ def generate(force: bool) -> None:
                 action = "overwrite"
             else:
                 selected_page_ids = _prompt_pages_to_regenerate(
-                    existing_cache.wiki_structure, update_candidate_page_ids,
+                    existing_cache.wiki_structure,
+                    update_candidate_page_ids,
                 )
                 if not selected_page_ids:
                     progress.close()
@@ -866,15 +885,14 @@ def generate(force: bool) -> None:
                     title = page.title if page else pid
                     click.echo(f"  • {title}")
                 page_feedback = _collect_page_feedback(
-                    selected_page_ids, existing_cache.wiki_structure,
+                    selected_page_ids,
+                    existing_cache.wiki_structure,
                 )
 
         target_version = 1
         if action == "new_version":
             highest = max((entry.version for entry in existing_entries), default=0)
-            base_version = (
-                selected_cache_entry.version if selected_cache_entry else 1
-            )
+            base_version = selected_cache_entry.version if selected_cache_entry else 1
             target_version = max(highest, base_version) + 1
         elif selected_cache_entry:
             target_version = selected_cache_entry.version
@@ -951,12 +969,18 @@ def generate(force: bool) -> None:
             click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
 
             progress.set_status("Generating pages")
-            progress.init_overall_progress(len(wiki_structure.pages), "Generating Pages")
+            progress.init_overall_progress(
+                len(wiki_structure.pages),
+                "Generating Pages",
+            )
             click.echo(f"\nGenerating {len(wiki_structure.pages)} pages...\n")
 
             for page in wiki_structure.pages:
                 updated_page = generate_page_content_sync(
-                    page, generation_context, repo_url_or_path, progress,
+                    page,
+                    generation_context,
+                    repo_url_or_path,
+                    progress,
                 )
                 if updated_page:
                     generated_pages[page.id] = updated_page
@@ -984,7 +1008,7 @@ def generate(force: bool) -> None:
         )
         cache_file = cache_path / cache_filename
 
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         created_at = (
             now_iso
             if action == "new_version" or not existing_cache
@@ -1021,9 +1045,7 @@ def generate(force: bool) -> None:
         click.echo(f"Version: v{target_version}")
         click.echo(
             "Action: "
-            + (
-                "Update affected pages" if action == "update" else "Full regeneration"
-            ),
+            + ("Update affected pages" if action == "update" else "Full regeneration"),
         )
         click.echo(f"Pages regenerated: {len(regenerated_ids)}")
         if regenerated_ids:
@@ -1057,6 +1079,6 @@ def generate(force: bool) -> None:
     except Exception as e:
         if progress:
             progress.close()
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.exception("Unexpected error")
         click.echo(f"\n✗ Unexpected error: {e}", err=True)
         sys.exit(1)

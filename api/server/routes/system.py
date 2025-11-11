@@ -6,6 +6,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Request
 
+from api import __version__
+
 router = APIRouter(tags=["system"])
 
 

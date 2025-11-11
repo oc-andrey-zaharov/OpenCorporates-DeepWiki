@@ -1,5 +1,6 @@
 """Shell completion helpers for DeepWiki CLI."""
 
+import logging
 import os
 
 from click.shell_completion import CompletionItem
@@ -7,6 +8,8 @@ from click.shell_completion import CompletionItem
 from api.cli.config import get_provider_models
 from api.cli.utils import get_cache_path
 from api.utils.wiki_cache import parse_cache_filename
+
+logger = logging.getLogger(__name__)
 
 
 def complete_providers(ctx, param, incomplete: str) -> list[CompletionItem]:
@@ -69,7 +72,8 @@ def complete_wiki_names(ctx, param, incomplete: str) -> list[CompletionItem]:
                 repo = meta["repo"]
                 name = f"{owner}/{repo}" if owner and owner != "local" else repo
                 wiki_names.append(name)
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse cache filename %s: %s", cache_file, e)
                 continue
 
         return [

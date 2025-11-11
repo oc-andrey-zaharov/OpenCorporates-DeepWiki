@@ -49,7 +49,9 @@ def _get_encoding(embedder_type: str):
 
 
 def count_tokens(
-    text: str, embedder_type: str | None = None, is_ollama_embedder: bool | None = None,
+    text: str,
+    embedder_type: str | None = None,
+    is_ollama_embedder: bool | None = None,
 ) -> int:
     """Count the number of tokens in a text string using tiktoken.
 
@@ -84,7 +86,9 @@ def count_tokens(
 
 
 def count_tokens_batch(
-    texts: List[str], embedder_type: str | None = None, num_threads: int | None = None,
+    texts: List[str],
+    embedder_type: str | None = None,
+    num_threads: int | None = None,
 ) -> List[int]:
     """Count tokens for multiple texts in parallel using tiktoken batch operations.
 
@@ -187,7 +191,10 @@ def _chunk_file_content(
 
 
 def download_repo(
-    repo_url: str, local_path: str, repo_type: str | None = None, access_token: str | None = None,
+    repo_url: str,
+    local_path: str,
+    repo_type: str | None = None,
+    access_token: str | None = None,
 ) -> str:
     """Downloads a Git repository (GitHub) to a specified local path.
 
@@ -241,7 +248,9 @@ def download_repo(
 
             # Create a temporary credential helper script
             credential_script = tempfile.NamedTemporaryFile(
-                mode="w", delete=False, suffix=".sh",
+                mode="w",
+                delete=False,
+                suffix=".sh",
             )
             # For GitHub HTTPS, use token as username with empty password
             # The script reads Git's credential request and outputs credentials
@@ -498,7 +507,11 @@ def read_all_documents(
         return not is_excluded
 
     def read_single_file(
-        file_path: str, ext: str, is_code: bool, path: str, embedder_type: str,
+        file_path: str,
+        ext: str,
+        is_code: bool,
+        path: str,
+        embedder_type: str,
     ) -> List[Document] | None:
         """Read a single file and return Document object(s). May return multiple
         documents if the file needs to be chunked.
@@ -603,14 +616,20 @@ def read_all_documents(
     # Process files in parallel using ThreadPoolExecutor
     # Use a reasonable number of workers (I/O bound, so can use more than CPU count)
     max_workers = min(
-        os.cpu_count() * 2 or 8, 16,
+        os.cpu_count() * 2 or 8,
+        16,
     )  # Cap at 16 to avoid too many open files
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all file reading tasks
         future_to_file = {
             executor.submit(
-                read_single_file, file_path, ext, is_code, path, embedder_type,
+                read_single_file,
+                file_path,
+                ext,
+                is_code,
+                path,
+                embedder_type,
             ): (file_path, ext, is_code)
             for file_path, ext, is_code in all_files
         }
@@ -634,7 +653,9 @@ def read_all_documents(
     return documents
 
 
-def prepare_data_pipeline(embedder_type: str | None = None, is_ollama_embedder: bool | None = None):
+def prepare_data_pipeline(
+    embedder_type: str | None = None, is_ollama_embedder: bool | None = None,
+):
     """Creates and returns the data transformation pipeline.
 
     Args:
@@ -679,7 +700,8 @@ def prepare_data_pipeline(embedder_type: str | None = None, is_ollama_embedder: 
         embedder_transformer = ToEmbeddings(embedder=embedder, batch_size=batch_size)
 
     return adal.Sequential(
-        splitter, embedder_transformer,
+        splitter,
+        embedder_transformer,
     )  # sequential will chain together splitter and embedder
 
 
@@ -713,7 +735,9 @@ def transform_documents_and_save_to_db(
 
 
 def get_github_file_content(
-    repo_url: str, file_path: str, access_token: str | None = None,
+    repo_url: str,
+    file_path: str,
+    access_token: str | None = None,
 ) -> str:
     """Retrieves the content of a file from a GitHub repository using the GitHub API.
     Supports both public GitHub (github.com) and GitHub Enterprise (custom domains).
@@ -764,7 +788,7 @@ def get_github_file_content(
             headers["Authorization"] = f"token {access_token}"
         logger.info(f"Fetching file content from GitHub API: {api_url}")
         try:
-            response = requests.get(api_url, headers=headers)
+            response = requests.get(api_url, headers=headers, timeout=30)
             response.raise_for_status()
         except RequestException as e:
             raise ValueError(f"Error fetching file content: {e}")
@@ -791,7 +815,10 @@ def get_github_file_content(
 
 
 def get_file_content(
-    repo_url: str, file_path: str, repo_type: str | None = None, access_token: str | None = None,
+    repo_url: str,
+    file_path: str,
+    repo_type: str | None = None,
+    access_token: str | None = None,
 ) -> str:
     """Retrieves the content of a file from a GitHub repository.
 
@@ -882,7 +909,10 @@ class DatabaseManager:
         return repo_name
 
     def _create_repo(
-        self, repo_url_or_path: str, repo_type: str | None = None, access_token: str | None = None,
+        self,
+        repo_url_or_path: str,
+        repo_type: str | None = None,
+        access_token: str | None = None,
     ) -> None:
         """Download and prepare all paths.
         Paths:
@@ -904,7 +934,8 @@ class DatabaseManager:
             if repo_url_or_path.startswith(("https://", "http://")):
                 # Extract the repository name from the URL
                 repo_name = self._extract_repo_name_from_url(
-                    repo_url_or_path, repo_type,
+                    repo_url_or_path,
+                    repo_type,
                 )
                 logger.info(f"Extracted repo name: {repo_name}")
 
@@ -914,7 +945,10 @@ class DatabaseManager:
                 if not (os.path.exists(save_repo_dir) and os.listdir(save_repo_dir)):
                     # Only download if the repository doesn't exist or is empty
                     download_repo(
-                        repo_url_or_path, save_repo_dir, repo_type, access_token,
+                        repo_url_or_path,
+                        save_repo_dir,
+                        repo_type,
+                        access_token,
                     )
                 else:
                     logger.info(
@@ -1010,7 +1044,8 @@ class DatabaseManager:
                                 continue
 
                             full_path = os.path.join(
-                                self.repo_paths["save_repo_dir"], file_path,
+                                self.repo_paths["save_repo_dir"],
+                                file_path,
                             )
 
                             if file_path in existing_by_path:
@@ -1040,7 +1075,8 @@ class DatabaseManager:
                                 # New file
                                 try:
                                     full_path = os.path.join(
-                                        self.repo_paths["save_repo_dir"], file_path,
+                                        self.repo_paths["save_repo_dir"],
+                                        file_path,
                                     )
                                     doc.meta_data["file_mtime"] = os.path.getmtime(
                                         full_path,
@@ -1062,11 +1098,13 @@ class DatabaseManager:
                             if files_to_process:
                                 # Transform only changed/new documents
                                 data_transformer = prepare_data_pipeline(
-                                    embedder_type, is_ollama_embedder,
+                                    embedder_type,
+                                    is_ollama_embedder,
                                 )
                                 temp_db = LocalDB()
                                 temp_db.register_transformer(
-                                    transformer=data_transformer, key="split_and_embed",
+                                    transformer=data_transformer,
+                                    key="split_and_embed",
                                 )
                                 temp_db.load(files_to_process)
                                 temp_db.transform(key="split_and_embed")
@@ -1086,7 +1124,8 @@ class DatabaseManager:
                                 # without calling transform() again
                                 self.db = LocalDB()
                                 self.db.register_transformer(
-                                    transformer=data_transformer, key="split_and_embed",
+                                    transformer=data_transformer,
+                                    key="split_and_embed",
                                 )
                                 # Load already-transformed documents without re-transforming
                                 # We use load() to add them to the database, but skip transform()
@@ -1142,14 +1181,17 @@ class DatabaseManager:
             if file_path:
                 try:
                     full_path = os.path.join(
-                        self.repo_paths["save_repo_dir"], file_path,
+                        self.repo_paths["save_repo_dir"],
+                        file_path,
                     )
                     doc.meta_data["file_mtime"] = os.path.getmtime(full_path)
                 except OSError:
                     pass
 
         self.db = transform_documents_and_save_to_db(
-            documents, self.repo_paths["save_db_file"], embedder_type=embedder_type,
+            documents,
+            self.repo_paths["save_db_file"],
+            embedder_type=embedder_type,
         )
         logger.info(f"Total documents: {len(documents)}")
         transformed_docs = self.db.get_transformed_data(key="split_and_embed")
@@ -1157,7 +1199,10 @@ class DatabaseManager:
         return transformed_docs
 
     def prepare_retriever(
-        self, repo_url_or_path: str, repo_type: str | None = None, access_token: str | None = None,
+        self,
+        repo_url_or_path: str,
+        repo_type: str | None = None,
+        access_token: str | None = None,
     ):
         """Prepare the retriever for a repository.
         This is a compatibility method for the isolated API.

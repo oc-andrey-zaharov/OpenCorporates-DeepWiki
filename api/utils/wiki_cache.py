@@ -135,7 +135,7 @@ def list_existing_wikis(
                 repo=meta["repo"],
                 language=meta["language"],
                 version=int(meta["version"]),
-                modified=datetime.fromtimestamp(stats.st_mtime),
+                modified=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
                 size=stats.st_size,
             ),
         )

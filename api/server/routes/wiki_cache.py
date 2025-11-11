@@ -64,7 +64,8 @@ async def delete_wiki_cache(
     repo: str = Query(..., description="Repository name"),
     repo_type: str = Query(..., description="Repository type (e.g., github)"),
     language: str = Query(
-        "en", description="Language of the wiki content (always English)",
+        "en",
+        description="Language of the wiki content (always English)",
     ),
     version: int | None = Query(
         None,
@@ -93,7 +94,7 @@ async def get_processed_projects():
     try:
         return await wiki_cache_service.list_processed_projects()
     except Exception as exc:
-        logger.error("Error listing processed projects: %s", exc, exc_info=True)
+        logger.exception("Error listing processed projects: %s", exc)
         raise HTTPException(
             status_code=500,
             detail="Failed to list processed projects from server cache.",

@@ -11,7 +11,6 @@ from adalflow.core.types import EmbedderOutput, ModelType
 
 try:
     import google.generativeai as genai
-    from google.generativeai.types.text_types import BatchEmbeddingDict, EmbeddingDict
 except ImportError:
     raise ImportError(
         "google-generativeai is required. Install it with 'pip install google-generativeai'",
@@ -133,7 +132,9 @@ class GoogleEmbedderClient(ModelClient):
                 embedding_data = []
 
             return EmbedderOutput(
-                data=embedding_data, error=None, raw_response=response,
+                data=embedding_data,
+                error=None,
+                raw_response=response,
             )
         except Exception as e:
             log.exception(f"Error parsing Google AI embedding response: {e}")
@@ -193,7 +194,11 @@ class GoogleEmbedderClient(ModelClient):
         (Exception,),  # Google AI may raise various exceptions
         max_time=5,
     )
-    def call(self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED):
+    def call(
+        self,
+        api_kwargs: dict | None = None,
+        model_type: ModelType = ModelType.UNDEFINED,
+    ):
         """Call Google AI embedding API.
 
         Args:
@@ -229,7 +234,9 @@ class GoogleEmbedderClient(ModelClient):
             raise
 
     async def acall(
-        self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED,
+        self,
+        api_kwargs: dict | None = None,
+        model_type: ModelType = ModelType.UNDEFINED,
     ):
         """Async call to Google AI embedding API.
 

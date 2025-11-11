@@ -1,5 +1,8 @@
 """Module containing all prompts used in the DeepWiki project."""
 
+from pathlib import Path
+from string import Template
+
 # System prompt for RAG
 RAG_SYSTEM_PROMPT = r"""
 You are a code assistant which answers user questions on a Github Repo.
@@ -94,3 +97,63 @@ This file contains...
 - When showing code, include line numbers and file paths when relevant
 - Use markdown formatting to improve readability
 </style>"""
+
+_TEMPLATE_DIR = Path(__file__).with_name("templates")
+PAGE_PROMPT_TEMPLATE = Template(
+    (_TEMPLATE_DIR / "wiki_page_prompt.txt").read_text(encoding="utf-8")
+)
+STRUCTURE_PROMPT_TEMPLATE = Template(
+    (_TEMPLATE_DIR / "wiki_structure_prompt.txt").read_text(encoding="utf-8")
+)
+
+
+def build_wiki_page_prompt(page_title: str, file_paths_list: str) -> str:
+    """Return the canonical prompt for generating wiki page content."""
+
+    return PAGE_PROMPT_TEMPLATE.substitute(
+        page_title=page_title,
+        file_paths_list=file_paths_list,
+    )
+
+
+def _section_guidance(is_comprehensive: bool) -> str:
+    if is_comprehensive:
+        return """Create a structured wiki with the following main sections:
+- Overview (general information about the project)
+- System Architecture (how the system is designed)
+- Core Features (key functionality)
+- Data Management/Flow: If applicable, how data is stored, processed, accessed, and managed (e.g., database schema, data pipelines, state management).
+- Frontend Components (UI elements, if applicable.)
+- Backend Systems (server-side components)
+- Model Integration (AI model connections)
+- Deployment/Infrastructure (how to deploy, what's the infrastructure like)
+- Extensibility and Customization: If the project architecture supports it, explain how to extend or customize its functionality (e.g., plugins, theming, custom modules, hooks).
+
+Each section should contain relevant pages. For example, the 'Frontend Components' section might include pages for 'Home Page', 'Repository Wiki Page', 'Configuration Modal', etc."""
+    return "Create a concise wiki with essential pages covering:"
+
+
+def build_wiki_structure_prompt(
+    file_tree: str,
+    readme: str,
+    is_comprehensive: bool,
+    min_pages: int,
+    max_pages: int,
+    target_pages: int,
+    file_count: int,
+) -> str:
+    """Return the prompt used for structure generation."""
+
+    section_guidance = _section_guidance(is_comprehensive)
+    wiki_scope = "comprehensive" if is_comprehensive else "concise"
+
+    return STRUCTURE_PROMPT_TEMPLATE.substitute(
+        file_tree=file_tree,
+        readme=readme,
+        section_guidance=section_guidance,
+        min_pages=min_pages,
+        max_pages=max_pages,
+        target_pages=target_pages,
+        wiki_scope=wiki_scope,
+        file_count=file_count,
+    )

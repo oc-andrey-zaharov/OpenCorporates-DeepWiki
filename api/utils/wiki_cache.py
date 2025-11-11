@@ -6,20 +6,16 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 CACHE_FILENAME_PREFIX = "deepwiki_cache_"
 DEFAULT_LANGUAGE = "en"
 
 
-def _sanitize_component(value: Optional[str]) -> str:
+def _sanitize_component(value: str | None) -> str:
     """Normalize filename components to avoid filesystem issues."""
-
     if not value:
         return "unknown"
-    return (
-        value.strip().replace("/", "-").replace(" ", "-").replace(os.sep, "-")
-    )
+    return value.strip().replace("/", "-").replace(" ", "-").replace(os.sep, "-")
 
 
 @dataclass
@@ -44,20 +40,21 @@ class CacheFileInfo:
 
 def get_cache_filename(
     repo_type: str,
-    owner: Optional[str],
+    owner: str | None,
     repo_name: str,
-    language: str = DEFAULT_LANGUAGE,
-    version: Optional[int] = 1,
-    suffix: Optional[str] = None,
+    language: str | None = None,
+    version: int | None = 1,
+    suffix: str | None = None,
 ) -> str:
     """Build a cache filename with optional versioning."""
-
     safe_type = _sanitize_component(repo_type or "github")
     safe_owner = _sanitize_component(owner or "local")
     safe_repo = _sanitize_component(repo_name)
     safe_language = _sanitize_component(language or DEFAULT_LANGUAGE)
 
-    filename = f"{CACHE_FILENAME_PREFIX}{safe_type}_{safe_owner}_{safe_repo}_{safe_language}"
+    filename = (
+        f"{CACHE_FILENAME_PREFIX}{safe_type}_{safe_owner}_{safe_repo}_{safe_language}"
+    )
     if suffix:
         filename = f"{filename}_{_sanitize_component(suffix)}"
     if version and version > 1:
@@ -65,15 +62,14 @@ def get_cache_filename(
     return f"{filename}.json"
 
 
-def _parse_version_token(token: str) -> Optional[int]:
+def _parse_version_token(token: str) -> int | None:
     if token and token.startswith("v") and token[1:].isdigit():
         return int(token[1:])
     return None
 
 
-def parse_cache_filename(path: Path) -> Optional[Dict[str, str]]:
+def parse_cache_filename(path: Path) -> dict[str, str] | None:
     """Extract metadata from a cache filename."""
-
     name = path.stem
     if not name.startswith(CACHE_FILENAME_PREFIX):
         return None
@@ -109,11 +105,10 @@ def parse_cache_filename(path: Path) -> Optional[Dict[str, str]]:
 def list_existing_wikis(
     cache_dir: Path,
     repo_type: str,
-    owner: Optional[str],
+    owner: str | None,
     repo_name: str,
-) -> List[CacheFileInfo]:
+) -> list[CacheFileInfo]:
     """Return cache files for a specific repository (all versions)."""
-
     if not cache_dir.exists():
         return []
 
@@ -123,7 +118,7 @@ def list_existing_wikis(
 
     pattern = f"{CACHE_FILENAME_PREFIX}{safe_type}_{safe_owner}_{safe_repo}_*.json"
 
-    entries: List[CacheFileInfo] = []
+    entries: list[CacheFileInfo] = []
     for path in cache_dir.glob(pattern):
         meta = parse_cache_filename(path)
         if not meta:
@@ -139,7 +134,7 @@ def list_existing_wikis(
                 version=int(meta["version"]),
                 modified=datetime.fromtimestamp(stats.st_mtime),
                 size=stats.st_size,
-            )
+            ),
         )
 
     entries.sort(key=lambda e: (e.version, e.modified), reverse=True)
@@ -147,9 +142,9 @@ def list_existing_wikis(
 
 
 __all__ = [
-    "CacheFileInfo",
-    "DEFAULT_LANGUAGE",
     "CACHE_FILENAME_PREFIX",
+    "DEFAULT_LANGUAGE",
+    "CacheFileInfo",
     "get_cache_filename",
     "list_existing_wikis",
     "parse_cache_filename",

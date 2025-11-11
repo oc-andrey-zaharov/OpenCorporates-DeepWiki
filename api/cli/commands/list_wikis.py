@@ -1,11 +1,12 @@
-"""
-List cached wikis command.
+"""List cached wikis command.
 """
 
 import json
-import click
 from datetime import datetime
-from api.cli.utils import get_cache_path, format_file_size
+
+import click
+
+from api.cli.utils import format_file_size, get_cache_path
 from api.utils.wiki_cache import parse_cache_filename
 
 
@@ -52,12 +53,12 @@ def list_wikis():
             wiki_type = "unknown"
             page_count = 0
             try:
-                with open(cache_file, "r") as f:
+                with open(cache_file) as f:
                     data = json.load(f)
                     if "wiki_structure" in data and "pages" in data["wiki_structure"]:
                         page_count = len(data["wiki_structure"]["pages"])
                     # Try to determine wiki type from comprehensive flag if available
-                    if "comprehensive" in data:
+                    if "comprehensive" in data and data["comprehensive"] is not None:
                         wiki_type = (
                             "comprehensive" if data["comprehensive"] else "concise"
                         )
@@ -77,7 +78,7 @@ def list_wikis():
                     "size": size,
                     "modified": modified,
                     "path": str(cache_file),
-                }
+                },
             )
         except Exception as e:
             click.echo(f"Warning: Could not parse {cache_file.name}: {e}", err=True)
@@ -89,7 +90,7 @@ def list_wikis():
     for i, wiki in enumerate(wikis, 1):
         click.echo(f"{i}. {wiki['name']} (v{wiki['version']})")
         click.echo(
-            f"   Type: {wiki['repo_type']} | Wiki Type: {wiki['wiki_type']} | Language: {wiki['language']}"
+            f"   Type: {wiki['repo_type']} | Wiki Type: {wiki['wiki_type']} | Language: {wiki['language']}",
         )
         click.echo(f"   Pages: {wiki['page_count']} | Size: {wiki['size']}")
         click.echo(f"   Modified: {wiki['modified'].strftime('%Y-%m-%d %H:%M:%S')}")

@@ -7,7 +7,6 @@ import json
 import tiktoken
 import logging
 import base64
-import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from adalflow.utils import get_adalflow_default_root_path
@@ -19,6 +18,7 @@ import requests
 from requests.exceptions import RequestException
 
 from api.tools.embedder import get_embedder
+from api.utils.repo_scanner import collect_repository_files
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -590,33 +590,27 @@ def read_all_documents(
             logger.error(f"Error reading {file_path}: {e}")
             return None
 
-    # Collect all files to process
+    # Collect all files to process using shared repository scanner
     all_files = []
-    for ext in code_extensions:
-        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
-        for file_path in files:
-            if should_process_file(
-                file_path,
-                use_inclusion_mode,
-                included_dirs,
-                included_files,
-                excluded_dirs,
-                excluded_files,
-            ):
-                all_files.append((file_path, ext, True))
+    discovered_files = collect_repository_files(path)
+    for file_path in discovered_files:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in code_extensions:
+            is_code = True
+        elif ext in doc_extensions:
+            is_code = False
+        else:
+            continue
 
-    for ext in doc_extensions:
-        files = glob.glob(f"{path}/**/*{ext}", recursive=True)
-        for file_path in files:
-            if should_process_file(
-                file_path,
-                use_inclusion_mode,
-                included_dirs,
-                included_files,
-                excluded_dirs,
-                excluded_files,
-            ):
-                all_files.append((file_path, ext, False))
+        if should_process_file(
+            file_path,
+            use_inclusion_mode,
+            included_dirs,
+            included_files,
+            excluded_dirs,
+            excluded_files,
+        ):
+            all_files.append((file_path, ext, is_code))
 
     logger.info(f"Found {len(all_files)} files to process, reading in parallel...")
 

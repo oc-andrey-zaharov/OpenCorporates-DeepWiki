@@ -1,11 +1,11 @@
-"""
-Pydantic models for DeepWiki.
+"""Pydantic models for DeepWiki.
 
 This module contains all shared data models used across the application,
 including wiki structures, cache data, and repository information.
 """
 
-from typing import List, Optional, Dict, Literal
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -13,37 +13,33 @@ class RepoSnapshotFile(BaseModel):
     """Metadata about a single file referenced by a wiki cache snapshot."""
 
     path: str
-    hash: Optional[str] = None
-    size: Optional[int] = None
-    modified_at: Optional[float] = None
+    hash: str | None = None
+    size: int | None = None
+    modified_at: float | None = None
 
 
 class RepoSnapshot(BaseModel):
     """Lightweight snapshot of repository files for change detection."""
 
     captured_at: float
-    files: Dict[str, RepoSnapshotFile]
-    source: Optional[str] = None
-    reference: Optional[str] = None
+    files: dict[str, RepoSnapshotFile]
+    source: str | None = None
+    reference: str | None = None
 
 
 class WikiPage(BaseModel):
-    """
-    Model for a wiki page.
-    """
+    """Model for a wiki page."""
 
     id: str
     title: str
     content: str
-    filePaths: List[str]
+    filePaths: list[str]
     importance: str  # Should ideally be Literal['high', 'medium', 'low']
-    relatedPages: List[str]
+    relatedPages: list[str]
 
 
 class ProcessedProjectEntry(BaseModel):
-    """
-    Model for a processed project entry in the cache.
-    """
+    """Model for a processed project entry in the cache."""
 
     id: str  # Filename
     owner: str
@@ -55,97 +51,88 @@ class ProcessedProjectEntry(BaseModel):
 
 
 class RepoInfo(BaseModel):
-    """
-    Model for repository information.
-    """
+    """Model for repository information."""
 
     owner: str
     repo: str
     type: str
-    token: Optional[str] = None
-    localPath: Optional[str] = None
-    repoUrl: Optional[str] = None
+    token: str | None = None
+    localPath: str | None = None
+    repoUrl: str | None = None
 
 
 class WikiSection(BaseModel):
-    """
-    Model for the wiki sections.
-    """
+    """Model for the wiki sections."""
 
     id: str
     title: str
-    pages: List[str]
-    subsections: Optional[List[str]] = None
+    pages: list[str]
+    subsections: list[str] | None = None
 
 
 class WikiStructureModel(BaseModel):
-    """
-    Model for the overall wiki structure.
-    """
+    """Model for the overall wiki structure."""
 
     id: str
     title: str
     description: str
-    pages: List[WikiPage]
-    sections: Optional[List[WikiSection]] = None
-    rootSections: Optional[List[str]] = None
+    pages: list[WikiPage]
+    sections: list[WikiSection] | None = None
+    rootSections: list[str] | None = None
 
 
 class WikiCacheData(BaseModel):
-    """
-    Model for the data to be stored in the wiki cache.
-    """
+    """Model for the data to be stored in the wiki cache."""
 
     wiki_structure: WikiStructureModel
-    generated_pages: Dict[str, WikiPage]
-    repo_url: Optional[str] = None  # compatible for old cache
-    repo: Optional[RepoInfo] = None
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    version: Optional[int] = 1
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    repo_snapshot: Optional[RepoSnapshot] = None
+    generated_pages: dict[str, WikiPage]
+    repo_url: str | None = None  # compatible for old cache
+    repo: RepoInfo | None = None
+    provider: str | None = None
+    model: str | None = None
+    version: int | None = 1
+    created_at: str | None = None
+    updated_at: str | None = None
+    repo_snapshot: RepoSnapshot | None = None
+    comprehensive: bool | None = None  # True for comprehensive, False for concise
 
 
 class WikiCacheRequest(BaseModel):
-    """
-    Model for the request body when saving wiki cache.
-    """
+    """Model for the request body when saving wiki cache."""
 
     repo: RepoInfo
-    language: str
+    language: str = "en"  # Always English
     wiki_structure: WikiStructureModel
-    generated_pages: Dict[str, WikiPage]
+    generated_pages: dict[str, WikiPage]
     provider: str
     model: str
-    version: Optional[int] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    repo_snapshot: Optional[RepoSnapshot] = None
+    version: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    repo_snapshot: RepoSnapshot | None = None
+    comprehensive: bool | None = None  # True for comprehensive, False for concise
 
 
 class WikiExportRequest(BaseModel):
-    """
-    Model for requesting a wiki export.
-    """
+    """Model for requesting a wiki export."""
 
     repo_url: str = Field(..., description="URL of the repository")
-    pages: List[WikiPage] = Field(..., description="List of wiki pages to export")
+    pages: list[WikiPage] = Field(..., description="List of wiki pages to export")
     format: Literal["markdown", "json"] = Field(
-        ..., description="Export format (markdown or json)"
+        ...,
+        description="Export format (markdown or json)",
     )
 
 
 __all__ = [
-    "WikiPage",
     "ProcessedProjectEntry",
     "RepoInfo",
-    "WikiSection",
-    "WikiStructureModel",
+    "RepoSnapshot",
+    "RepoSnapshotFile",
     "WikiCacheData",
     "WikiCacheRequest",
     "WikiExportRequest",
-    "RepoSnapshot",
-    "RepoSnapshotFile",
+    "WikiPage",
+    "WikiSection",
+    "WikiStructureModel",
 ]

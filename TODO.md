@@ -44,24 +44,24 @@
    - [x] Update CLI generation and `generate_chat_completion_core()` to reuse that context instead of instantiating new `RAG` objects for every page.
 
 4. DRY up repository scanning and file filtering  
-   - [ ] Extract git discovery, `.gitignore` parsing, and file collection into a single module used by both `api/services/data_pipeline.py` and CLI helpers.  
-   - [ ] Remove duplicated implementations once the shared module exists.
-   - **Status**: NOT COMPLETE - Git discovery/gitignore parsing exists in `api/cli/commands/generate.py` (`_is_git_repo`, `_load_gitignore_patterns`, `_matches_gitignore_pattern`, `collect_repository_files`) but `api/services/data_pipeline.py` uses its own file filtering logic without git awareness.
+   - [x] Extract git discovery, `.gitignore` parsing, and file collection into a single module used by both `api/services/data_pipeline.py` and CLI helpers.  
+   - [x] Remove duplicated implementations once the shared module exists.
+   - **Status**: ✅ Shared `api/utils/repo_scanner.py` powers both CLI repository prep and the data pipeline; legacy logic in `generate.py`/pipeline was removed.
 
 5. Prune unused dependencies  
-   - [ ] Confirm `langid`, `jinja2`, and any other lingering requirements are truly unused; drop them from `pyproject.toml` / lockfiles if so.  
+   - [x] Confirm `langid`, `jinja2`, and any other lingering requirements are truly unused; drop them from `pyproject.toml` / lockfiles if so.  
    - [ ] Add regression tests (or grep checks) to prevent reintroduction.
-   - **Status**: PARTIALLY COMPLETE - `langid` is unused (no imports found) and can be removed. `jinja2` is not directly imported but may be needed by `adalflow` for template rendering (`RAG_TEMPLATE` uses Jinja2 syntax). Check if `adalflow` brings it as a dependency.
+   - **Status**: ✅ `langid` removed from the legacy `api/pyproject.toml`; `jinja2` is now only brought in transitively by `adalflow` (no direct dependency remains). Regression automation still pending.
 
 6. Make FastAPI server thin and accurate  
-   - [ ] Split `api/server/server.py` into routers that call shared services; ensure there is (or isn't) a wiki-generation endpoint and keep docs/tests aligned.  
-   - [ ] Remove "Streaming API" wording if chat streaming is no longer served here.
-   - **Status**: NOT COMPLETE - `api/server/server.py` is still monolithic (572 lines) with all routes defined directly in the main file. No router structure exists.
+   - [x] Split `api/server/server.py` into routers that call shared services; ensure there is (or isn't) a wiki-generation endpoint and keep docs/tests aligned.  
+   - [x] Remove "Streaming API" wording if chat streaming is no longer served here.
+   - **Status**: ✅ Server now wires modular routers (`routes/*`) backed by `services/*`, and branding/documentation references only the DeepWiki API.
 
 7. Deduplicate streaming helpers and prompts  
-   - [ ] Move prompt strings and chunk-collection logic into dedicated modules so CLI/server share the same implementations.  
-   - [ ] Add unit tests for the new helpers to keep behavior stable.
-   - **Status**: PARTIALLY COMPLETE - Prompts are centralized in `api/prompts.py` for RAG/chat, but CLI has inline prompts in `api/cli/commands/generate.py` (page generation prompt ~lines 418-710, structure generation prompt ~lines 831-898) that should be moved to `api/prompts.py`.
+   - [x] Move prompt strings and chunk-collection logic into dedicated modules so CLI/server share the same implementations.  
+   - [x] Add unit tests for the new helpers to keep behavior stable.
+   - **Status**: ✅ Wiki page/structure prompts now live in template files consumed via `api/prompts.py`, and dedicated unit tests cover the builder helpers.
 
 8. Update architecture/docs/tests  
    - [x] Refresh `README.md`, `docs/architecture.md`, `docs/backend-cli-migration-plan.md`, etc., to match the Python-only architecture (no Next.js, no missing files).  

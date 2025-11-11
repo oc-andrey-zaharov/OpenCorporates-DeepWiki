@@ -1,18 +1,18 @@
-"""
-Delete wiki command.
+"""Delete wiki command.
 """
 
 import click
 import requests
+
 from api.cli.config import load_config
-from api.cli.utils import get_cache_path, select_wiki_from_list, confirm_action
-from api.utils.wiki_cache import parse_cache_filename
+from api.cli.utils import confirm_action, get_cache_path, select_wiki_from_list
 from api.utils.mode import (
-    is_server_mode,
-    get_server_url,
     check_server_health_with_retry,
+    get_server_url,
+    is_server_mode,
     should_fallback,
 )
+from api.utils.wiki_cache import parse_cache_filename
 
 
 @click.command(name="delete")
@@ -61,7 +61,7 @@ def delete(yes: bool):
                     "language": meta["language"],
                     "version": meta["version"],
                     "path": cache_file,
-                }
+                },
             )
         except Exception:
             continue
@@ -114,7 +114,7 @@ def delete(yes: bool):
                     "owner": selected_wiki["owner"],
                     "repo": selected_wiki["repo"],
                     "repo_type": selected_wiki["repo_type"],
-                    "language": selected_wiki["language"],
+                    "language": "en",
                     "version": selected_wiki.get("version", 1),
                 }
 
@@ -123,7 +123,7 @@ def delete(yes: bool):
                 if response.status_code == 200:
                     result = response.json()
                     click.echo(
-                        f"\n✓ {result.get('message', 'Wiki deleted successfully')}"
+                        f"\n✓ {result.get('message', 'Wiki deleted successfully')}",
                     )
                 elif response.status_code == 404:
                     click.echo(

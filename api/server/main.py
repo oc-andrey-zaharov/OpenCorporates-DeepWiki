@@ -54,7 +54,7 @@ def main():
 
     # Import the app here to ensure environment variables are set first
 
-    logger.info(f"Starting Streaming API on port {port}")
+    logger.info(f"Starting DeepWiki API on port {port}")
 
     # Run the FastAPI app with uvicorn
     uvicorn.run(

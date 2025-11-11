@@ -40,7 +40,6 @@ def list_wikis():
 
             repo_type = meta["repo_type"]
             owner = meta["owner"]
-            language = meta["language"]
             repo = meta["repo"]
             version = meta["version"]
 
@@ -50,18 +49,22 @@ def list_wikis():
             modified = datetime.fromtimestamp(stats.st_mtime)
 
             # Try to load the cache to get more info
-            wiki_type = "unknown"
+            wiki_type = "-"
             page_count = 0
             try:
                 with open(cache_file) as f:
                     data = json.load(f)
                     if "wiki_structure" in data and "pages" in data["wiki_structure"]:
                         page_count = len(data["wiki_structure"]["pages"])
-                    # Try to determine wiki type from comprehensive flag if available
-                    if "comprehensive" in data and data["comprehensive"] is not None:
-                        wiki_type = (
-                            "comprehensive" if data["comprehensive"] else "concise"
-                        )
+                    comprehensive_flag = data.get("comprehensive")
+                    if comprehensive_flag is True:
+                        wiki_type = "comprehensive"
+                    elif comprehensive_flag is False:
+                        wiki_type = "concise"
+                    else:
+                        detected = data.get("wiki_type")
+                        if isinstance(detected, str) and detected.strip():
+                            wiki_type = detected.strip()
             except Exception:
                 pass
 
@@ -72,7 +75,6 @@ def list_wikis():
                     "repo": repo,
                     "version": version,
                     "name": f"{owner}/{repo}" if owner else repo,
-                    "language": language,
                     "wiki_type": wiki_type,
                     "page_count": page_count,
                     "size": size,
@@ -90,7 +92,7 @@ def list_wikis():
     for i, wiki in enumerate(wikis, 1):
         click.echo(f"{i}. {wiki['name']} (v{wiki['version']})")
         click.echo(
-            f"   Type: {wiki['repo_type']} | Wiki Type: {wiki['wiki_type']} | Language: {wiki['language']}",
+            f"   Type: {wiki['repo_type']} | Wiki Type: {wiki['wiki_type']}",
         )
         click.echo(f"   Pages: {wiki['page_count']} | Size: {wiki['size']}")
         click.echo(f"   Modified: {wiki['modified'].strftime('%Y-%m-%d %H:%M:%S')}")

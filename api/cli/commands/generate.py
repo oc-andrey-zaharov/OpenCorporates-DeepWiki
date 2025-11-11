@@ -999,6 +999,7 @@ def generate(force: bool):
             created_at=created_at,
             updated_at=now_iso,
             repo_snapshot=repo_state.snapshot,
+            comprehensive=is_comprehensive,
         )
 
         with open(cache_file, "w") as f:

@@ -65,7 +65,7 @@ class OpenRouterClient(ModelClient):
         return {"api_key": api_key, "base_url": "https://openrouter.ai/api/v1"}
 
     def convert_inputs_to_api_kwargs(
-        self, input: Any, model_kwargs: dict = None, model_type: ModelType = None,
+        self, input: Any, model_kwargs: dict | None = None, model_type: ModelType = None,
     ) -> dict:
         """Convert AdalFlow inputs to OpenRouter API format."""
         model_kwargs = model_kwargs or {}
@@ -107,7 +107,7 @@ class OpenRouterClient(ModelClient):
 
         raise ValueError(f"Unsupported model type: {model_type}")
 
-    async def acall(self, api_kwargs: dict = None, model_type: ModelType = None) -> Any:
+    async def acall(self, api_kwargs: dict | None = None, model_type: ModelType = None) -> Any:
         """Make an asynchronous call to the OpenRouter API."""
         if not self.async_client:
             self.async_client = self.init_async_client()
@@ -415,7 +415,7 @@ class OpenRouterClient(ModelClient):
                                                     # For other XML content, just yield it as is
                                                     yield content
                                             except Exception as xml_error:
-                                                log.error(
+                                                log.exception(
                                                     f"Error processing XML content: {xml_error!s}",
                                                 )
                                                 yield content
@@ -432,7 +432,7 @@ class OpenRouterClient(ModelClient):
                             return content_generator()
                     except aiohttp.ClientError as e:
                         e_client = e
-                        log.error(
+                        log.exception(
                             f"Connection error with OpenRouter API: {e_client!s}",
                         )
 
@@ -444,7 +444,7 @@ class OpenRouterClient(ModelClient):
 
             except RequestException as e:
                 e_req = e
-                log.error(f"Error calling OpenRouter API asynchronously: {e_req!s}")
+                log.exception(f"Error calling OpenRouter API asynchronously: {e_req!s}")
 
                 # Return a generator that yields the error message
                 async def request_error_generator():
@@ -454,7 +454,7 @@ class OpenRouterClient(ModelClient):
 
             except Exception as e:
                 e_unexp = e
-                log.error(
+                log.exception(
                     f"Unexpected error calling OpenRouter API asynchronously: {e_unexp!s}",
                 )
 
@@ -505,7 +505,7 @@ class OpenRouterClient(ModelClient):
             return GeneratorOutput(data=content, usage=usage, raw_response=data)
 
         except Exception as e_proc:
-            log.error(f"Error processing OpenRouter completion response: {e_proc!s}")
+            log.exception(f"Error processing OpenRouter completion response: {e_proc!s}")
             raise
 
     def _process_streaming_response(self, response):
@@ -577,10 +577,10 @@ class OpenRouterClient(ModelClient):
                                 log.warning(f"Failed to parse SSE data: {data}")
                                 continue
                 except Exception as e_chunk:
-                    log.error(f"Error processing streaming chunk: {e_chunk!s}")
+                    log.exception(f"Error processing streaming chunk: {e_chunk!s}")
                     yield f"Error processing response chunk: {e_chunk!s}"
         except Exception as e_stream:
-            log.error(f"Error in streaming response: {e_stream!s}")
+            log.exception(f"Error in streaming response: {e_stream!s}")
             yield f"Error in streaming response: {e_stream!s}"
 
     async def _process_async_streaming_response(self, response):
@@ -656,8 +656,8 @@ class OpenRouterClient(ModelClient):
                                 log.warning(f"Failed to parse SSE data: {data}")
                                 continue
                 except Exception as e_chunk:
-                    log.error(f"Error processing streaming chunk: {e_chunk!s}")
+                    log.exception(f"Error processing streaming chunk: {e_chunk!s}")
                     yield f"Error processing response chunk: {e_chunk!s}"
         except Exception as e_stream:
-            log.error(f"Error in async streaming response: {e_stream!s}")
+            log.exception(f"Error in async streaming response: {e_stream!s}")
             yield f"Error in streaming response: {e_stream!s}"

@@ -1,5 +1,4 @@
-"""List cached wikis command.
-"""
+"""List cached wikis command."""
 
 import json
 from datetime import datetime
@@ -11,7 +10,7 @@ from api.utils.wiki_cache import parse_cache_filename
 
 
 @click.command(name="list")
-def list_wikis():
+def list_wikis() -> None:
     """List all cached wikis."""
     cache_dir = get_cache_path()
 

@@ -109,7 +109,7 @@ def get_github_repo_structure_standalone(
                 f"Error fetching branch {branch}: {response.status_code} - {error_data}",
             )
         except RequestException as e:
-            logger.error(f"Network error fetching branch {branch}: {e}")
+            logger.exception(f"Network error fetching branch {branch}: {e}")
 
     if not tree_data or "tree" not in tree_data:
         error_msg = "Could not fetch repository structure. Repository might not exist, be empty, or private."

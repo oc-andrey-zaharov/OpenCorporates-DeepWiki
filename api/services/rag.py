@@ -29,13 +29,13 @@ class DialogTurn:
 
 
 class CustomConversation:
-    """Custom implementation of Conversation to fix the list assignment index out of range error"""
+    """Custom implementation of Conversation to fix the list assignment index out of range error."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.dialog_turns = []
 
-    def append_dialog_turn(self, dialog_turn):
-        """Safely append a dialog turn to the conversation"""
+    def append_dialog_turn(self, dialog_turn) -> None:
+        """Safely append a dialog turn to the conversation."""
         if not hasattr(self, "dialog_turns"):
             self.dialog_turns = []
         self.dialog_turns.append(dialog_turn)
@@ -57,7 +57,7 @@ MAX_INPUT_TOKENS = 7500  # Safe threshold below 8192 token limit
 class Memory(adal.core.component.DataComponent):
     """Simple conversation management with a list of dialog turns."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Use our custom implementation instead of the original Conversation class
         self.current_conversation = CustomConversation()
@@ -89,13 +89,13 @@ class Memory(adal.core.component.DataComponent):
                 # Try to initialize it
                 self.current_conversation.dialog_turns = []
         except Exception as e:
-            logger.error(f"Error accessing dialog turns: {e!s}")
+            logger.exception(f"Error accessing dialog turns: {e!s}")
             # Try to recover
             try:
                 self.current_conversation = CustomConversation()
                 logger.info("Recovered by creating new conversation")
             except Exception as e2:
-                logger.error(f"Failed to recover: {e2!s}")
+                logger.exception(f"Failed to recover: {e2!s}")
 
         logger.info(f"Returning {len(all_dialog_turns)} dialog turns from memory")
         return all_dialog_turns
@@ -139,7 +139,7 @@ class Memory(adal.core.component.DataComponent):
             return True
 
         except Exception as e:
-            logger.error(f"Error adding dialog turn: {e!s}")
+            logger.exception(f"Error adding dialog turn: {e!s}")
             # Try to recover by creating a new conversation
             try:
                 self.current_conversation = CustomConversation()
@@ -154,7 +154,7 @@ class Memory(adal.core.component.DataComponent):
                 logger.info("Recovered from error by creating new conversation")
                 return True
             except Exception as e2:
-                logger.error(f"Failed to recover from error: {e2!s}")
+                logger.exception(f"Failed to recover from error: {e2!s}")
                 return False
 
 
@@ -181,7 +181,7 @@ class RAG(adal.Component):
     If you want to load a new repos, call prepare_retriever(repo_url_or_path) first.
     """
 
-    def __init__(self, provider="google", model=None, use_s3: bool = False):
+    def __init__(self, provider="google", model=None, use_s3: bool = False) -> None:
         """Initialize the RAG component.
 
         Args:
@@ -280,8 +280,8 @@ IMPORTANT FORMATTING RULES:
             output_processors=data_parser,
         )
 
-    def initialize_db_manager(self):
-        """Initialize the database manager with local storage"""
+    def initialize_db_manager(self) -> None:
+        """Initialize the database manager with local storage."""
         self.db_manager = DatabaseManager()
         self.transformed_docs = []
 
@@ -486,12 +486,12 @@ IMPORTANT FORMATTING RULES:
         self,
         repo_url_or_path: str,
         type: str = "github",
-        access_token: str = None,
-        excluded_dirs: list[str] = None,
-        excluded_files: list[str] = None,
-        included_dirs: list[str] = None,
-        included_files: list[str] = None,
-    ):
+        access_token: str | None = None,
+        excluded_dirs: list[str] | None = None,
+        excluded_files: list[str] | None = None,
+        included_dirs: list[str] | None = None,
+        included_files: list[str] | None = None,
+    ) -> None:
         """Prepare the retriever for a repository.
         Will load database from local storage if available.
 
@@ -660,10 +660,10 @@ IMPORTANT FORMATTING RULES:
         except Exception as e:
             # Get error message using repr to avoid any str() issues
             error_msg = repr(e)
-            logger.error(f"Error creating FAISS retriever: {error_msg}")
+            logger.exception(f"Error creating FAISS retriever: {error_msg}")
             # Try to provide more specific error information
             if "All embeddings should be of the same size" in error_msg:
-                logger.error(
+                logger.exception(
                     "Embedding size validation failed. This suggests there are still inconsistent embedding sizes.",
                 )
                 # Log embedding sizes for debugging
@@ -688,7 +688,7 @@ IMPORTANT FORMATTING RULES:
                             sizes.append(f"doc_{i}: {size}")
                         except Exception:
                             sizes.append(f"doc_{i}: error")
-                logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
+                logger.exception(f"Sample embedding sizes: {', '.join(sizes)}")
             raise
 
     def call(self, query: str) -> list:
@@ -721,7 +721,7 @@ IMPORTANT FORMATTING RULES:
             return retrieved_documents
 
         except Exception as e:
-            logger.error(f"Error in RAG call: {e!s}")
+            logger.exception(f"Error in RAG call: {e!s}")
 
             # Create error response
             # Preserve structured error logging while returning empty results for callers

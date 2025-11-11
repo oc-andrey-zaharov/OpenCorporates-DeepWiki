@@ -63,13 +63,13 @@ def _async_to_sync_generator(async_gen):
     q = queue.Queue()
     exception = None
 
-    def run_async():
+    def run_async() -> None:
         nonlocal exception
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
 
-            async def consume():
+            async def consume() -> None:
                 try:
                     async for item in async_gen:
                         q.put(("item", item))
@@ -179,15 +179,15 @@ def generate_wiki_content(
             logger.info(f"Retriever prepared for {repo_url}")
         except ValueError as e:
             if "No valid documents with embeddings found" in str(e):
-                logger.error(f"No valid embeddings found: {e!s}")
+                logger.exception(f"No valid embeddings found: {e!s}")
                 raise ValueError(
                     "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content.",
                 )
             else:
-                logger.error(f"ValueError preparing retriever: {e!s}")
+                logger.exception(f"ValueError preparing retriever: {e!s}")
                 raise ValueError(f"Error preparing retriever: {e!s}")
         except Exception as e:
-            logger.error(f"Error preparing retriever: {e!s}")
+            logger.exception(f"Error preparing retriever: {e!s}")
             # Check for specific embedding-related errors
             if "All embeddings should be of the same size" in str(e):
                 raise ValueError(
@@ -258,11 +258,11 @@ def generate_wiki_content(
                 else:
                     logger.warning("No documents retrieved from RAG")
             except Exception as e:
-                logger.error(f"Error in RAG retrieval: {e!s}")
+                logger.exception(f"Error in RAG retrieval: {e!s}")
                 # Continue without RAG if there's an error
 
         except Exception as e:
-            logger.error(f"Error retrieving documents: {e!s}")
+            logger.exception(f"Error retrieving documents: {e!s}")
             context_text = ""
 
     # Get repository information
@@ -282,7 +282,7 @@ def generate_wiki_content(
             file_content = get_file_content(repo_url, file_path, repo_type, token)
             logger.info(f"Successfully retrieved content for file: {file_path}")
         except Exception as e:
-            logger.error(f"Error retrieving file content: {e!s}")
+            logger.exception(f"Error retrieving file content: {e!s}")
             # Continue without file content if there's an error
 
     # Create the prompt with context
@@ -368,7 +368,7 @@ def generate_wiki_content(
                     async for chunk in response:
                         yield chunk
                 except Exception as e_openrouter:
-                    logger.error(f"Error with OpenRouter API: {e_openrouter!s}")
+                    logger.exception(f"Error with OpenRouter API: {e_openrouter!s}")
                     yield f"\nError with OpenRouter API: {e_openrouter!s}\n\nPlease check that you have set the OPENROUTER_API_KEY environment variable with a valid API key."
             elif provider == "openai":
                 try:
@@ -455,7 +455,7 @@ def generate_wiki_content(
                             yield str(completion)
                             return
                         except Exception as fallback_error:
-                            logger.error(
+                            logger.exception(
                                 f"Error with Openai API non-stream fallback: {fallback_error!s}",
                             )
                             yield (
@@ -463,7 +463,7 @@ def generate_wiki_content(
                                 "Please check that you have set the OPENAI_API_KEY environment variable with a valid API key."
                             )
                             return
-                    logger.error(f"Error with Openai API: {error_text}")
+                    logger.exception(f"Error with Openai API: {error_text}")
                     yield f"\nError with Openai API: {error_text}\n\nPlease check that you have set the OPENAI_API_KEY environment variable with a valid API key."
             elif provider == "bedrock":
                 try:
@@ -489,7 +489,7 @@ def generate_wiki_content(
                     else:
                         yield str(response)
                 except Exception as e_bedrock:
-                    logger.error(f"Error with AWS Bedrock API: {e_bedrock!s}")
+                    logger.exception(f"Error with AWS Bedrock API: {e_bedrock!s}")
                     yield f"\nError with AWS Bedrock API: {e_bedrock!s}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
             else:
                 # Google Generative AI
@@ -507,7 +507,7 @@ def generate_wiki_content(
                         yield chunk.text
 
         except Exception as e_outer:
-            logger.error(f"Error in streaming response: {e_outer!s}")
+            logger.exception(f"Error in streaming response: {e_outer!s}")
             error_message = str(e_outer)
 
             # Check for token limit errors
@@ -549,7 +549,7 @@ def generate_wiki_content(
                     else:
                         yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
                 except Exception as e2:
-                    logger.error(f"Error in fallback streaming response: {e2!s}")
+                    logger.exception(f"Error in fallback streaming response: {e2!s}")
                     yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
             else:
                 # For other errors, return the error message

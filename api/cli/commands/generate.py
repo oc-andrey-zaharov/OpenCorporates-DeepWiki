@@ -1,5 +1,4 @@
-"""Wiki generation command.
-"""
+"""Wiki generation command."""
 
 import json
 import logging
@@ -86,7 +85,7 @@ def prompt_repository() -> tuple:
         except ValueError as e:
             click.echo(f"✗ {e}", err=True)
             if not confirm_action("Try again?", default=True):
-                raise click.Abort()
+                raise click.Abort
 
 
 def prompt_model_config(config: dict) -> tuple:
@@ -104,7 +103,7 @@ def prompt_model_config(config: dict) -> tuple:
 
     if not provider_models:
         click.echo("✗ No model providers configured.", err=True)
-        raise click.Abort()
+        raise click.Abort
 
     # Prompt for provider
     default_provider = config.get("default_provider", "google")
@@ -142,15 +141,14 @@ def prompt_model_config(config: dict) -> tuple:
 
     if not model:
         click.echo("✗ Model name is required.", err=True)
-        raise click.Abort()
+        raise click.Abort
 
     # Warn if custom model is used
-    if available_models and model not in available_models:
-        if not confirm_action(
-            f"⚠ '{model}' is not in the predefined list. Continue anyway?",
-            default=True,
-        ):
-            raise click.Abort()
+    if available_models and model not in available_models and not confirm_action(
+        f"⚠ '{model}' is not in the predefined list. Continue anyway?",
+        default=True,
+    ):
+        raise click.Abort
 
     click.echo(f"✓ Using {provider}/{model}")
     return provider, model
@@ -263,7 +261,7 @@ def _display_change_summary(
     summary: dict[str, list[str]] | None,
     wiki_structure: WikiStructureModel | None,
     affected_page_ids: list[str],
-):
+) -> None:
     click.echo(
         f"\n⚠️  Wiki already exists for {repo_name} (v{cache_entry.version})",
     )
@@ -295,7 +293,7 @@ def _display_change_summary(
         page = page_lookup.get(page_id)
         if not page:
             continue
-        page_changes = len({fp for fp in page.filePaths} & changed_set)
+        page_changes = len(set(page.filePaths) & changed_set)
         click.echo(f"  • {page.title} ({page_changes} files changed)")
 
 
@@ -488,7 +486,7 @@ def generate_page_content_sync(
             page_bar.update(100)  # Complete
             progress_manager.complete_page(page_id)
         except Exception as e:
-            logger.error(f"Error generating page {page_title}: {e}")
+            logger.exception(f"Error generating page {page_title}: {e}")
             return None
 
         if not content:
@@ -498,7 +496,7 @@ def generate_page_content_sync(
         return page
 
     except Exception as e:
-        logger.error(f"Error generating page {page_title}: {e}")
+        logger.exception(f"Error generating page {page_title}: {e}")
         progress_manager.complete_page(page_id)
         return None
 
@@ -576,7 +574,7 @@ def generate_wiki_structure(
 
         # Clean up response
         xml_content = xml_content.strip()
-        if xml_content.startswith("```xml") or xml_content.startswith("```"):
+        if xml_content.startswith(("```xml", "```")):
             xml_content = (
                 xml_content.split("\n", 1)[1] if "\n" in xml_content else xml_content
             )
@@ -610,7 +608,7 @@ def generate_wiki_structure(
         try:
             root = ET.fromstring(xml_text)
         except ET.ParseError as e:
-            logger.error(f"XML parsing failed: {e}")
+            logger.exception(f"XML parsing failed: {e}")
             logger.debug(f"Failed XML content:\n{xml_text[:500]}...")
             return None
 
@@ -691,7 +689,7 @@ def generate_wiki_structure(
         )
 
     except Exception as e:
-        logger.error(f"Error parsing wiki structure: {e}")
+        logger.exception(f"Error parsing wiki structure: {e}")
         return None
 
 
@@ -744,7 +742,7 @@ def prepare_repository_state(
     is_flag=True,
     help="Skip prompts when regenerating and overwrite the latest cache automatically.",
 )
-def generate(force: bool):
+def generate(force: bool) -> None:
     """Generate a new wiki or refresh an existing cache."""
     click.echo("\n" + "=" * 60)
     click.echo("DeepWiki Generator")
@@ -795,12 +793,12 @@ def generate(force: bool):
         except Exception as e:
             click.echo(f"✗ Error inspecting repository: {e}", err=True)
             progress.close()
-            raise click.Abort()
+            raise click.Abort
 
         if not repo_state.file_tree.strip():
             click.echo("✗ No files found in repository", err=True)
             progress.close()
-            raise click.Abort()
+            raise click.Abort
 
         change_summary = None
         affected_pages: list[str] = []
@@ -901,7 +899,7 @@ def generate(force: bool):
         except Exception as e:
             click.echo(f"✗ Error preparing repository: {e}", err=True)
             progress.close()
-            raise click.Abort()
+            raise click.Abort
 
         wiki_structure: WikiStructureModel | None = None
         generated_pages: dict[str, WikiPage] = {}
@@ -948,7 +946,7 @@ def generate(force: bool):
             if not wiki_structure:
                 click.echo("✗ Failed to generate wiki structure", err=True)
                 progress.close()
-                raise click.Abort()
+                raise click.Abort
 
             click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
 

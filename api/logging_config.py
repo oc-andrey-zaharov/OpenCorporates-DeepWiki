@@ -12,7 +12,7 @@ class IgnoreLogChangeDetectedFilter(logging.Filter):
 class IgnoreMLflowWarningFilter(logging.Filter):
     """Filter to suppress MLflow availability warnings from adalflow."""
 
-    def filter(self, record: logging.LogRecord):
+    def filter(self, record: logging.LogRecord) -> bool:
         # Suppress warnings about MLflow not being available
         if record.name == "adalflow.tracing.mlflow_integration":
             if "MLflow not available" in record.getMessage():
@@ -20,7 +20,7 @@ class IgnoreMLflowWarningFilter(logging.Filter):
         return True
 
 
-def setup_logging(format: str = None):
+def setup_logging(format: str | None = None) -> None:
     """Configure logging for the application with log rotation.
 
     Environment variables:

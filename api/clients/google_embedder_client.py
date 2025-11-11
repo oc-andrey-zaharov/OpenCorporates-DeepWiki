@@ -57,7 +57,7 @@ class GoogleEmbedderClient(ModelClient):
         self,
         api_key: str | None = None,
         env_api_key_name: str = "GOOGLE_API_KEY",
-    ):
+    ) -> None:
         """Initialize Google AI Embeddings client.
 
         Args:
@@ -69,7 +69,7 @@ class GoogleEmbedderClient(ModelClient):
         self._env_api_key_name = env_api_key_name
         self._initialize_client()
 
-    def _initialize_client(self):
+    def _initialize_client(self) -> None:
         """Initialize the Google AI client with API key."""
         api_key = self._api_key or os.getenv(self._env_api_key_name)
         if not api_key:
@@ -136,13 +136,13 @@ class GoogleEmbedderClient(ModelClient):
                 data=embedding_data, error=None, raw_response=response,
             )
         except Exception as e:
-            log.error(f"Error parsing Google AI embedding response: {e}")
+            log.exception(f"Error parsing Google AI embedding response: {e}")
             return EmbedderOutput(data=[], error=str(e), raw_response=response)
 
     def convert_inputs_to_api_kwargs(
         self,
         input: Any | None = None,
-        model_kwargs: dict = {},
+        model_kwargs: dict | None = None,
         model_type: ModelType = ModelType.UNDEFINED,
     ) -> dict:
         """Convert inputs to Google AI API format.
@@ -155,6 +155,8 @@ class GoogleEmbedderClient(ModelClient):
         Returns:
             Dict: API kwargs for Google AI embedding call
         """
+        if model_kwargs is None:
+            model_kwargs = {}
         if model_type != ModelType.EMBEDDER:
             raise ValueError(
                 f"GoogleEmbedderClient only supports EMBEDDER model type, got {model_type}",
@@ -191,7 +193,7 @@ class GoogleEmbedderClient(ModelClient):
         (Exception,),  # Google AI may raise various exceptions
         max_time=5,
     )
-    def call(self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED):
+    def call(self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED):
         """Call Google AI embedding API.
 
         Args:
@@ -201,6 +203,8 @@ class GoogleEmbedderClient(ModelClient):
         Returns:
             Google AI embedding response
         """
+        if api_kwargs is None:
+            api_kwargs = {}
         if model_type != ModelType.EMBEDDER:
             raise ValueError("GoogleEmbedderClient only supports EMBEDDER model type")
 
@@ -221,11 +225,11 @@ class GoogleEmbedderClient(ModelClient):
             return response
 
         except Exception as e:
-            log.error(f"Error calling Google AI Embeddings API: {e}")
+            log.exception(f"Error calling Google AI Embeddings API: {e}")
             raise
 
     async def acall(
-        self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED,
+        self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED,
     ):
         """Async call to Google AI embedding API.
 
@@ -233,4 +237,6 @@ class GoogleEmbedderClient(ModelClient):
         so this falls back to synchronous call.
         """
         # Google AI client doesn't have async support yet
+        if api_kwargs is None:
+            api_kwargs = {}
         return self.call(api_kwargs, model_type)

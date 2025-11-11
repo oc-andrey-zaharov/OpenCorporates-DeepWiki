@@ -39,7 +39,7 @@ async def root(request: Request):
 
     return {
         "message": "Welcome to DeepWiki API",
-        "version": "1.0.0",
+        "version": __version__,
         "endpoints": endpoints,
     }
 

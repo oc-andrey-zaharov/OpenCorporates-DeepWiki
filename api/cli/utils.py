@@ -1,5 +1,4 @@
-"""Utility functions for DeepWiki CLI.
-"""
+"""Utility functions for DeepWiki CLI."""
 
 import inspect
 import logging
@@ -44,7 +43,7 @@ def validate_github_url(url: str) -> tuple[bool, str | None, str | None]:
 
         return False, None, None
     except Exception as e:
-        logger.error(f"Error validating URL: {e}")
+        logger.exception(f"Error validating URL: {e}")
         return False, None, None
 
 
@@ -155,7 +154,7 @@ def get_cache_path() -> Path:
     return Path(get_adalflow_default_root_path()) / "wikicache"
 
 
-def ensure_cache_dir():
+def ensure_cache_dir() -> None:
     """Ensure the cache directory exists."""
     cache_dir = get_cache_path()
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -369,7 +368,7 @@ def select_multiple_from_list(
         if not selected_indexes:
             return choices
 
-        unique_sorted = sorted(set(idx for idx in selected_indexes if idx is not None))
+        unique_sorted = sorted({idx for idx in selected_indexes if idx is not None})
         return [choices[idx] for idx in unique_sorted if idx < len(choices)]
 
     except KeyboardInterrupt:

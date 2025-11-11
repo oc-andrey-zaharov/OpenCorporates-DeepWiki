@@ -16,15 +16,15 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 class OllamaModelNotFoundError(Exception):
-    """Custom exception for when Ollama model is not found"""
+    """Custom exception for when Ollama model is not found."""
 
-def check_ollama_model_exists(model_name: str, ollama_host: str = None) -> bool:
+def check_ollama_model_exists(model_name: str, ollama_host: str | None = None) -> bool:
     """Check if an Ollama model exists before attempting to use it.
-    
+
     Args:
         model_name: Name of the model to check
         ollama_host: Ollama host URL, defaults to localhost:11434
-        
+
     Returns:
         bool: True if model exists, False otherwise
     """
@@ -96,7 +96,7 @@ class OllamaDocumentProcessor(DataComponent):
                     logger.warning(f"Failed to get embedding for document '{file_path}', skipping")
             except Exception as e:
                 file_path = getattr(doc, "meta_data", {}).get("file_path", f"document_{i}")
-                logger.error(f"Error processing document '{file_path}': {e}, skipping")
+                logger.exception(f"Error processing document '{file_path}': {e}, skipping")
 
         logger.info(f"Successfully processed {len(successful_docs)}/{len(output)} documents with consistent embeddings")
         return successful_docs

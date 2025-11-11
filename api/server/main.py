@@ -50,7 +50,7 @@ else:
     logger.warning("GOOGLE_API_KEY not configured")
 
 
-def main():
+def main() -> None:
     # Get port from environment variable or use default
     port = int(os.environ.get("PORT", 8001))
 

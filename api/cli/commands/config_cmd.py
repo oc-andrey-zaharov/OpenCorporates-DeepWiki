@@ -1,9 +1,9 @@
-"""Configuration management commands.
-"""
+"""Configuration management commands."""
 
 import json
 
 import click
+import requests
 
 from api.cli.completion import complete_config_keys
 from api.cli.config import CONFIG_FILE, load_config, set_config_value
@@ -16,12 +16,12 @@ from api.utils.mode import (
 
 
 @click.group(name="config")
-def config():
+def config() -> None:
     """Manage DeepWiki CLI configuration."""
 
 
 @config.command(name="show")
-def show_config():
+def show_config() -> None:
     """Display current configuration."""
     config_data = load_config()
 
@@ -53,11 +53,11 @@ def show_config():
                             )
                         else:
                             click.echo("Fallback: ✗ Auto-fallback disabled")
-                    except Exception as e:
+                    except (OSError, ValueError, KeyError, AttributeError) as e:
                         click.echo(
                             f"Fallback: ✗ Error checking fallback: {e}", err=True,
                         )
-            except Exception as e:
+            except (OSError, requests.exceptions.RequestException, ValueError) as e:
                 click.echo(f"Status: ✗ Error checking server health: {e}", err=True)
                 click.echo(
                     "Note: Server health check failed. Configuration may still be valid.",
@@ -65,7 +65,7 @@ def show_config():
         else:
             click.echo("Mode: Standalone")
             click.echo("Status: ✓ Ready (no server required)")
-    except Exception as e:
+    except (OSError, ValueError, KeyError, AttributeError) as e:
         click.echo(f"Error checking server mode: {e}", err=True)
         click.echo("Note: Some configuration details may be unavailable.")
 
@@ -75,7 +75,7 @@ def show_config():
 @config.command(name="set")
 @click.argument("key", shell_complete=complete_config_keys)
 @click.argument("value")
-def set_config(key: str, value: str):
+def set_config(key: str, value: str) -> None:
     """Set a configuration value.
 
     KEY: Configuration key (e.g., 'default_provider' or 'file_filters.excluded_dirs')
@@ -91,6 +91,6 @@ def set_config(key: str, value: str):
     try:
         set_config_value(key, parsed_value)
         click.echo(f"✓ Configuration updated: {key} = {parsed_value}")
-    except Exception as e:
+    except (TypeError, OSError, json.JSONDecodeError) as e:
         click.echo(f"✗ Error updating configuration: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort from None

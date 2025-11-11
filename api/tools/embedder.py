@@ -3,14 +3,14 @@ import adalflow as adal
 from api.config import configs, get_embedder_type
 
 
-def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = False, embedder_type: str = None) -> adal.Embedder:
+def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = False, embedder_type: str | None = None) -> adal.Embedder:
     """Get embedder based on configuration or parameters.
-    
+
     Args:
         is_local_ollama: Legacy parameter for Ollama embedder
-        use_google_embedder: Legacy parameter for Google embedder  
+        use_google_embedder: Legacy parameter for Google embedder
         embedder_type: Direct specification of embedder type ('ollama', 'google', 'openai')
-    
+
     Returns:
         adal.Embedder: Configured embedder instance
     """

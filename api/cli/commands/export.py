@@ -1,11 +1,12 @@
-"""Export wiki command.
-"""
+"""Export wiki command."""
 
 import json
-import os
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 
 import click
+
+KB_SIZE = 1024
 
 from api.cli.utils import get_cache_path, select_from_list, select_wiki_from_list
 from api.models import WikiPage
@@ -21,8 +22,9 @@ from api.utils.wiki_cache import parse_cache_filename
     help="Export format (markdown or json)",
 )
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
-def export(format: str, output: str):
+def export(format: str, output: str) -> None:
     """Export a cached wiki to Markdown or JSON format."""
+    export_format = format
     cache_dir = get_cache_path()
 
     if not cache_dir.exists():
@@ -64,7 +66,7 @@ def export(format: str, output: str):
                     "path": cache_file,
                 },
             )
-        except Exception:
+        except (OSError, ValueError, KeyError):
             continue
 
     if not wikis:
@@ -75,8 +77,8 @@ def export(format: str, output: str):
     selected_wiki = select_wiki_from_list(wikis, "Select wiki to export")
 
     # Prompt for format if not provided
-    if not format:
-        format = select_from_list(
+    if not export_format:
+        export_format = select_from_list(
             "Select export format",
             ["markdown", "json"],
             default="markdown",
@@ -84,9 +86,9 @@ def export(format: str, output: str):
 
     # Load the wiki cache
     try:
-        with open(selected_wiki["path"]) as f:
+        with selected_wiki["path"].open() as f:
             cache_data = json.load(f)
-    except Exception as e:
+    except (OSError, json.JSONDecodeError) as e:
         click.echo(f"Error loading wiki cache: {e}", err=True)
         return
 
@@ -136,37 +138,35 @@ def export(format: str, output: str):
 
     # Generate output filename if not provided
     if not output:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         repo_name = selected_wiki["name"].replace("/", "_")
         if selected_wiki.get("version", 1) > 1:
             repo_name = f"{repo_name}_v{selected_wiki['version']}"
-        extension = "md" if format == "markdown" else "json"
+        extension = "md" if export_format == "markdown" else "json"
         output = f"{repo_name}_wiki_{timestamp}.{extension}"
 
     # Export based on format
     try:
-        if format.lower() == "markdown":
+        if export_format.lower() == "markdown":
             content = generate_markdown_export(repo_url, pages_to_export)
         else:
             content = generate_json_export(repo_url, pages_to_export)
 
         # Write to file
-        with open(output, "w", encoding="utf-8") as f:
+        output_path = Path(output)
+        with output_path.open("w", encoding="utf-8") as f:
             f.write(content)
 
         click.echo(f"\n✓ Wiki exported successfully to: {output}")
 
         # Show file size
-        file_size = os.path.getsize(output)
-        size_kb = file_size / 1024
-        if size_kb > 1024:
-            size_str = f"{size_kb / 1024:.2f} MB"
-        else:
-            size_str = f"{size_kb:.2f} KB"
+        file_size = output_path.stat().st_size
+        size_kb = file_size / KB_SIZE
+        size_str = f"{size_kb / KB_SIZE:.2f} MB" if size_kb > KB_SIZE else f"{size_kb:.2f} KB"
 
         click.echo(f"  File size: {size_str}")
         click.echo(f"  Pages exported: {len(pages_to_export)}\n")
 
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         click.echo(f"✗ Error exporting wiki: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort from None

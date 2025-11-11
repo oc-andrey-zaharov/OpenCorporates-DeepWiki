@@ -6,7 +6,10 @@ import fnmatch
 import logging
 import os
 import subprocess
-from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 logger = logging.getLogger(__name__)
 

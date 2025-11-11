@@ -63,7 +63,7 @@ def describe_github_repository(
             access_token=token or GITHUB_TOKEN,
         )
     except Exception as exc:
-        logger.error("Error fetching GitHub repo structure: %s", exc)
+        logger.exception("Error fetching GitHub repo structure: %s", exc)
         raise
 
 

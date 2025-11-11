@@ -1,5 +1,4 @@
-"""Main CLI entry point for DeepWiki.
-"""
+"""Main CLI entry point for DeepWiki."""
 
 import logging
 import os
@@ -7,6 +6,8 @@ import sys
 
 import click
 from dotenv import load_dotenv
+
+from api import __version__
 
 # Add the project root to the path
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="deepwiki")
+@click.version_option(version=__version__, prog_name="deepwiki")
 @click.option(
     "--verbose",
     "-v",
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
     help="Enable verbose output (INFO level logging)",
 )
 @click.pass_context
-def cli(ctx, verbose):
+def cli(ctx, verbose) -> None:
     """DeepWiki CLI - Generate comprehensive wikis from code repositories.
 
     Interactive tool for creating, managing, and exporting documentation
@@ -81,7 +82,7 @@ cli.add_command(config_cmd.config)
 cli.add_command(delete.delete)
 
 
-def main():
+def main() -> None:
     """Main entry point with custom error handling."""
     # Check if first non-option argument is a valid command
     args = sys.argv[1:]

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
-from api.models import WikiExportRequest
 from api.utils.export import generate_json_export, generate_markdown_export
+
+if TYPE_CHECKING:
+    from api.models import WikiExportRequest
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ async def export_wiki(request: WikiExportRequest):
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     except Exception as exc:
-        logger.error("Error exporting wiki: %s", exc)
+        logger.exception("Error exporting wiki: %s", exc)
         raise HTTPException(status_code=500, detail=f"Error exporting wiki: {exc}")
 
 

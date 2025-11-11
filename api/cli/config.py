@@ -1,5 +1,4 @@
-"""Configuration management for DeepWiki CLI.
-"""
+"""Configuration management for DeepWiki CLI."""
 
 import copy
 import json
@@ -27,7 +26,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def ensure_config_dir():
+def ensure_config_dir() -> None:
     """Ensure the configuration directory exists."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -68,14 +67,13 @@ def load_config() -> dict[str, Any]:
         with open(CONFIG_FILE) as f:
             config = json.load(f)
             # Deep merge with defaults to ensure all keys exist
-            merged = _deep_merge(DEFAULT_CONFIG, config)
-            return merged
+            return _deep_merge(DEFAULT_CONFIG, config)
     except Exception as e:
         logger.warning(f"Error loading config file: {e}. Using defaults.")
         return DEFAULT_CONFIG.copy()
 
 
-def save_config(config: dict[str, Any]):
+def save_config(config: dict[str, Any]) -> None:
     """Save configuration to file.
 
     Args:
@@ -88,7 +86,7 @@ def save_config(config: dict[str, Any]):
             json.dump(config, f, indent=2)
         logger.info(f"Configuration saved to {CONFIG_FILE}")
     except Exception as e:
-        logger.error(f"Error saving config file: {e}")
+        logger.exception(f"Error saving config file: {e}")
         raise
 
 
@@ -116,7 +114,7 @@ def get_config_value(key: str, default: Any = None) -> Any:
     return value
 
 
-def set_config_value(key: str, value: Any):
+def set_config_value(key: str, value: Any) -> None:
     """Set a configuration value.
 
     Args:

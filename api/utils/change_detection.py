@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from api.models import (
     RepoSnapshot,
@@ -15,6 +15,9 @@ from api.models import (
     WikiCacheData,
     WikiStructureModel,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +116,7 @@ def _file_changed(previous: RepoSnapshotFile, current: RepoSnapshotFile) -> bool
         and previous.size != current.size
     ):
         return True
-    if (
-        previous.modified_at is not None
-        and current.modified_at is not None
-        and abs(previous.modified_at - current.modified_at) > 1
-    ):
-        return True
-    return False
+    return bool(previous.modified_at is not None and current.modified_at is not None and abs(previous.modified_at - current.modified_at) > 1)
 
 
 def detect_repo_changes(

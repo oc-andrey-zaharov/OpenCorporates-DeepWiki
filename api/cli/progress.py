@@ -1,5 +1,4 @@
-"""Progress display system using Enlighten library.
-"""
+"""Progress display system using Enlighten library."""
 
 import logging
 
@@ -9,10 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 class ProgressManager:
-    """Manages multiple progress bars for wiki generation.
-    """
+    """Manages multiple progress bars for wiki generation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.manager = enlighten.get_manager()
         self.status_bar = None
         self.overall_bar = None
@@ -20,7 +18,7 @@ class ProgressManager:
         self.completed = 0
         self.total = 0
 
-    def set_status(self, message: str):
+    def set_status(self, message: str) -> None:
         """Update the status bar message."""
         if self.status_bar is None:
             self.status_bar = self.manager.status_bar(
@@ -33,7 +31,7 @@ class ProgressManager:
             )
         self.status_bar.update(stage=message)
 
-    def init_overall_progress(self, total: int, desc: str = "Overall Progress"):
+    def init_overall_progress(self, total: int, desc: str = "Overall Progress") -> None:
         """Initialize the overall progress bar."""
         self.total = total
         self.completed = 0
@@ -74,14 +72,14 @@ class ProgressManager:
         self.page_bars[page_id] = counter
         return counter
 
-    def update_page_progress(self, page_id: str, progress: int):
+    def update_page_progress(self, page_id: str, progress: int) -> None:
         """Update progress for a specific page."""
         if page_id in self.page_bars:
             # Clamp progress to valid range
             progress = max(0, min(100, progress))
             self.page_bars[page_id].update(progress - self.page_bars[page_id].count)
 
-    def complete_page(self, page_id: str):
+    def complete_page(self, page_id: str) -> None:
         """Mark a page as completed."""
         if page_id in self.page_bars:
             self.page_bars[page_id].update(100 - self.page_bars[page_id].count)
@@ -92,7 +90,7 @@ class ProgressManager:
         if self.overall_bar:
             self.overall_bar.update()
 
-    def close(self):
+    def close(self) -> None:
         """Close all progress bars and the manager."""
         # Close any remaining page bars
         for bar in list(self.page_bars.values()):
@@ -116,16 +114,16 @@ class ProgressManager:
 class SimpleProgressBar:
     """Simple progress bar for non-parallel operations."""
 
-    def __init__(self, total: int, desc: str = "Progress"):
+    def __init__(self, total: int, desc: str = "Progress") -> None:
         self.manager = enlighten.get_manager()
         self.bar = self.manager.counter(
             total=total, desc=desc, unit="items", color="green",
         )
 
-    def update(self, count: int = 1):
+    def update(self, count: int = 1) -> None:
         """Update the progress bar."""
         self.bar.update(count)
 
-    def close(self):
+    def close(self) -> None:
         """Close the progress bar."""
         self.bar.close()

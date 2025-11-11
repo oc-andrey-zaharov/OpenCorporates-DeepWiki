@@ -46,7 +46,7 @@ def get_github_repo_structure(
         ConnectionError: If server mode enabled but server unavailable and auto_fallback is False
         Exception: For other errors during processing
     """
-    config = load_config()
+    load_config()
 
     # Determine token precedence: CLI arg > config > env var
     token = access_token
@@ -96,7 +96,7 @@ def get_github_repo_structure_via_server(
         ConnectionError: If server connection fails
         Exception: For other errors
     """
-    config = load_config()
+    load_config()
     server_url = get_server_url()
 
     params = {"owner": owner, "repo": repo}

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "opencorporates-deepwiki-api"
-version = "0.0.1"
+version = "0.0.1.dev221+e5bf2ee"
 description = "CLI tool and optional API server for OpenCorporates-DeepWiki, providing smart code analysis and AI-powered documentation generation."
 authors = ["OpenCorporates DeepWiki Team"]
 packages = [{include = "api"}]
@@ -15,6 +15,7 @@ vcs = "git"
 style = "pep440"
 bump = true
 pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
+
 
 [tool.poetry.scripts]
 deepwiki = "api.cli.main:main"

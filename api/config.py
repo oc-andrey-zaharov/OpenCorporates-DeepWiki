@@ -108,10 +108,9 @@ def load_json_config(filename):
 
         with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
-            config = replace_env_placeholders(config)
-            return config
+            return replace_env_placeholders(config)
     except Exception as e:
-        logger.error(f"Error loading configuration file {filename}: {e!s}")
+        logger.exception(f"Error loading configuration file {filename}: {e!s}")
         return {}
 
 
@@ -227,7 +226,7 @@ def is_google_embedder():
     return False
 
 
-def get_embedder_type():
+def get_embedder_type() -> str:
     """Get the current embedder type based on configuration.
 
     Returns:
@@ -437,7 +436,7 @@ configs["lang_config"] = {"supported_languages": {"en": "English"}, "default": "
 
 
 def get_model_config(provider="google", model=None):
-    """Get configuration for the specified provider and model
+    """Get configuration for the specified provider and model.
 
     Parameters:
         provider (str): Model provider ('google', 'openai', 'openrouter', 'ollama', 'bedrock')

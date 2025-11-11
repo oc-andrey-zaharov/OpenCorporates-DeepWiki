@@ -1,5 +1,4 @@
-"""Shell completion helpers for DeepWiki CLI.
-"""
+"""Shell completion helpers for DeepWiki CLI."""
 
 import os
 

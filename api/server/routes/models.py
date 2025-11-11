@@ -54,7 +54,7 @@ async def get_model_config():
         for provider_id, provider_config in configs["providers"].items():
             models = [
                 Model(id=model_id, name=model_id)
-                for model_id in provider_config["models"].keys()
+                for model_id in provider_config["models"]
             ]
             providers.append(
                 Provider(
@@ -68,7 +68,7 @@ async def get_model_config():
         return ModelConfig(providers=providers, defaultProvider=default_provider)
 
     except Exception as exc:
-        logger.error("Error creating model configuration: %s", exc)
+        logger.exception("Error creating model configuration: %s", exc)
         return ModelConfig(
             providers=[
                 Provider(

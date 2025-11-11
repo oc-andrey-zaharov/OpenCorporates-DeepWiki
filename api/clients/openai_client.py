@@ -103,7 +103,6 @@ def get_probabilities(completion: ChatCompletion) -> list[list[TokenLogProb]]:
     log_probs = []
     for c in completion.choices:
         content = c.logprobs.content
-        print(content)
         log_probs_for_choice = []
         for openai_token_logprob in content:
             token = openai_token_logprob.token
@@ -157,12 +156,12 @@ class OpenAIClient(ModelClient):
     def __init__(
         self,
         api_key: str | None = None,
-        chat_completion_parser: Callable[[Completion], Any] = None,
+        chat_completion_parser: Callable[[Completion], Any] | None = None,
         input_type: Literal["text", "messages"] = "text",
         base_url: str | None = None,
         env_base_url_name: str = "OPENAI_BASE_URL",
         env_api_key_name: str = "OPENAI_API_KEY",
-    ):
+    ) -> None:
         r"""It is recommended to set the OPENAI_API_KEY environment variable instead of passing it as an argument.
 
         Args:
@@ -220,7 +219,7 @@ class OpenAIClient(ModelClient):
         try:
             data = self.chat_completion_parser(completion)
         except Exception as e:
-            log.error(f"Error parsing the completion: {e}")
+            log.exception(f"Error parsing the completion: {e}")
             return GeneratorOutput(data=None, error=str(e), raw_response=completion)
 
         try:
@@ -229,7 +228,7 @@ class OpenAIClient(ModelClient):
                 data=None, error=None, raw_response=data, usage=usage,
             )
         except Exception as e:
-            log.error(f"Error tracking the completion usage: {e}")
+            log.exception(f"Error tracking the completion usage: {e}")
             return GeneratorOutput(data=None, error=str(e), raw_response=data)
 
     def track_completion_usage(
@@ -245,7 +244,7 @@ class OpenAIClient(ModelClient):
             )
             return usage
         except Exception as e:
-            log.error(f"Error tracking the completion usage: {e}")
+            log.exception(f"Error tracking the completion usage: {e}")
             return CompletionUsage(
                 completion_tokens=None, prompt_tokens=None, total_tokens=None,
             )
@@ -260,13 +259,13 @@ class OpenAIClient(ModelClient):
         try:
             return parse_embedding_response(response)
         except Exception as e:
-            log.error(f"Error parsing the embedding response: {e}")
+            log.exception(f"Error parsing the embedding response: {e}")
             return EmbedderOutput(data=[], error=str(e), raw_response=response)
 
     def convert_inputs_to_api_kwargs(
         self,
         input: Any | None = None,
-        model_kwargs: dict = {},
+        model_kwargs: dict | None = None,
         model_type: ModelType = ModelType.UNDEFINED,
     ) -> dict:
         r"""Specify the API input type and output api_kwargs that will be used in _call and _acall methods.
@@ -285,6 +284,8 @@ class OpenAIClient(ModelClient):
         Returns:
             Dict: API-specific kwargs for the model call
         """
+        if model_kwargs is None:
+            model_kwargs = {}
         final_model_kwargs = model_kwargs.copy()
         if model_type == ModelType.EMBEDDER:
             if isinstance(input, str):
@@ -323,7 +324,7 @@ class OpenAIClient(ModelClient):
                     system_prompt = match.group(1)
                     input_str = match.group(2)
                 else:
-                    print("No match found.")
+                    pass
                 if system_prompt and input_str:
                     messages.append({"role": "system", "content": system_prompt})
                     if images:
@@ -388,7 +389,7 @@ class OpenAIClient(ModelClient):
                 raw_response=str(response),
             )
         except Exception as e:
-            log.error(f"Error parsing image generation response: {e}")
+            log.exception(f"Error parsing image generation response: {e}")
             return GeneratorOutput(data=None, error=str(e), raw_response=str(response))
 
     @backoff.on_exception(
@@ -402,9 +403,10 @@ class OpenAIClient(ModelClient):
         ),
         max_time=5,
     )
-    def call(self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED):
-        """Kwargs is the combined input and model_kwargs.  Support streaming call.
-        """
+    def call(self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED):
+        """Kwargs is the combined input and model_kwargs.  Support streaming call."""
+        if api_kwargs is None:
+            api_kwargs = {}
         log.info(f"api_kwargs: {api_kwargs}")
         self._api_kwargs = api_kwargs
         if model_type == ModelType.EMBEDDER:
@@ -477,11 +479,12 @@ class OpenAIClient(ModelClient):
         max_time=5,
     )
     async def acall(
-        self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED,
+        self, api_kwargs: dict | None = None, model_type: ModelType = ModelType.UNDEFINED,
     ):
-        """Kwargs is the combined input and model_kwargs
-        """
+        """Kwargs is the combined input and model_kwargs."""
         # store the api kwargs in the client
+        if api_kwargs is None:
+            api_kwargs = {}
         self._api_kwargs = api_kwargs
         if self.async_client is None:
             self.async_client = self.init_async_client()
@@ -521,8 +524,7 @@ class OpenAIClient(ModelClient):
             "sync_client",
             "async_client",
         ]  # unserializable object
-        output = super().to_dict(exclude=exclude)
-        return output
+        return super().to_dict(exclude=exclude)
 
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64 string.
@@ -590,7 +592,6 @@ if __name__ == "__main__":
         model_kwargs={"model": "gpt-4o", "stream": False},
     )
     gen_response = gen(prompt_kwargs)
-    print(f"gen_response: {gen_response}")
 
     # for genout in gen_response.data:
     #     print(f"genout: {genout}")
@@ -614,4 +615,3 @@ if __name__ == "__main__":
         model_client=OpenAIClient(), model_kwargs={"model": "gpt-4o"},
     )
     resopnse = openai_llm(prompt_kwargs={"input_str": "What is LLM?"})
-    print(resopnse)

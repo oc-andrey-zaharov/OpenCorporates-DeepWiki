@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from api.utils.repo_scanner import collect_repository_files
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.unit

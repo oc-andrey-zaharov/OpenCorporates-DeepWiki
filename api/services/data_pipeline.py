@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import json
 import logging
 import os
@@ -38,7 +39,7 @@ _encoding_cache = {}
 def _get_encoding(embedder_type: str):
     """Get or create cached encoding object."""
     if embedder_type not in _encoding_cache:
-        if embedder_type == "ollama" or embedder_type == "google":
+        if embedder_type in {"ollama", "google"}:
             _encoding_cache[embedder_type] = tiktoken.get_encoding("cl100k_base")
         else:  # OpenAI or default
             _encoding_cache[embedder_type] = tiktoken.encoding_for_model(
@@ -48,7 +49,7 @@ def _get_encoding(embedder_type: str):
 
 
 def count_tokens(
-    text: str, embedder_type: str = None, is_ollama_embedder: bool = None,
+    text: str, embedder_type: str | None = None, is_ollama_embedder: bool | None = None,
 ) -> int:
     """Count the number of tokens in a text string using tiktoken.
 
@@ -83,7 +84,7 @@ def count_tokens(
 
 
 def count_tokens_batch(
-    texts: List[str], embedder_type: str = None, num_threads: int | None = None,
+    texts: List[str], embedder_type: str | None = None, num_threads: int | None = None,
 ) -> List[int]:
     """Count tokens for multiple texts in parallel using tiktoken batch operations.
 
@@ -186,7 +187,7 @@ def _chunk_file_content(
 
 
 def download_repo(
-    repo_url: str, local_path: str, repo_type: str = None, access_token: str = None,
+    repo_url: str, local_path: str, repo_type: str | None = None, access_token: str | None = None,
 ) -> str:
     """Downloads a Git repository (GitHub) to a specified local path.
 
@@ -205,8 +206,7 @@ def download_repo(
         subprocess.run(
             ["git", "--version"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
 
         # Check if repository already exists
@@ -278,23 +278,19 @@ echo password=
                         local_path,
                     ],
                     check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     env=env,
                 )
             finally:
                 # Clean up the temporary credential helper script
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(credential_script.name)
-                except OSError:
-                    pass
         else:
             # No token, clone normally
             result = subprocess.run(
                 ["git", "clone", "--depth=1", "--single-branch", clone_url, local_path],
                 check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 env=env,
             )
 
@@ -324,8 +320,8 @@ download_github_repo = download_repo
 
 def read_all_documents(
     path: str,
-    embedder_type: str = None,
-    is_ollama_embedder: bool = None,
+    embedder_type: str | None = None,
+    is_ollama_embedder: bool | None = None,
     excluded_dirs: List[str] = None,
     excluded_files: List[str] = None,
     included_dirs: List[str] = None,
@@ -577,7 +573,7 @@ def read_all_documents(
                 )
                 return [doc]
         except Exception as e:
-            logger.error(f"Error reading {file_path}: {e}")
+            logger.exception(f"Error reading {file_path}: {e}")
             return None
 
     # Collect all files to process using shared repository scanner
@@ -632,13 +628,13 @@ def read_all_documents(
                         # Backward compatibility: handle single Document if returned
                         documents.append(result)
             except Exception as e:
-                logger.error(f"Error processing {file_path}: {e}")
+                logger.exception(f"Error processing {file_path}: {e}")
 
     logger.info(f"Found {len(documents)} documents")
     return documents
 
 
-def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = None):
+def prepare_data_pipeline(embedder_type: str | None = None, is_ollama_embedder: bool | None = None):
     """Creates and returns the data transformation pipeline.
 
     Args:
@@ -682,17 +678,16 @@ def prepare_data_pipeline(embedder_type: str = None, is_ollama_embedder: bool = 
 
         embedder_transformer = ToEmbeddings(embedder=embedder, batch_size=batch_size)
 
-    data_transformer = adal.Sequential(
+    return adal.Sequential(
         splitter, embedder_transformer,
     )  # sequential will chain together splitter and embedder
-    return data_transformer
 
 
 def transform_documents_and_save_to_db(
     documents: List[Document],
     db_path: str,
-    embedder_type: str = None,
-    is_ollama_embedder: bool = None,
+    embedder_type: str | None = None,
+    is_ollama_embedder: bool | None = None,
 ) -> LocalDB:
     """Transforms a list of documents and saves them to a local database.
 
@@ -718,7 +713,7 @@ def transform_documents_and_save_to_db(
 
 
 def get_github_file_content(
-    repo_url: str, file_path: str, access_token: str = None,
+    repo_url: str, file_path: str, access_token: str | None = None,
 ) -> str:
     """Retrieves the content of a file from a GitHub repository using the GitHub API.
     Supports both public GitHub (github.com) and GitHub Enterprise (custom domains).
@@ -787,8 +782,7 @@ def get_github_file_content(
             if content_data["encoding"] == "base64":
                 # The content might be split into lines, so join them first
                 content_base64 = content_data["content"].replace("\n", "")
-                content = base64.b64decode(content_base64).decode("utf-8")
-                return content
+                return base64.b64decode(content_base64).decode("utf-8")
             raise ValueError(f"Unexpected encoding: {content_data['encoding']}")
         raise ValueError("File content not found in GitHub API response")
 
@@ -797,7 +791,7 @@ def get_github_file_content(
 
 
 def get_file_content(
-    repo_url: str, file_path: str, repo_type: str = None, access_token: str = None,
+    repo_url: str, file_path: str, repo_type: str | None = None, access_token: str | None = None,
 ) -> str:
     """Retrieves the content of a file from a GitHub repository.
 
@@ -817,10 +811,9 @@ def get_file_content(
 
 
 class DatabaseManager:
-    """Manages the creation, loading, transformation, and persistence of LocalDB instances.
-    """
+    """Manages the creation, loading, transformation, and persistence of LocalDB instances."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.db = None
         self.repo_url_or_path = None
         self.repo_paths = None
@@ -828,10 +821,10 @@ class DatabaseManager:
     def prepare_database(
         self,
         repo_url_or_path: str,
-        repo_type: str = None,
-        access_token: str = None,
-        embedder_type: str = None,
-        is_ollama_embedder: bool = None,
+        repo_type: str | None = None,
+        access_token: str | None = None,
+        embedder_type: str | None = None,
+        is_ollama_embedder: bool | None = None,
         excluded_dirs: List[str] = None,
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
@@ -869,9 +862,8 @@ class DatabaseManager:
             included_files=included_files,
         )
 
-    def reset_database(self):
-        """Reset the database to its initial state.
-        """
+    def reset_database(self) -> None:
+        """Reset the database to its initial state."""
         self.db = None
         self.repo_url_or_path = None
         self.repo_paths = None
@@ -890,12 +882,12 @@ class DatabaseManager:
         return repo_name
 
     def _create_repo(
-        self, repo_url_or_path: str, repo_type: str = None, access_token: str = None,
+        self, repo_url_or_path: str, repo_type: str | None = None, access_token: str | None = None,
     ) -> None:
         """Download and prepare all paths.
         Paths:
         ~/.adalflow/repos/{owner}_{repo_name} (for url, local path will be the same)
-        ~/.adalflow/databases/{owner}_{repo_name}.pkl
+        ~/.adalflow/databases/{owner}_{repo_name}.pkl.
 
         Args:
             repo_type(str): Type of repository
@@ -909,9 +901,7 @@ class DatabaseManager:
 
             os.makedirs(root_path, exist_ok=True)
             # url
-            if repo_url_or_path.startswith("https://") or repo_url_or_path.startswith(
-                "http://",
-            ):
+            if repo_url_or_path.startswith(("https://", "http://")):
                 # Extract the repository name from the URL
                 repo_name = self._extract_repo_name_from_url(
                     repo_url_or_path, repo_type,
@@ -946,13 +936,13 @@ class DatabaseManager:
             logger.info(f"Repo paths: {self.repo_paths}")
 
         except Exception as e:
-            logger.error(f"Failed to create repository structure: {e}")
+            logger.exception(f"Failed to create repository structure: {e}")
             raise
 
     def prepare_db_index(
         self,
-        embedder_type: str = None,
-        is_ollama_embedder: bool = None,
+        embedder_type: str | None = None,
+        is_ollama_embedder: bool | None = None,
         excluded_dirs: List[str] = None,
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
@@ -1132,7 +1122,7 @@ class DatabaseManager:
                     # If incremental update didn't work, return existing documents
                     return existing_documents
             except Exception as e:
-                logger.error(f"Error loading existing database: {e}")
+                logger.exception(f"Error loading existing database: {e}")
                 # Continue to create a new database
 
         # prepare the database (full rebuild)
@@ -1167,7 +1157,7 @@ class DatabaseManager:
         return transformed_docs
 
     def prepare_retriever(
-        self, repo_url_or_path: str, repo_type: str = None, access_token: str = None,
+        self, repo_url_or_path: str, repo_type: str | None = None, access_token: str | None = None,
     ):
         """Prepare the retriever for a repository.
         This is a compatibility method for the isolated API.

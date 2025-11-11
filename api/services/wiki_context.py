@@ -1,13 +1,15 @@
-"""Helpers for reusing RAG state across multiple wiki generation steps.
-"""
+"""Helpers for reusing RAG state across multiple wiki generation steps."""
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from api.core.chat import generate_chat_completion_core
 from api.services.rag import RAG
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @dataclass

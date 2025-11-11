@@ -1,5 +1,4 @@
-"""High-level services for RAG and data processing.
-"""
+"""High-level services for RAG and data processing."""
 
 from api.services.data_pipeline import (
     DatabaseManager,

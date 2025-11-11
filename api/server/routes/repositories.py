@@ -34,7 +34,7 @@ async def get_local_repo_structure(
             detail=str(exc),
         ) from exc
     except Exception as exc:
-        logger.error("Error processing local repository: %s", exc)
+        logger.exception("Error processing local repository: %s", exc)
         raise HTTPException(
             status_code=500,
             detail=f"Error processing local repository: {exc}",
@@ -52,7 +52,7 @@ async def get_github_repo_structure(
         return describe_github_repository(owner=owner, repo=repo, repo_url=repo_url)
     except Exception as exc:
         error_msg = str(exc)
-        logger.error("Error fetching GitHub repository structure: %s", error_msg)
+        logger.exception("Error fetching GitHub repository structure: %s", error_msg)
         if "Could not fetch repository structure" in error_msg:
             raise HTTPException(status_code=404, detail=error_msg) from exc
         raise HTTPException(

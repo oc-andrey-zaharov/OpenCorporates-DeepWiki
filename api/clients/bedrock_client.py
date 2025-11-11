@@ -95,14 +95,13 @@ class BedrockClient(ModelClient):
                 )
 
             # Create the Bedrock client
-            bedrock_runtime = session.client(
+            return session.client(
                 service_name="bedrock-runtime", region_name=self.aws_region,
             )
 
-            return bedrock_runtime
 
         except Exception as e:
-            log.error(f"Error initializing AWS Bedrock client: {e!s}")
+            log.exception(f"Error initializing AWS Bedrock client: {e!s}")
             # Return None to indicate initialization failure
             return None
 
@@ -224,7 +223,7 @@ class BedrockClient(ModelClient):
         (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError),
         max_time=5,
     )
-    def call(self, api_kwargs: dict = None, model_type: ModelType = None) -> Any:
+    def call(self, api_kwargs: dict | None = None, model_type: ModelType = None) -> Any:
         """Make a synchronous call to the AWS Bedrock API."""
         api_kwargs = api_kwargs or {}
 
@@ -255,7 +254,7 @@ class BedrockClient(ModelClient):
                     request_body["textGenerationConfig"]["temperature"] = api_kwargs[
                         "temperature"
                     ]
-                elif provider == "cohere" or provider == "ai21":
+                elif provider in {"cohere", "ai21"}:
                     request_body["temperature"] = api_kwargs["temperature"]
 
             if "top_p" in api_kwargs:
@@ -279,26 +278,25 @@ class BedrockClient(ModelClient):
                 response_body = json.loads(response["body"].read())
 
                 # Extract the generated text
-                generated_text = self._extract_response_text(provider, response_body)
+                return self._extract_response_text(provider, response_body)
 
-                return generated_text
 
             except Exception as e:
-                log.error(f"Error calling AWS Bedrock API: {e!s}")
+                log.exception(f"Error calling AWS Bedrock API: {e!s}")
                 return f"Error: {e!s}"
         else:
             raise ValueError(
                 f"Model type {model_type} is not supported by AWS Bedrock client",
             )
 
-    async def acall(self, api_kwargs: dict = None, model_type: ModelType = None) -> Any:
+    async def acall(self, api_kwargs: dict | None = None, model_type: ModelType = None) -> Any:
         """Make an asynchronous call to the AWS Bedrock API."""
         # For now, just call the sync method
         # In a real implementation, you would use an async library or run the sync method in a thread pool
         return self.call(api_kwargs, model_type)
 
     def convert_inputs_to_api_kwargs(
-        self, input: Any = None, model_kwargs: dict = None, model_type: ModelType = None,
+        self, input: Any = None, model_kwargs: dict | None = None, model_type: ModelType = None,
     ) -> dict:
         """Convert inputs to API kwargs for AWS Bedrock."""
         model_kwargs = model_kwargs or {}

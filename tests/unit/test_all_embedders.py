@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""
-Comprehensive test suite for all embedder types (OpenAI, Google, Ollama).
+"""Comprehensive test suite for all embedder types (OpenAI, Google, Ollama).
 This test file validates the embedder system before any modifications are made.
 """
 
+import logging
 import os
 import sys
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,7 +20,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -94,7 +93,7 @@ class TestEmbedderConfiguration:
 
     def test_config_loading(self):
         """Test that all embedder configurations load properly."""
-        from api.config import configs, CLIENT_CLASSES
+        from api.config import CLIENT_CLASSES, configs
 
         # Check all embedder configurations exist
         assert "embedder" in configs, "OpenAI embedder config missing"
@@ -114,7 +113,7 @@ class TestEmbedderConfiguration:
 
     def test_embedder_type_detection(self):
         """Test embedder type detection functions."""
-        from api.config import get_embedder_type, is_ollama_embedder, is_google_embedder
+        from api.config import get_embedder_type, is_google_embedder, is_ollama_embedder
 
         # Default type should be detected
         current_type = get_embedder_type()
@@ -180,7 +179,7 @@ class TestEmbedderFactory:
             assert ollama_embedder is not None, "Ollama embedder should be created"
         except Exception as e:
             logger.warning(
-                f"Ollama embedder creation failed (expected if Ollama not available): {e}"
+                f"Ollama embedder creation failed (expected if Ollama not available): {e}",
             )
 
     def test_get_embedder_with_legacy_params(self):
@@ -201,7 +200,7 @@ class TestEmbedderFactory:
             )
         except Exception as e:
             logger.warning(
-                f"Ollama embedder creation failed (expected if Ollama not available): {e}"
+                f"Ollama embedder creation failed (expected if Ollama not available): {e}",
             )
 
     def test_get_embedder_auto_detection(self):
@@ -220,12 +219,13 @@ class TestEmbedderClients:
         """Test Google embedder client directly."""
         if not os.getenv("GOOGLE_API_KEY"):
             logger.warning(
-                "Skipping Google embedder test - GOOGLE_API_KEY not available"
+                "Skipping Google embedder test - GOOGLE_API_KEY not available",
             )
             return
 
-        from api.clients.google_embedder_client import GoogleEmbedderClient
         from adalflow.core.types import ModelType
+
+        from api.clients.google_embedder_client import GoogleEmbedderClient
 
         client = GoogleEmbedderClient()
 
@@ -278,7 +278,7 @@ class TestDataPipelineFunctions:
             try:
                 pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama)
                 assert pipeline is not None, "Data pipeline should be created"
-                assert hasattr(pipeline, "__call__"), "Pipeline should be callable"
+                assert callable(pipeline), "Pipeline should be callable"
             except Exception as e:
                 # Some configurations might fail if services aren't available
                 logger.warning(f"Pipeline creation failed (might be expected): {e}")
@@ -288,10 +288,10 @@ class TestDataPipelineFunctions:
                 try:
                     pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama_val)
                     assert pipeline is not None, "Data pipeline should be created"
-                    assert hasattr(pipeline, "__call__"), "Pipeline should be callable"
+                    assert callable(pipeline), "Pipeline should be callable"
                 except Exception as e:
                     logger.warning(
-                        f"Pipeline creation failed for is_ollama={is_ollama_val}: {e}"
+                        f"Pipeline creation failed for is_ollama={is_ollama_val}: {e}",
                     )
 
 
@@ -312,7 +312,7 @@ class TestRAGIntegration:
             )
         except Exception as e:
             logger.warning(
-                f"RAG initialization failed (might be expected if keys missing): {e}"
+                f"RAG initialization failed (might be expected if keys missing): {e}",
             )
 
     def test_rag_embedder_type_detection(self):
@@ -335,7 +335,6 @@ class TestEnvironmentVariableHandling:
 
     def test_embedder_type_env_var(self, embedder_type=None):
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
-
         if embedder_type:
             # Test specific embedder type
             self._test_single_embedder_type(embedder_type)
@@ -347,6 +346,7 @@ class TestEnvironmentVariableHandling:
     def _test_single_embedder_type(self, embedder_type):
         """Test a single embedder type."""
         import importlib
+
         import api.config
 
         # Save original value
@@ -361,7 +361,7 @@ class TestEnvironmentVariableHandling:
 
             from api.config import EMBEDDER_TYPE, get_embedder_type
 
-            assert EMBEDDER_TYPE == embedder_type, (
+            assert embedder_type == EMBEDDER_TYPE, (
                 f"EMBEDDER_TYPE should be {embedder_type}"
             )
             assert get_embedder_type() == embedder_type, (
@@ -404,7 +404,7 @@ class TestIssuesIdentified:
 
     def test_binary_assumptions_in_data_pipeline(self):
         """Test binary assumptions in data pipeline functions."""
-        from api.services.data_pipeline import prepare_data_pipeline, count_tokens
+        from api.services.data_pipeline import count_tokens, prepare_data_pipeline
 
         # These functions currently only consider is_ollama_embedder parameter
         # This test documents the issue and will verify fixes

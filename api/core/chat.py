@@ -1,5 +1,4 @@
-"""
-Chat completion core functionality.
+"""Chat completion core functionality.
 
 This module provides synchronous chat completion with streaming support
 that can be used by both CLI and server.
@@ -8,26 +7,26 @@ that can be used by both CLI and server.
 import asyncio
 import logging
 import os
-from typing import Dict, Generator, List, Optional
+from collections.abc import Generator
 
 import google.generativeai as genai
 from adalflow.components.model_client.ollama_client import OllamaClient
 from adalflow.core.types import ModelType
 
+from api.clients.bedrock_client import BedrockClient
+from api.clients.openai_client import OpenAIClient
+from api.clients.openrouter_client import OpenRouterClient
 from api.config import (
     get_model_config,
 )
-from api.services.data_pipeline import count_tokens, get_file_content
-from api.clients.openai_client import OpenAIClient
-from api.clients.openrouter_client import OpenRouterClient
-from api.clients.bedrock_client import BedrockClient
-from api.services.rag import RAG
 from api.prompts import SIMPLE_CHAT_SYSTEM_PROMPT
+from api.services.data_pipeline import count_tokens, get_file_content
+from api.services.rag import RAG
 
 logger = logging.getLogger(__name__)
 
 
-def _is_truthy(value: Optional[str]) -> bool:
+def _is_truthy(value: str | None) -> bool:
     if value is None:
         return False
     return value.lower() in {"1", "true", "yes", "on"}
@@ -36,7 +35,7 @@ def _is_truthy(value: Optional[str]) -> bool:
 OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED"))
 
 
-def _extract_chat_completion_text(completion) -> Optional[str]:
+def _extract_chat_completion_text(completion) -> str | None:
     try:
         choices = getattr(completion, "choices", [])
         if choices:
@@ -54,8 +53,7 @@ def _extract_chat_completion_text(completion) -> Optional[str]:
 
 
 def _async_to_sync_generator(async_gen):
-    """
-    Convert an async generator to a sync generator.
+    """Convert an async generator to a sync generator.
     Uses a new event loop and runs the async generator in a background task.
     """
     import queue
@@ -108,20 +106,19 @@ def _async_to_sync_generator(async_gen):
 
 def generate_chat_completion_core(
     repo_url: str,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     provider: str,
     model: str,
     repo_type: str = "github",
-    token: Optional[str] = None,
-    excluded_dirs: Optional[List[str]] = None,
-    excluded_files: Optional[List[str]] = None,
-    included_dirs: Optional[List[str]] = None,
-    included_files: Optional[List[str]] = None,
-    file_path: Optional[str] = None,
-    prepared_rag: Optional[RAG] = None,
-) -> Generator[str, None, None]:
-    """
-    Core chat completion logic with streaming.
+    token: str | None = None,
+    excluded_dirs: list[str] | None = None,
+    excluded_files: list[str] | None = None,
+    included_dirs: list[str] | None = None,
+    included_files: list[str] | None = None,
+    file_path: str | None = None,
+    prepared_rag: RAG | None = None,
+) -> Generator[str]:
+    """Core chat completion logic with streaming.
 
     This function provides synchronous streaming chat completion that can be used
     by both CLI (standalone mode) and server. It yields chunks as they arrive.
@@ -155,7 +152,7 @@ def generate_chat_completion_core(
             logger.info(f"Request size: {tokens} tokens")
             if tokens > 8000:
                 logger.warning(
-                    f"Request exceeds recommended token limit ({tokens} > 8000)"
+                    f"Request exceeds recommended token limit ({tokens} > 8000)",
                 )
                 input_too_large = True
 
@@ -179,22 +176,22 @@ def generate_chat_completion_core(
             logger.info(f"Retriever prepared for {repo_url}")
         except ValueError as e:
             if "No valid documents with embeddings found" in str(e):
-                logger.error(f"No valid embeddings found: {str(e)}")
+                logger.error(f"No valid embeddings found: {e!s}")
                 raise ValueError(
-                    "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content."
+                    "No valid document embeddings found. This may be due to embedding size inconsistencies or API errors during document processing. Please try again or check your repository content.",
                 )
             else:
-                logger.error(f"ValueError preparing retriever: {str(e)}")
-                raise ValueError(f"Error preparing retriever: {str(e)}")
+                logger.error(f"ValueError preparing retriever: {e!s}")
+                raise ValueError(f"Error preparing retriever: {e!s}")
         except Exception as e:
-            logger.error(f"Error preparing retriever: {str(e)}")
+            logger.error(f"Error preparing retriever: {e!s}")
             # Check for specific embedding-related errors
             if "All embeddings should be of the same size" in str(e):
                 raise ValueError(
-                    "Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again."
+                    "Inconsistent embedding sizes detected. Some documents may have failed to embed properly. Please try again.",
                 )
             else:
-                raise ValueError(f"Error preparing retriever: {str(e)}")
+                raise ValueError(f"Error preparing retriever: {e!s}")
 
     # Validate request
     if not messages or len(messages) == 0:
@@ -258,11 +255,11 @@ def generate_chat_completion_core(
                 else:
                     logger.warning("No documents retrieved from RAG")
             except Exception as e:
-                logger.error(f"Error in RAG retrieval: {str(e)}")
+                logger.error(f"Error in RAG retrieval: {e!s}")
                 # Continue without RAG if there's an error
 
         except Exception as e:
-            logger.error(f"Error retrieving documents: {str(e)}")
+            logger.error(f"Error retrieving documents: {e!s}")
             context_text = ""
 
     # Get repository information
@@ -282,7 +279,7 @@ def generate_chat_completion_core(
             file_content = get_file_content(repo_url, file_path, repo_type, token)
             logger.info(f"Successfully retrieved content for file: {file_path}")
         except Exception as e:
-            logger.error(f"Error retrieving file content: {str(e)}")
+            logger.error(f"Error retrieving file content: {e!s}")
             # Continue without file content if there's an error
 
     # Create the prompt with context
@@ -328,7 +325,7 @@ def generate_chat_completion_core(
                     model_type=ModelType.LLM,
                 )
                 response = await model_client.acall(
-                    api_kwargs=api_kwargs, model_type=ModelType.LLM
+                    api_kwargs=api_kwargs, model_type=ModelType.LLM,
                 )
                 async for chunk in response:
                     text = (
@@ -361,13 +358,13 @@ def generate_chat_completion_core(
                     )
                     logger.info("Making OpenRouter API call")
                     response = await model_client.acall(
-                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM,
                     )
                     async for chunk in response:
                         yield chunk
                 except Exception as e_openrouter:
-                    logger.error(f"Error with OpenRouter API: {str(e_openrouter)}")
-                    yield f"\nError with OpenRouter API: {str(e_openrouter)}\n\nPlease check that you have set the OPENROUTER_API_KEY environment variable with a valid API key."
+                    logger.error(f"Error with OpenRouter API: {e_openrouter!s}")
+                    yield f"\nError with OpenRouter API: {e_openrouter!s}\n\nPlease check that you have set the OPENROUTER_API_KEY environment variable with a valid API key."
             elif provider == "openai":
                 try:
                     logger.info(f"Using Openai protocol with model: {model}")
@@ -387,7 +384,7 @@ def generate_chat_completion_core(
                     )
                     logger.info("Making Openai API call")
                     response = await model_client.acall(
-                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM,
                     )
                     if model_kwargs.get("stream", True):
                         async for chunk in response:
@@ -408,7 +405,7 @@ def generate_chat_completion_core(
                             yield completion_text
                         else:
                             logger.warning(
-                                "OpenAI non-stream response empty; yielding raw completion"
+                                "OpenAI non-stream response empty; yielding raw completion",
                             )
                             yield str(response)
                 except Exception as e_openai:
@@ -420,7 +417,7 @@ def generate_chat_completion_core(
                         and "stream" in error_text
                     ):
                         logger.warning(
-                            "OpenAI streaming not permitted for this model; retrying without stream"
+                            "OpenAI streaming not permitted for this model; retrying without stream",
                         )
                         try:
                             non_stream_model_kwargs = {
@@ -447,16 +444,16 @@ def generate_chat_completion_core(
                                 yield completion_text
                                 return
                             logger.warning(
-                                "OpenAI fallback non-stream response empty; yielding raw completion"
+                                "OpenAI fallback non-stream response empty; yielding raw completion",
                             )
                             yield str(completion)
                             return
                         except Exception as fallback_error:
                             logger.error(
-                                f"Error with Openai API non-stream fallback: {str(fallback_error)}"
+                                f"Error with Openai API non-stream fallback: {fallback_error!s}",
                             )
                             yield (
-                                f"\nError with Openai API fallback: {str(fallback_error)}\n\n"
+                                f"\nError with Openai API fallback: {fallback_error!s}\n\n"
                                 "Please check that you have set the OPENAI_API_KEY environment variable with a valid API key."
                             )
                             return
@@ -478,15 +475,15 @@ def generate_chat_completion_core(
                     )
                     logger.info("Making AWS Bedrock API call")
                     response = await model_client.acall(
-                        api_kwargs=api_kwargs, model_type=ModelType.LLM
+                        api_kwargs=api_kwargs, model_type=ModelType.LLM,
                     )
                     if isinstance(response, str):
                         yield response
                     else:
                         yield str(response)
                 except Exception as e_bedrock:
-                    logger.error(f"Error with AWS Bedrock API: {str(e_bedrock)}")
-                    yield f"\nError with AWS Bedrock API: {str(e_bedrock)}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
+                    logger.error(f"Error with AWS Bedrock API: {e_bedrock!s}")
+                    yield f"\nError with AWS Bedrock API: {e_bedrock!s}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
             else:
                 # Google Generative AI
                 model_client = genai.GenerativeModel(
@@ -503,7 +500,7 @@ def generate_chat_completion_core(
                         yield chunk.text
 
         except Exception as e_outer:
-            logger.error(f"Error in streaming response: {str(e_outer)}")
+            logger.error(f"Error in streaming response: {e_outer!s}")
             error_message = str(e_outer)
 
             # Check for token limit errors
@@ -536,7 +533,7 @@ def generate_chat_completion_core(
                             },
                         )
                         fallback_response = fallback_model.generate_content(
-                            simplified_prompt, stream=True
+                            simplified_prompt, stream=True,
                         )
                         for chunk in fallback_response:
                             if hasattr(chunk, "text"):
@@ -544,7 +541,7 @@ def generate_chat_completion_core(
                     else:
                         yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
                 except Exception as e2:
-                    logger.error(f"Error in fallback streaming response: {str(e2)}")
+                    logger.error(f"Error in fallback streaming response: {e2!s}")
                     yield "\nI apologize, but your request is too large for me to process. Please try a shorter query or break it into smaller parts."
             else:
                 # For other errors, return the error message

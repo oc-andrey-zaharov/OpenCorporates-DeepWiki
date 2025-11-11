@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""
-Test script to reproduce and fix Google embedder 'list' object has no attribute 'embedding' error.
+"""Test script to reproduce and fix Google embedder 'list' object has no attribute 'embedding' error.
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add the project root to the Python path
@@ -18,7 +17,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,9 @@ def test_google_embedder_client():
     logger.info("Testing Google embedder client...")
 
     try:
-        from api.clients.google_embedder_client import GoogleEmbedderClient
         from adalflow.core.types import ModelType
+
+        from api.clients.google_embedder_client import GoogleEmbedderClient
 
         # Initialize the client
         client = GoogleEmbedderClient()
@@ -48,13 +48,13 @@ def test_google_embedder_client():
         response = client.call(api_kwargs, ModelType.EMBEDDER)
         logger.info(f"Single embedding response type: {type(response)}")
         logger.info(
-            f"Single embedding response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}"
+            f"Single embedding response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}",
         )
 
         # Parse the response
         parsed = client.parse_embedding_response(response)
         logger.info(
-            f"Parsed response data length: {len(parsed.data) if parsed.data else 0}"
+            f"Parsed response data length: {len(parsed.data) if parsed.data else 0}",
         )
         logger.info(f"Parsed response error: {parsed.error}")
 
@@ -72,13 +72,13 @@ def test_google_embedder_client():
         response = client.call(api_kwargs, ModelType.EMBEDDER)
         logger.info(f"Batch embedding response type: {type(response)}")
         logger.info(
-            f"Batch embedding response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}"
+            f"Batch embedding response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}",
         )
 
         # Parse the response
         parsed = client.parse_embedding_response(response)
         logger.info(
-            f"Parsed batch response data length: {len(parsed.data) if parsed.data else 0}"
+            f"Parsed batch response data length: {len(parsed.data) if parsed.data else 0}",
         )
         logger.info(f"Parsed batch response error: {parsed.error}")
 
@@ -98,6 +98,7 @@ def test_adalflow_embedder():
 
     try:
         import adalflow as adal
+
         from api.clients.google_embedder_client import GoogleEmbedderClient
 
         # Create embedder
@@ -134,17 +135,18 @@ def test_document_processing():
     logger.info("Testing document processing with Google embedder...")
 
     try:
-        from adalflow.core.types import Document
         from adalflow.components.data_process import ToEmbeddings
+        from adalflow.core.types import Document
+
         from api.tools.embedder import get_embedder
 
         # Create some test documents
         docs = [
             Document(
-                text="This is a test document.", meta_data={"file_path": "test1.txt"}
+                text="This is a test document.", meta_data={"file_path": "test1.txt"},
             ),
             Document(
-                text="Another test document here.", meta_data={"file_path": "test2.txt"}
+                text="Another test document here.", meta_data={"file_path": "test2.txt"},
             ),
         ]
 
@@ -169,7 +171,7 @@ def test_document_processing():
             if hasattr(doc, "vector"):
                 logger.info(f"Doc {i} vector type: {type(doc.vector)}")
                 logger.info(
-                    f"Doc {i} vector length: {len(doc.vector) if doc.vector else 0}"
+                    f"Doc {i} vector length: {len(doc.vector) if doc.vector else 0}",
                 )
             else:
                 logger.info(f"Doc {i} has no vector attribute")

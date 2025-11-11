@@ -1,12 +1,12 @@
-"""
-Integration tests for fallback scenarios.
+"""Integration tests for fallback scenarios.
 
 These tests verify that the CLI correctly falls back to standalone mode
 when server is unavailable or misconfigured.
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 class TestFallbackScenarios:
@@ -54,4 +54,3 @@ class TestFallbackScenarios:
         # - use_server = True
         # - auto_fallback = False
         # - Server is unavailable
-        pass

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""
-Unit tests for api/utils/export.py
+"""Unit tests for api/utils/export.py
 
 Tests export functions for generating markdown and JSON exports.
 """
 
-import sys
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
+
 import pytest
 
 # Add the parent directory to the path
@@ -34,7 +34,7 @@ class TestGenerateMarkdownExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_markdown_export(repo_url, pages)
@@ -136,7 +136,7 @@ class TestGenerateMarkdownExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_markdown_export(repo_url, pages)
@@ -156,7 +156,7 @@ class TestGenerateMarkdownExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_markdown_export(repo_url, pages)
@@ -180,7 +180,7 @@ class TestGenerateJsonExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_json_export(repo_url, pages)
@@ -247,7 +247,7 @@ class TestGenerateJsonExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_json_export(repo_url, pages)
@@ -268,7 +268,7 @@ class TestGenerateJsonExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
-            )
+            ),
         ]
 
         result = export.generate_json_export(repo_url, pages)
@@ -290,7 +290,7 @@ class TestGenerateJsonExport:
                 filePaths=["file1.py", "file2.py"],
                 importance="high",
                 relatedPages=["page2", "page3"],
-            )
+            ),
         ]
 
         result = export.generate_json_export(repo_url, pages)

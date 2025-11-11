@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -46,7 +45,7 @@ async def get_local_repo_structure(
 async def get_github_repo_structure(
     owner: str = Query(..., description="Repository owner"),
     repo: str = Query(..., description="Repository name"),
-    repo_url: Optional[str] = Query(None, description="Full repository URL"),
+    repo_url: str | None = Query(None, description="Full repository URL"),
 ):
     """Return the file tree and README content for a GitHub repository."""
     try:

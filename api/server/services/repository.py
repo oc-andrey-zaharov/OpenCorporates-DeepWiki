@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Dict, Optional
 
 from api.config import GITHUB_TOKEN
 from api.core.github import get_github_repo_structure_standalone
@@ -12,7 +11,7 @@ from api.core.github import get_github_repo_structure_standalone
 logger = logging.getLogger(__name__)
 
 
-def describe_local_repository(path: str) -> Dict[str, str]:
+def describe_local_repository(path: str) -> dict[str, str]:
     """Return a file tree and README contents for ``path``."""
     if not path:
         raise ValueError("Repository path is required")
@@ -39,7 +38,7 @@ def describe_local_repository(path: str) -> Dict[str, str]:
             file_tree_lines.append(rel_file)
             if file.lower() == "readme.md" and not readme_content:
                 try:
-                    with open(os.path.join(root, file), "r", encoding="utf-8") as handle:
+                    with open(os.path.join(root, file), encoding="utf-8") as handle:
                         readme_content = handle.read()
                 except Exception as exc:
                     logger.warning("Could not read README.md: %s", exc)
@@ -52,9 +51,9 @@ def describe_local_repository(path: str) -> Dict[str, str]:
 def describe_github_repository(
     owner: str,
     repo: str,
-    repo_url: Optional[str] = None,
-    token: Optional[str] = None,
-) -> Dict[str, str]:
+    repo_url: str | None = None,
+    token: str | None = None,
+) -> dict[str, str]:
     """Fetch repository structure using the GitHub API."""
     try:
         return get_github_repo_structure_standalone(
@@ -68,4 +67,4 @@ def describe_github_repository(
         raise
 
 
-__all__ = ["describe_local_repository", "describe_github_repository"]
+__all__ = ["describe_github_repository", "describe_local_repository"]

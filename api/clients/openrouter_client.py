@@ -1,17 +1,17 @@
 """OpenRouter ModelClient integration."""
 
-from typing import Dict, Any
-import logging
 import json
-import aiohttp
-from requests.exceptions import RequestException
+import logging
+from typing import Any
 
+import aiohttp
 from adalflow.core.model_client import ModelClient
 from adalflow.core.types import (
     CompletionUsage,
-    ModelType,
     GeneratorOutput,
+    ModelType,
 )
+from requests.exceptions import RequestException
 
 log = logging.getLogger(__name__)
 
@@ -65,8 +65,8 @@ class OpenRouterClient(ModelClient):
         return {"api_key": api_key, "base_url": "https://openrouter.ai/api/v1"}
 
     def convert_inputs_to_api_kwargs(
-        self, input: Any, model_kwargs: Dict = None, model_type: ModelType = None
-    ) -> Dict:
+        self, input: Any, model_kwargs: dict = None, model_type: ModelType = None,
+    ) -> dict:
         """Convert AdalFlow inputs to OpenRouter API format."""
         model_kwargs = model_kwargs or {}
 
@@ -83,7 +83,7 @@ class OpenRouterClient(ModelClient):
                 messages = input
             else:
                 raise ValueError(
-                    f"Unsupported input format for OpenRouter: {type(input)}"
+                    f"Unsupported input format for OpenRouter: {type(input)}",
                 )
 
             # For debugging
@@ -97,18 +97,17 @@ class OpenRouterClient(ModelClient):
 
             return api_kwargs
 
-        elif model_type == ModelType.EMBEDDING:
+        if model_type == ModelType.EMBEDDING:
             # OpenRouter doesn't support embeddings directly
             # We could potentially use a specific model through OpenRouter for embeddings
             # but for now, we'll raise an error
             raise NotImplementedError(
-                "OpenRouter client does not support embeddings yet"
+                "OpenRouter client does not support embeddings yet",
             )
 
-        else:
-            raise ValueError(f"Unsupported model type: {model_type}")
+        raise ValueError(f"Unsupported model type: {model_type}")
 
-    async def acall(self, api_kwargs: Dict = None, model_type: ModelType = None) -> Any:
+    async def acall(self, api_kwargs: dict = None, model_type: ModelType = None) -> Any:
         """Make an asynchronous call to the OpenRouter API."""
         if not self.async_client:
             self.async_client = self.init_async_client()
@@ -142,7 +141,7 @@ class OpenRouterClient(ModelClient):
             # Make the API call
             try:
                 log.info(
-                    f"Making async OpenRouter API call to {self.async_client['base_url']}/chat/completions"
+                    f"Making async OpenRouter API call to {self.async_client['base_url']}/chat/completions",
                 )
                 log.info(f"Request headers: {headers}")
                 log.info(f"Request body: {api_kwargs}")
@@ -158,7 +157,7 @@ class OpenRouterClient(ModelClient):
                             if response.status != 200:
                                 error_text = await response.text()
                                 log.error(
-                                    f"OpenRouter API error ({response.status}): {error_text}"
+                                    f"OpenRouter API error ({response.status}): {error_text}",
                                 )
 
                                 # Return a generator that yields the error message
@@ -195,7 +194,7 @@ class OpenRouterClient(ModelClient):
                                                 # Check if it's a wiki_structure XML
                                                 if "<wiki_structure>" in xml_content:
                                                     log.info(
-                                                        "Found wiki_structure XML, ensuring proper format"
+                                                        "Found wiki_structure XML, ensuring proper format",
                                                     )
 
                                                     # Extract just the wiki_structure XML
@@ -228,7 +227,7 @@ class OpenRouterClient(ModelClient):
                                                             # Fix other common XML issues
                                                             fixed_xml = (
                                                                 fixed_xml.replace(
-                                                                    "</", "</"
+                                                                    "</", "</",
                                                                 ).replace("  >", ">")
                                                             )
 
@@ -246,24 +245,24 @@ class OpenRouterClient(ModelClient):
 
                                                             # Remove XML declaration
                                                             if pretty_xml.startswith(
-                                                                "<?xml"
+                                                                "<?xml",
                                                             ):
                                                                 pretty_xml = pretty_xml[
                                                                     pretty_xml.find(
-                                                                        "?>"
+                                                                        "?>",
                                                                     )
                                                                     + 2 :
                                                                 ].strip()
 
                                                             log.info(
-                                                                f"Extracted and validated XML: {pretty_xml[:100]}..."
+                                                                f"Extracted and validated XML: {pretty_xml[:100]}...",
                                                             )
                                                             yield pretty_xml
                                                         except (
                                                             Exception
                                                         ) as xml_parse_error:
                                                             log.warning(
-                                                                f"XML validation failed: {str(xml_parse_error)}, using raw XML"
+                                                                f"XML validation failed: {xml_parse_error!s}, using raw XML",
                                                             )
 
                                                             # If XML validation fails, try a more aggressive approach
@@ -279,7 +278,7 @@ class OpenRouterClient(ModelClient):
                                                                 )
                                                                 if structure_match:
                                                                     structure = structure_match.group(
-                                                                        1
+                                                                        1,
                                                                     ).strip()
 
                                                                     # Rebuild a clean XML structure
@@ -293,7 +292,7 @@ class OpenRouterClient(ModelClient):
                                                                     )
                                                                     if title_match:
                                                                         title = title_match.group(
-                                                                            1
+                                                                            1,
                                                                         ).strip()
                                                                         clean_structure += f"  <title>{title}</title>\n"
 
@@ -305,7 +304,7 @@ class OpenRouterClient(ModelClient):
                                                                     )
                                                                     if desc_match:
                                                                         desc = desc_match.group(
-                                                                            1
+                                                                            1,
                                                                         ).strip()
                                                                         clean_structure += f"  <description>{desc}</description>\n"
 
@@ -334,7 +333,7 @@ class OpenRouterClient(ModelClient):
                                                                         )
                                                                         if page_title_match:
                                                                             page_title = page_title_match.group(
-                                                                                1
+                                                                                1,
                                                                             ).strip()
                                                                             clean_structure += f"      <title>{page_title}</title>\n"
 
@@ -346,7 +345,7 @@ class OpenRouterClient(ModelClient):
                                                                         )
                                                                         if page_desc_match:
                                                                             page_desc = page_desc_match.group(
-                                                                                1
+                                                                                1,
                                                                             ).strip()
                                                                             clean_structure += f"      <description>{page_desc}</description>\n"
 
@@ -358,7 +357,7 @@ class OpenRouterClient(ModelClient):
                                                                         )
                                                                         if importance_match:
                                                                             importance = importance_match.group(
-                                                                                1
+                                                                                1,
                                                                             ).strip()
                                                                             clean_structure += f"      <importance>{importance}</importance>\n"
 
@@ -391,25 +390,25 @@ class OpenRouterClient(ModelClient):
                                                                     clean_structure += "  </pages>\n</wiki_structure>"
 
                                                                     log.info(
-                                                                        "Successfully rebuilt clean XML structure"
+                                                                        "Successfully rebuilt clean XML structure",
                                                                     )
                                                                     yield clean_structure
                                                                 else:
                                                                     log.warning(
-                                                                        "Could not extract wiki structure, using raw XML"
+                                                                        "Could not extract wiki structure, using raw XML",
                                                                     )
                                                                     yield clean_xml
                                                             except (
                                                                 Exception
                                                             ) as rebuild_error:
                                                                 log.warning(
-                                                                    f"Failed to rebuild XML: {str(rebuild_error)}, using raw XML"
+                                                                    f"Failed to rebuild XML: {rebuild_error!s}, using raw XML",
                                                                 )
                                                                 yield clean_xml
                                                     else:
                                                         # If we can't extract it, just yield the original content
                                                         log.warning(
-                                                            "Could not extract wiki_structure XML, yielding original content"
+                                                            "Could not extract wiki_structure XML, yielding original content",
                                                         )
                                                         yield xml_content
                                                 else:
@@ -417,7 +416,7 @@ class OpenRouterClient(ModelClient):
                                                     yield content
                                             except Exception as xml_error:
                                                 log.error(
-                                                    f"Error processing XML content: {str(xml_error)}"
+                                                    f"Error processing XML content: {xml_error!s}",
                                                 )
                                                 yield content
                                         else:
@@ -434,34 +433,34 @@ class OpenRouterClient(ModelClient):
                     except aiohttp.ClientError as e:
                         e_client = e
                         log.error(
-                            f"Connection error with OpenRouter API: {str(e_client)}"
+                            f"Connection error with OpenRouter API: {e_client!s}",
                         )
 
                         # Return a generator that yields the error message
                         async def connection_error_generator():
-                            yield f"Connection error with OpenRouter API: {str(e_client)}. Please check your internet connection and that the OpenRouter API is accessible."
+                            yield f"Connection error with OpenRouter API: {e_client!s}. Please check your internet connection and that the OpenRouter API is accessible."
 
                         return connection_error_generator()
 
             except RequestException as e:
                 e_req = e
-                log.error(f"Error calling OpenRouter API asynchronously: {str(e_req)}")
+                log.error(f"Error calling OpenRouter API asynchronously: {e_req!s}")
 
                 # Return a generator that yields the error message
                 async def request_error_generator():
-                    yield f"Error calling OpenRouter API: {str(e_req)}"
+                    yield f"Error calling OpenRouter API: {e_req!s}"
 
                 return request_error_generator()
 
             except Exception as e:
                 e_unexp = e
                 log.error(
-                    f"Unexpected error calling OpenRouter API asynchronously: {str(e_unexp)}"
+                    f"Unexpected error calling OpenRouter API asynchronously: {e_unexp!s}",
                 )
 
                 # Return a generator that yields the error message
                 async def unexpected_error_generator():
-                    yield f"Unexpected error calling OpenRouter API: {str(e_unexp)}"
+                    yield f"Unexpected error calling OpenRouter API: {e_unexp!s}"
 
                 return unexpected_error_generator()
 
@@ -475,7 +474,7 @@ class OpenRouterClient(ModelClient):
 
             return model_type_error_generator()
 
-    def _process_completion_response(self, data: Dict) -> GeneratorOutput:
+    def _process_completion_response(self, data: dict) -> GeneratorOutput:
         """Process a non-streaming completion response from OpenRouter."""
         try:
             # Extract the completion text from the response
@@ -490,7 +489,7 @@ class OpenRouterClient(ModelClient):
                 content = choice.get("text", "")
             else:
                 raise ValueError(
-                    f"Unexpected response format from OpenRouter: {choice}"
+                    f"Unexpected response format from OpenRouter: {choice}",
                 )
 
             # Extract usage information if available
@@ -506,7 +505,7 @@ class OpenRouterClient(ModelClient):
             return GeneratorOutput(data=content, usage=usage, raw_response=data)
 
         except Exception as e_proc:
-            log.error(f"Error processing OpenRouter completion response: {str(e_proc)}")
+            log.error(f"Error processing OpenRouter completion response: {e_proc!s}")
             raise
 
     def _process_streaming_response(self, response):
@@ -564,12 +563,12 @@ class OpenRouterClient(ModelClient):
                                         yield content
                                     elif "text" in choice:
                                         log.debug(
-                                            f"Yielding text content: {choice['text']}"
+                                            f"Yielding text content: {choice['text']}",
                                         )
                                         yield choice["text"]
                                     else:
                                         log.debug(
-                                            f"No content found in choice: {choice}"
+                                            f"No content found in choice: {choice}",
                                         )
                                 else:
                                     log.debug(f"No choices found in data: {data_obj}")
@@ -578,11 +577,11 @@ class OpenRouterClient(ModelClient):
                                 log.warning(f"Failed to parse SSE data: {data}")
                                 continue
                 except Exception as e_chunk:
-                    log.error(f"Error processing streaming chunk: {str(e_chunk)}")
-                    yield f"Error processing response chunk: {str(e_chunk)}"
+                    log.error(f"Error processing streaming chunk: {e_chunk!s}")
+                    yield f"Error processing response chunk: {e_chunk!s}"
         except Exception as e_stream:
-            log.error(f"Error in streaming response: {str(e_stream)}")
-            yield f"Error in streaming response: {str(e_stream)}"
+            log.error(f"Error in streaming response: {e_stream!s}")
+            yield f"Error in streaming response: {e_stream!s}"
 
     async def _process_async_streaming_response(self, response):
         """Process an asynchronous streaming response from OpenRouter."""
@@ -643,12 +642,12 @@ class OpenRouterClient(ModelClient):
                                         yield content
                                     elif "text" in choice:
                                         log.debug(
-                                            f"Yielding text content: {choice['text']}"
+                                            f"Yielding text content: {choice['text']}",
                                         )
                                         yield choice["text"]
                                     else:
                                         log.debug(
-                                            f"No content found in choice: {choice}"
+                                            f"No content found in choice: {choice}",
                                         )
                                 else:
                                     log.debug(f"No choices found in data: {data_obj}")
@@ -657,8 +656,8 @@ class OpenRouterClient(ModelClient):
                                 log.warning(f"Failed to parse SSE data: {data}")
                                 continue
                 except Exception as e_chunk:
-                    log.error(f"Error processing streaming chunk: {str(e_chunk)}")
-                    yield f"Error processing response chunk: {str(e_chunk)}"
+                    log.error(f"Error processing streaming chunk: {e_chunk!s}")
+                    yield f"Error processing response chunk: {e_chunk!s}"
         except Exception as e_stream:
-            log.error(f"Error in async streaming response: {str(e_stream)}")
-            yield f"Error in streaming response: {str(e_stream)}"
+            log.error(f"Error in async streaming response: {e_stream!s}")
+            yield f"Error in streaming response: {e_stream!s}"

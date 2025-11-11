@@ -100,16 +100,15 @@ This file contains...
 
 _TEMPLATE_DIR = Path(__file__).with_name("templates")
 PAGE_PROMPT_TEMPLATE = Template(
-    (_TEMPLATE_DIR / "wiki_page_prompt.txt").read_text(encoding="utf-8")
+    (_TEMPLATE_DIR / "wiki_page_prompt.txt").read_text(encoding="utf-8"),
 )
 STRUCTURE_PROMPT_TEMPLATE = Template(
-    (_TEMPLATE_DIR / "wiki_structure_prompt.txt").read_text(encoding="utf-8")
+    (_TEMPLATE_DIR / "wiki_structure_prompt.txt").read_text(encoding="utf-8"),
 )
 
 
 def build_wiki_page_prompt(page_title: str, file_paths_list: str) -> str:
     """Return the canonical prompt for generating wiki page content."""
-
     return PAGE_PROMPT_TEMPLATE.substitute(
         page_title=page_title,
         file_paths_list=file_paths_list,
@@ -143,7 +142,6 @@ def build_wiki_structure_prompt(
     file_count: int,
 ) -> str:
     """Return the prompt used for structure generation."""
-
     section_guidance = _section_guidance(is_comprehensive)
     wiki_scope = "comprehensive" if is_comprehensive else "concise"
 

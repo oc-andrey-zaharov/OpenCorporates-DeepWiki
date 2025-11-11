@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Focused test script for the _extract_repo_name_from_url method
+"""Focused test script for the _extract_repo_name_from_url method
 
 Run this script to test only the repository name extraction functionality.
 Usage: python test_extract_repo_name.py
@@ -44,12 +43,12 @@ class TestExtractRepoNameFromUrl:
     def test_extract_repo_name_local_paths(self):
         """Test repository name extraction from local paths"""
         result = self.db_manager._extract_repo_name_from_url(
-            "/home/user/projects/my-repo", "local"
+            "/home/user/projects/my-repo", "local",
         )
         assert result == "my-repo"
 
         result = self.db_manager._extract_repo_name_from_url(
-            "/var/repos/project.git", "local"
+            "/var/repos/project.git", "local",
         )
         assert result == "project"
 
@@ -62,7 +61,6 @@ class TestExtractRepoNameFromUrl:
 
     def test_extract_repo_name_edge_cases(self):
         """Test edge cases for repository name extraction"""
-
         # Test URL with insufficient parts (should use fallback)
         short_url = "https://github.com/repo"
         result = self.db_manager._extract_repo_name_from_url(short_url, "github")

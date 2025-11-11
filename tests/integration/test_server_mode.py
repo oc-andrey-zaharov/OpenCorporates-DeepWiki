@@ -1,5 +1,4 @@
-"""
-Integration tests for server mode functionality.
+"""Integration tests for server mode functionality.
 
 These tests verify that the CLI works correctly when connecting to
 a FastAPI server for shared resources and caching.
@@ -37,7 +36,6 @@ class TestServerMode:
         Run manually with server started.
         """
         # This would test actual wiki generation via server
-        pass
 
     def test_server_mode_config(self):
         """Test server mode configuration."""

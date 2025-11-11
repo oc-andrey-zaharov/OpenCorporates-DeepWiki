@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Unit tests for api/cli/utils.py
+"""Unit tests for api/cli/utils.py
 
 Tests all utility functions including validation, parsing, formatting, and interactive functions.
 """
@@ -9,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 # Mock problematic imports before importing utils
@@ -30,7 +30,7 @@ class TestValidateGithubUrl:
     def test_valid_github_url(self):
         """Test valid GitHub URLs"""
         is_valid, owner, repo = utils.validate_github_url(
-            "https://github.com/owner/repo"
+            "https://github.com/owner/repo",
         )
         assert is_valid is True
         assert owner == "owner"
@@ -39,7 +39,7 @@ class TestValidateGithubUrl:
     def test_valid_github_url_with_git_suffix(self):
         """Test GitHub URL with .git suffix"""
         is_valid, owner, repo = utils.validate_github_url(
-            "https://github.com/owner/repo.git"
+            "https://github.com/owner/repo.git",
         )
         assert is_valid is True
         assert owner == "owner"
@@ -48,7 +48,7 @@ class TestValidateGithubUrl:
     def test_valid_github_url_with_trailing_slash(self):
         """Test GitHub URL with trailing slash"""
         is_valid, owner, repo = utils.validate_github_url(
-            "https://github.com/owner/repo/"
+            "https://github.com/owner/repo/",
         )
         assert is_valid is True
         assert owner == "owner"
@@ -57,7 +57,7 @@ class TestValidateGithubUrl:
     def test_valid_github_url_with_path(self):
         """Test GitHub URL with additional path"""
         is_valid, owner, repo = utils.validate_github_url(
-            "https://github.com/owner/repo/tree/main"
+            "https://github.com/owner/repo/tree/main",
         )
         assert is_valid is True
         assert owner == "owner"
@@ -136,7 +136,7 @@ class TestValidateGithubShorthand:
         owner_39 = "a" * 39
         repo_100 = "b" * 100
         is_valid, owner, repo = utils.validate_github_shorthand(
-            f"{owner_39}/{repo_100}"
+            f"{owner_39}/{repo_100}",
         )
         assert is_valid is True
         assert owner == owner_39
@@ -233,7 +233,7 @@ class TestParseRepositoryInput:
     def test_parse_github_url(self):
         """Test parsing GitHub URL"""
         repo_type, repo_url, owner, repo_name = utils.parse_repository_input(
-            "https://github.com/owner/repo"
+            "https://github.com/owner/repo",
         )
         assert repo_type == "github"
         assert repo_url == "https://github.com/owner/repo"
@@ -243,7 +243,7 @@ class TestParseRepositoryInput:
     def test_parse_github_shorthand(self):
         """Test parsing GitHub shorthand"""
         repo_type, repo_url, owner, repo_name = utils.parse_repository_input(
-            "owner/repo"
+            "owner/repo",
         )
         assert repo_type == "github"
         assert repo_url == "https://github.com/owner/repo"
@@ -255,7 +255,7 @@ class TestParseRepositoryInput:
         test_dir = tmp_path / "my_repo"
         test_dir.mkdir()
         repo_type, repo_url, owner, repo_name = utils.parse_repository_input(
-            str(test_dir)
+            str(test_dir),
         )
         assert repo_type == "local"
         assert repo_url == str(test_dir)
@@ -363,7 +363,7 @@ class TestSelectFromList:
         """Test select_from_list with custom input allowed"""
         mock_prompt.return_value = "custom_value"
         result = utils.select_from_list(
-            "Select", ["option1", "option2"], allow_custom=True
+            "Select", ["option1", "option2"], allow_custom=True,
         )
         assert result == "custom_value"
 
@@ -384,7 +384,7 @@ class TestSelectFromList:
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_from_list_custom_option(
-        self, mock_echo, mock_prompt, mock_terminal_menu
+        self, mock_echo, mock_prompt, mock_terminal_menu,
     ):
         """Test select_from_list with custom option selected"""
         mock_menu_instance = MagicMock()
@@ -393,7 +393,7 @@ class TestSelectFromList:
         mock_prompt.return_value = "custom_input"
 
         result = utils.select_from_list(
-            "Select", ["option1", "option2"], allow_custom=True
+            "Select", ["option1", "option2"], allow_custom=True,
         )
         assert result == "custom_input"
         mock_prompt.assert_called_once()
@@ -411,11 +411,11 @@ class TestSelectMultipleFromList:
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_multiple_from_list_fallback_all(
-        self, mock_echo, mock_prompt
+        self, mock_echo, mock_prompt,
     ):
         mock_prompt.return_value = ""
         result = utils.select_multiple_from_list(
-            "Select", ["option1", "option2"]
+            "Select", ["option1", "option2"],
         )
         assert result == ["option1", "option2"]
 
@@ -423,11 +423,11 @@ class TestSelectMultipleFromList:
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_multiple_from_list_fallback_specific(
-        self, mock_echo, mock_prompt
+        self, mock_echo, mock_prompt,
     ):
         mock_prompt.side_effect = ["1,2"]
         result = utils.select_multiple_from_list(
-            "Select", ["option1", "option2", "option3"]
+            "Select", ["option1", "option2", "option3"],
         )
         assert result == ["option1", "option2"]
 
@@ -439,7 +439,7 @@ class TestSelectMultipleFromList:
         mock_terminal_menu.return_value = mock_menu_instance
 
         result = utils.select_multiple_from_list(
-            "Select", ["option1", "option2", "option3"]
+            "Select", ["option1", "option2", "option3"],
         )
         assert result == ["option1", "option3"]
 

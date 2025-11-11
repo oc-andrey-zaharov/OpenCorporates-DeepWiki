@@ -1,9 +1,8 @@
-"""
-Shell completion helpers for DeepWiki CLI.
+"""Shell completion helpers for DeepWiki CLI.
 """
 
 import os
-from typing import List
+
 from click.shell_completion import CompletionItem
 
 from api.cli.config import get_provider_models
@@ -11,7 +10,7 @@ from api.cli.utils import get_cache_path
 from api.utils.wiki_cache import parse_cache_filename
 
 
-def complete_providers(ctx, param, incomplete: str) -> List[CompletionItem]:
+def complete_providers(ctx, param, incomplete: str) -> list[CompletionItem]:
     """Complete provider names from configuration."""
     try:
         provider_models = get_provider_models()
@@ -25,7 +24,7 @@ def complete_providers(ctx, param, incomplete: str) -> List[CompletionItem]:
         return []
 
 
-def complete_models(ctx, param, incomplete: str) -> List[CompletionItem]:
+def complete_models(ctx, param, incomplete: str) -> list[CompletionItem]:
     """Complete model names, optionally filtered by provider."""
     try:
         provider_models = get_provider_models()
@@ -52,7 +51,7 @@ def complete_models(ctx, param, incomplete: str) -> List[CompletionItem]:
         return []
 
 
-def complete_wiki_names(ctx, param, incomplete: str) -> List[CompletionItem]:
+def complete_wiki_names(ctx, param, incomplete: str) -> list[CompletionItem]:
     """Complete wiki names from cache files."""
     try:
         cache_dir = get_cache_path()
@@ -81,7 +80,7 @@ def complete_wiki_names(ctx, param, incomplete: str) -> List[CompletionItem]:
         return []
 
 
-def complete_config_keys(ctx, param, incomplete: str) -> List[CompletionItem]:
+def complete_config_keys(ctx, param, incomplete: str) -> list[CompletionItem]:
     """Complete configuration keys."""
     common_keys = [
         "default_provider",
@@ -100,7 +99,7 @@ def complete_config_keys(ctx, param, incomplete: str) -> List[CompletionItem]:
     return [CompletionItem(key) for key in common_keys if key.startswith(incomplete)]
 
 
-def complete_file_paths(ctx, param, incomplete: str) -> List[CompletionItem]:
+def complete_file_paths(ctx, param, incomplete: str) -> list[CompletionItem]:
     """Complete file paths."""
     if not incomplete:
         incomplete = "."

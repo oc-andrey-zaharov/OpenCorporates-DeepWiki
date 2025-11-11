@@ -1,15 +1,16 @@
-"""
-Export wiki command.
+"""Export wiki command.
 """
 
-import os
 import json
-import click
+import os
 from datetime import datetime
+
+import click
+
 from api.cli.utils import get_cache_path, select_from_list, select_wiki_from_list
-from api.utils.wiki_cache import parse_cache_filename
 from api.models import WikiPage
-from api.utils.export import generate_markdown_export, generate_json_export
+from api.utils.export import generate_json_export, generate_markdown_export
+from api.utils.wiki_cache import parse_cache_filename
 
 
 @click.command(name="export")
@@ -26,7 +27,7 @@ def export(format: str, output: str):
 
     if not cache_dir.exists():
         click.echo(
-            "No cached wikis found. Generate a wiki first using 'deepwiki generate'."
+            "No cached wikis found. Generate a wiki first using 'deepwiki generate'.",
         )
         return
 
@@ -35,7 +36,7 @@ def export(format: str, output: str):
 
     if not cache_files:
         click.echo(
-            "No cached wikis found. Generate a wiki first using 'deepwiki generate'."
+            "No cached wikis found. Generate a wiki first using 'deepwiki generate'.",
         )
         return
 
@@ -61,7 +62,7 @@ def export(format: str, output: str):
                     "language": meta["language"],
                     "version": meta["version"],
                     "path": cache_file,
-                }
+                },
             )
         except Exception:
             continue
@@ -83,7 +84,7 @@ def export(format: str, output: str):
 
     # Load the wiki cache
     try:
-        with open(selected_wiki["path"], "r") as f:
+        with open(selected_wiki["path"]) as f:
             cache_data = json.load(f)
     except Exception as e:
         click.echo(f"Error loading wiki cache: {e}", err=True)
@@ -99,7 +100,7 @@ def export(format: str, output: str):
 
     # Get repo URL
     repo_url = ""
-    if "repo" in cache_data and cache_data["repo"]:
+    if cache_data.get("repo"):
         repo_info = cache_data["repo"]
         if "repoUrl" in repo_info:
             repo_url = repo_info["repoUrl"]
@@ -118,15 +119,15 @@ def export(format: str, output: str):
                     title=page_content.get("title", page_data.get("title", "")),
                     content=page_content.get("content", ""),
                     filePaths=page_content.get(
-                        "filePaths", page_data.get("filePaths", [])
+                        "filePaths", page_data.get("filePaths", []),
                     ),
                     importance=page_content.get(
-                        "importance", page_data.get("importance", "medium")
+                        "importance", page_data.get("importance", "medium"),
                     ),
                     relatedPages=page_content.get(
-                        "relatedPages", page_data.get("relatedPages", [])
+                        "relatedPages", page_data.get("relatedPages", []),
                     ),
-                )
+                ),
             )
 
     if not pages_to_export:

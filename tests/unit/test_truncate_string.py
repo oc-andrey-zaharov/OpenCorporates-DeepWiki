@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""
-Unit tests for the truncate_string function.
+"""Unit tests for the truncate_string function.
 
 Run this script to test the truncate_string functionality.
 Usage: python test_truncate_string.py
 Or use pytest: pytest tests/unit/test_truncate_string.py
 """
 
+import importlib.util
 import os
 import sys
-import importlib.util
 from unittest.mock import MagicMock
 
 # Mock problematic imports before importing utils
@@ -23,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Import utils module directly without going through package __init__
 utils_path = os.path.join(
-    os.path.dirname(__file__), "..", "..", "api", "cli", "utils.py"
+    os.path.dirname(__file__), "..", "..", "api", "cli", "utils.py",
 )
 spec = importlib.util.spec_from_file_location("api.cli.utils", utils_path)
 utils_module = importlib.util.module_from_spec(spec)
@@ -196,7 +195,7 @@ class TestTruncateString:
         suffix = "..."
         test_string = "a" * 100  # Long string
 
-        for max_len in range(0, 10):
+        for max_len in range(10):
             result = truncate_string(test_string, max_length=max_len, suffix=suffix)
             assert len(result) <= max_len, (
                 f"Result length {len(result)} exceeds max_length {max_len}"
@@ -205,7 +204,7 @@ class TestTruncateString:
         # Test with various suffix lengths
         for suffix_len in [1, 2, 3, 5, 10]:
             suffix = "." * suffix_len
-            for max_len in range(0, 15):
+            for max_len in range(15):
                 result = truncate_string(test_string, max_length=max_len, suffix=suffix)
                 assert len(result) <= max_len, (
                     f"Result length {len(result)} exceeds max_length {max_len} "

@@ -1,5 +1,4 @@
-"""
-Utility functions for DeepWiki.
+"""Utility functions for DeepWiki.
 
 This package contains utility modules for various operations.
 """

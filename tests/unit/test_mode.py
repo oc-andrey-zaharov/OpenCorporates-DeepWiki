@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""
-Unit tests for api/utils/mode.py
+"""Unit tests for api/utils/mode.py
 
 Tests mode detection and server health checking functions.
 """
 
 import sys
-from unittest.mock import patch, MagicMock
-import pytest
-from requests.exceptions import RequestException, Timeout
 
 # Add the parent directory to the path
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from requests.exceptions import RequestException, Timeout
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -151,7 +151,7 @@ class TestCheckServerHealthWithRetry:
     @patch("api.utils.mode.get_server_url")
     @patch("api.utils.mode.check_server_health")
     def test_check_server_health_with_retry_success_first_attempt(
-        self, mock_check_health, mock_get_url
+        self, mock_check_health, mock_get_url,
     ):
         """Test successful health check on first attempt"""
         mock_get_url.return_value = "http://localhost:8001"
@@ -165,7 +165,7 @@ class TestCheckServerHealthWithRetry:
     @patch("api.utils.mode.check_server_health")
     @patch("api.utils.mode.time.sleep")
     def test_check_server_health_with_retry_success_after_retries(
-        self, mock_sleep, mock_check_health, mock_get_url
+        self, mock_sleep, mock_check_health, mock_get_url,
     ):
         """Test successful health check after retries"""
         mock_get_url.return_value = "http://localhost:8001"
@@ -180,7 +180,7 @@ class TestCheckServerHealthWithRetry:
     @patch("api.utils.mode.check_server_health")
     @patch("api.utils.mode.time.sleep")
     def test_check_server_health_with_retry_all_fail(
-        self, mock_sleep, mock_check_health, mock_get_url
+        self, mock_sleep, mock_check_health, mock_get_url,
     ):
         """Test health check failure after all retries"""
         mock_get_url.return_value = "http://localhost:8001"
@@ -195,7 +195,7 @@ class TestCheckServerHealthWithRetry:
     @patch("api.utils.mode.check_server_health")
     @patch("api.utils.mode.time.sleep")
     def test_check_server_health_with_retry_exponential_backoff(
-        self, mock_sleep, mock_check_health, mock_get_url
+        self, mock_sleep, mock_check_health, mock_get_url,
     ):
         """Test exponential backoff timing"""
         mock_get_url.return_value = "http://localhost:8001"

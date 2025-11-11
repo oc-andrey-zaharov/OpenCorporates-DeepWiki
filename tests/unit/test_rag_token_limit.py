@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Unit tests for RAG token limit validation and truncation.
+"""Unit tests for RAG token limit validation and truncation.
 
 Tests the MAX_INPUT_TOKENS constant usage and query truncation functionality.
 """
@@ -15,7 +14,7 @@ sys.path.insert(0, str(project_root))
 import logging
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 

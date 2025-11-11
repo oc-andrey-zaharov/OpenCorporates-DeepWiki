@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""
-Unit tests for api/cli/config.py
+"""Unit tests for api/cli/config.py
 
 Tests configuration management functions including loading, saving, and accessing config values.
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import MagicMock, mock_open, patch
+
 import pytest
 
 # Add the parent directory to the path
@@ -126,7 +126,7 @@ class TestLoadConfig:
     def test_load_config_file_error(self, mock_open, mock_config_file):
         """Test loading config when file read fails"""
         mock_config_file.exists.return_value = True
-        mock_open.side_effect = IOError("Permission denied")
+        mock_open.side_effect = OSError("Permission denied")
 
         result = config.load_config()
         assert result == config.DEFAULT_CONFIG.copy()
@@ -160,7 +160,7 @@ class TestSaveConfig:
     @patch("builtins.open")
     def test_save_config_error(self, mock_open, mock_config_file, mock_ensure_dir):
         """Test config save with error"""
-        mock_open.side_effect = IOError("Permission denied")
+        mock_open.side_effect = OSError("Permission denied")
 
         with pytest.raises(IOError):
             config.save_config({"test": "value"})
@@ -182,7 +182,7 @@ class TestGetConfigValue:
     def test_get_config_value_nested_key(self, mock_load_config):
         """Test getting nested config value"""
         mock_load_config.return_value = {
-            "file_filters": {"excluded_dirs": ["test"], "excluded_files": []}
+            "file_filters": {"excluded_dirs": ["test"], "excluded_files": []},
         }
         result = config.get_config_value("file_filters.excluded_dirs")
         assert result == ["test"]
@@ -209,7 +209,7 @@ class TestGetConfigValue:
         """Test getting nested key when intermediate is not a dict"""
         mock_load_config.return_value = {"file_filters": "not_a_dict"}
         result = config.get_config_value(
-            "file_filters.excluded_dirs", default="default"
+            "file_filters.excluded_dirs", default="default",
         )
         # When intermediate is not a dict, isinstance(value, dict) is False
         # so it should return default immediately
@@ -282,7 +282,7 @@ class TestGetProviderModels:
             "providers": {
                 "google": {"models": {"model1": {}, "model2": {}}},
                 "openai": {"models": {"model3": {}}},
-            }
+            },
         },
     )
     def test_get_provider_models(self):

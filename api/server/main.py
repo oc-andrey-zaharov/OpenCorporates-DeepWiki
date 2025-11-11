@@ -1,6 +1,7 @@
+import logging
 import os
 import sys
-import logging
+
 from dotenv import load_dotenv
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +41,7 @@ if missing_vars:
 
 # Configure Google Generative AI
 import google.generativeai as genai
+
 from api.config import GOOGLE_API_KEY
 
 if GOOGLE_API_KEY:

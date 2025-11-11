@@ -1,5 +1,4 @@
-"""
-Model client implementations for various AI providers.
+"""Model client implementations for various AI providers.
 """
 
 from api.clients.bedrock_client import BedrockClient

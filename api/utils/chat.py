@@ -1,28 +1,27 @@
-"""
-Chat completion convenience helpers.
+"""Chat completion convenience helpers.
 
 The CLI relies on synchronous streaming responses, so this module provides a thin
 wrapper around :func:`api.core.chat.generate_chat_completion_core`.
 """
 
-from typing import Dict, Generator, List, Optional
+from collections.abc import Generator
 
 from api.core.chat import generate_chat_completion_core
 
 
 def generate_chat_completion_streaming(
     repo_url: str,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     provider: str,
     model: str,
     repo_type: str = "github",
-    token: Optional[str] = None,
-    excluded_dirs: Optional[List[str]] = None,
-    excluded_files: Optional[List[str]] = None,
-    included_dirs: Optional[List[str]] = None,
-    included_files: Optional[List[str]] = None,
-    file_path: Optional[str] = None,
-) -> Generator[str, None, None]:
+    token: str | None = None,
+    excluded_dirs: list[str] | None = None,
+    excluded_files: list[str] | None = None,
+    included_dirs: list[str] | None = None,
+    included_files: list[str] | None = None,
+    file_path: str | None = None,
+) -> Generator[str]:
     """Yield completion chunks for the given prompt."""
     yield from generate_chat_completion_core(
         repo_url=repo_url,

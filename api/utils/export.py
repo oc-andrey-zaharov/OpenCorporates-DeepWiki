@@ -1,19 +1,16 @@
-"""
-Export utilities for DeepWiki.
+"""Export utilities for DeepWiki.
 
 This module contains functions for exporting wiki content to various formats.
 """
 
 import json
 from datetime import datetime
-from typing import List
 
 from api.models import WikiPage
 
 
-def generate_markdown_export(repo_url: str, pages: List[WikiPage]) -> str:
-    """
-    Generate Markdown export of wiki pages.
+def generate_markdown_export(repo_url: str, pages: list[WikiPage]) -> str:
+    """Generate Markdown export of wiki pages.
 
     Args:
         repo_url: The repository URL
@@ -57,9 +54,8 @@ def generate_markdown_export(repo_url: str, pages: List[WikiPage]) -> str:
     return markdown
 
 
-def generate_json_export(repo_url: str, pages: List[WikiPage]) -> str:
-    """
-    Generate JSON export of wiki pages.
+def generate_json_export(repo_url: str, pages: list[WikiPage]) -> str:
+    """Generate JSON export of wiki pages.
 
     Args:
         repo_url: The repository URL
@@ -82,4 +78,4 @@ def generate_json_export(repo_url: str, pages: List[WikiPage]) -> str:
     return json.dumps(export_data, indent=2)
 
 
-__all__ = ["generate_markdown_export", "generate_json_export"]
+__all__ = ["generate_json_export", "generate_markdown_export"]

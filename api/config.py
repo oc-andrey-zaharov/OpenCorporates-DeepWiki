@@ -1,17 +1,18 @@
-import os
 import json
 import logging
+import os
 import re
 from pathlib import Path
-from typing import List, Union, Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from api.clients.openai_client import OpenAIClient
-from api.clients.openrouter_client import OpenRouterClient
+from adalflow import GoogleGenAIClient, OllamaClient
+
 from api.clients.bedrock_client import BedrockClient
 from api.clients.google_embedder_client import GoogleEmbedderClient
-from adalflow import GoogleGenAIClient, OllamaClient
+from api.clients.openai_client import OpenAIClient
+from api.clients.openrouter_client import OpenRouterClient
 
 # Get API keys from environment variables
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -59,10 +60,9 @@ CLIENT_CLASSES = {
 
 
 def replace_env_placeholders(
-    config: Union[Dict[str, Any], List[Any], str, Any],
-) -> Union[Dict[str, Any], List[Any], str, Any]:
-    """
-    Recursively replace placeholders like "${ENV_VAR}" in string values
+    config: dict[str, Any] | list[Any] | str | Any,
+) -> dict[str, Any] | list[Any] | str | Any:
+    """Recursively replace placeholders like "${ENV_VAR}" in string values
     within a nested configuration structure (dicts, lists, strings)
     with environment variable values. Logs a warning if a placeholder is not found.
     """
@@ -75,20 +75,19 @@ def replace_env_placeholders(
         if env_var_value is None:
             logger.warning(
                 f"Environment variable placeholder '{original_placeholder}' was not found in the environment. "
-                f"The placeholder string will be used as is."
+                f"The placeholder string will be used as is.",
             )
             return original_placeholder
         return env_var_value
 
     if isinstance(config, dict):
         return {k: replace_env_placeholders(v) for k, v in config.items()}
-    elif isinstance(config, list):
+    if isinstance(config, list):
         return [replace_env_placeholders(item) for item in config]
-    elif isinstance(config, str):
+    if isinstance(config, str):
         return pattern.sub(replacer, config)
-    else:
-        # Handles numbers, booleans, None, etc.
-        return config
+    # Handles numbers, booleans, None, etc.
+    return config
 
 
 # Load JSON configuration file
@@ -107,12 +106,12 @@ def load_json_config(filename):
             logger.warning(f"Configuration file {config_path} does not exist")
             return {}
 
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
             config = replace_env_placeholders(config)
             return config
     except Exception as e:
-        logger.error(f"Error loading configuration file {filename}: {str(e)}")
+        logger.error(f"Error loading configuration file {filename}: {e!s}")
         return {}
 
 
@@ -165,8 +164,7 @@ def load_embedder_config():
 
 
 def get_embedder_config():
-    """
-    Get the current embedder configuration based on DEEPWIKI_EMBEDDER_TYPE.
+    """Get the current embedder configuration based on DEEPWIKI_EMBEDDER_TYPE.
 
     Returns:
         dict: The embedder configuration with model_client resolved
@@ -174,15 +172,13 @@ def get_embedder_config():
     embedder_type = EMBEDDER_TYPE
     if embedder_type == "google" and "embedder_google" in configs:
         return configs.get("embedder_google", {})
-    elif embedder_type == "ollama" and "embedder_ollama" in configs:
+    if embedder_type == "ollama" and "embedder_ollama" in configs:
         return configs.get("embedder_ollama", {})
-    else:
-        return configs.get("embedder", {})
+    return configs.get("embedder", {})
 
 
 def is_ollama_embedder():
-    """
-    Check if the current embedder configuration uses OllamaClient.
+    """Check if the current embedder configuration uses OllamaClient.
 
     Returns:
         bool: True if using OllamaClient, False otherwise
@@ -207,8 +203,7 @@ def is_ollama_embedder():
 
 
 def is_google_embedder():
-    """
-    Check if the current embedder configuration uses GoogleEmbedderClient.
+    """Check if the current embedder configuration uses GoogleEmbedderClient.
 
     Returns:
         bool: True if using GoogleEmbedderClient, False otherwise
@@ -233,18 +228,16 @@ def is_google_embedder():
 
 
 def get_embedder_type():
-    """
-    Get the current embedder type based on configuration.
+    """Get the current embedder type based on configuration.
 
     Returns:
         str: 'ollama', 'google', or 'openai' (default)
     """
     if is_ollama_embedder():
         return "ollama"
-    elif is_google_embedder():
+    if is_google_embedder():
         return "google"
-    else:
-        return "openai"
+    return "openai"
 
 
 # Load repository and file filters configuration
@@ -253,7 +246,7 @@ def load_repo_config():
 
 
 # Default excluded directories and files
-DEFAULT_EXCLUDED_DIRS: List[str] = [
+DEFAULT_EXCLUDED_DIRS: list[str] = [
     # Virtual environments and package managers
     "./.venv/",
     "./venv/",
@@ -298,7 +291,7 @@ DEFAULT_EXCLUDED_DIRS: List[str] = [
     "./temp/",
 ]
 
-DEFAULT_EXCLUDED_FILES: List[str] = [
+DEFAULT_EXCLUDED_FILES: list[str] = [
     "yarn.lock",
     "pnpm-lock.yaml",
     "npm-shrinkwrap.json",
@@ -444,8 +437,7 @@ configs["lang_config"] = {"supported_languages": {"en": "English"}, "default": "
 
 
 def get_model_config(provider="google", model=None):
-    """
-    Get configuration for the specified provider and model
+    """Get configuration for the specified provider and model
 
     Parameters:
         provider (str): Model provider ('google', 'openai', 'openrouter', 'ollama', 'bedrock')

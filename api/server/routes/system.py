@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List
 
 from fastapi import APIRouter, Request
 
@@ -23,7 +22,7 @@ async def health_check():
 @router.get("/")
 async def root(request: Request):
     """Return a friendly welcome message and list available endpoints."""
-    endpoints: Dict[str, List[str]] = {}
+    endpoints: dict[str, list[str]] = {}
     for route in request.app.routes:
         if not getattr(route, "methods", None) or not getattr(route, "path", None):
             continue

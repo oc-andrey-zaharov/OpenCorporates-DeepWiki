@@ -1,7 +1,7 @@
 import logging
 import os
-from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 
 class IgnoreLogChangeDetectedFilter(logging.Filter):
@@ -21,8 +21,7 @@ class IgnoreMLflowWarningFilter(logging.Filter):
 
 
 def setup_logging(format: str = None):
-    """
-    Configure logging for the application with log rotation.
+    """Configure logging for the application with log rotation.
 
     Environment variables:
         LOG_LEVEL: Log level (default: INFO)
@@ -51,7 +50,7 @@ def setup_logging(format: str = None):
     resolved_path = log_file_path.resolve()
     if not str(resolved_path).startswith(str(log_dir_resolved) + os.sep):
         raise ValueError(
-            f"LOG_FILE_PATH '{log_file_path}' is outside the trusted log directory '{log_dir_resolved}'"
+            f"LOG_FILE_PATH '{log_file_path}' is outside the trusted log directory '{log_dir_resolved}'",
         )
 
     # Ensure parent directories exist
@@ -78,7 +77,7 @@ def setup_logging(format: str = None):
 
     # Create handlers
     file_handler = RotatingFileHandler(
-        resolved_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+        resolved_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8",
     )
     console_handler = logging.StreamHandler()
 
@@ -99,7 +98,7 @@ def setup_logging(format: str = None):
 
     # Apply logging configuration
     logging.basicConfig(
-        level=log_level, handlers=[file_handler, console_handler], force=True
+        level=log_level, handlers=[file_handler, console_handler], force=True,
     )
 
     # Log configuration info
@@ -107,5 +106,5 @@ def setup_logging(format: str = None):
     logger.debug(
         f"Logging configured: level={log_level_str}, "
         f"file={resolved_path}, max_size={max_bytes} bytes, "
-        f"backup_count={backup_count}"
+        f"backup_count={backup_count}",
     )

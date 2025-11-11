@@ -6,7 +6,7 @@ import fnmatch
 import logging
 import os
 import subprocess
-from typing import Iterable, List, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -20,16 +20,16 @@ def is_git_repo(path: str) -> bool:
     return os.path.exists(git_dir) or os.path.isdir(git_dir)
 
 
-def _load_gitignore_patterns(repo_path: str) -> List[str]:
+def _load_gitignore_patterns(repo_path: str) -> list[str]:
     """Load raw patterns from the repo's .gitignore file (if present)."""
-    patterns: List[str] = []
+    patterns: list[str] = []
     gitignore_path = os.path.join(repo_path, ".gitignore")
 
     if not os.path.exists(gitignore_path):
         return patterns
 
     try:
-        with open(gitignore_path, "r", encoding="utf-8", errors="ignore") as handle:
+        with open(gitignore_path, encoding="utf-8", errors="ignore") as handle:
             for line in handle:
                 entry = line.strip()
                 if entry and not entry.startswith("#"):
@@ -41,7 +41,7 @@ def _load_gitignore_patterns(repo_path: str) -> List[str]:
 
 
 def _matches_gitignore_pattern(
-    file_path: str, patterns: Sequence[str], repo_path: str
+    file_path: str, patterns: Sequence[str], repo_path: str,
 ) -> bool:
     """Return True if ``file_path`` matches any of the provided .gitignore rules."""
     rel_path = os.path.relpath(file_path, repo_path)
@@ -60,7 +60,7 @@ def _matches_gitignore_pattern(
         if normalized_pattern.startswith("/"):
             normalized_pattern = normalized_pattern[1:]
             if fnmatch.fnmatch(rel_path, normalized_pattern) or fnmatch.fnmatch(
-                rel_parts[0], normalized_pattern
+                rel_parts[0], normalized_pattern,
             ):
                 return True
             continue
@@ -81,7 +81,7 @@ def _matches_gitignore_pattern(
             continue
 
         if fnmatch.fnmatch(rel_path, normalized_pattern) or fnmatch.fnmatch(
-            os.path.basename(rel_path), normalized_pattern
+            os.path.basename(rel_path), normalized_pattern,
         ):
             return True
 
@@ -89,8 +89,8 @@ def _matches_gitignore_pattern(
 
 
 def _collect_files_with_git(
-    repo_path: str, *, excluded_dirs: Iterable[str]
-) -> Optional[List[str]]:
+    repo_path: str, *, excluded_dirs: Iterable[str],
+) -> list[str] | None:
     """Prefer ``git ls-files`` for speed/accuracy whenever possible."""
     try:
         result = subprocess.run(
@@ -109,7 +109,7 @@ def _collect_files_with_git(
         logger.warning("git ls-files failed (%s); falling back to os.walk", exc)
         return None
 
-    files: List[str] = []
+    files: list[str] = []
     for line in result.stdout.splitlines():
         relative = line.strip()
         if not relative:
@@ -125,10 +125,10 @@ def _collect_files_with_git(
 
 
 def _collect_files_with_walk(
-    repo_path: str, *, excluded_dirs: Iterable[str]
-) -> List[str]:
+    repo_path: str, *, excluded_dirs: Iterable[str],
+) -> list[str]:
     """Fallback collector that walks the filesystem while honoring .gitignore."""
-    files: List[str] = []
+    files: list[str] = []
     patterns = _load_gitignore_patterns(repo_path)
 
     for root, dirs, filenames in os.walk(repo_path):
@@ -156,10 +156,9 @@ def _collect_files_with_walk(
 def collect_repository_files(
     repo_path: str,
     *,
-    excluded_dirs: Optional[Sequence[str]] = None,
-) -> List[str]:
-    """
-    Collect files for ``repo_path`` using git metadata (when available) or a walk.
+    excluded_dirs: Sequence[str] | None = None,
+) -> list[str]:
+    """Collect files for ``repo_path`` using git metadata (when available) or a walk.
 
     Args:
         repo_path: location of the repository.
@@ -186,4 +185,4 @@ def collect_repository_files(
     return files
 
 
-__all__ = ["collect_repository_files", "is_git_repo", "DEFAULT_EXCLUDED_DIRS"]
+__all__ = ["DEFAULT_EXCLUDED_DIRS", "collect_repository_files", "is_git_repo"]

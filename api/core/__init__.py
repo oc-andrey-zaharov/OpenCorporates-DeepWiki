@@ -1,5 +1,4 @@
-"""
-Core business logic module for DeepWiki.
+"""Core business logic module for DeepWiki.
 
 This module contains the core functionality that can be used by both
 the CLI (standalone mode) and the FastAPI server.

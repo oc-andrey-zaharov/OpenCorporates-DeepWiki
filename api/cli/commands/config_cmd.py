@@ -1,15 +1,16 @@
-"""
-Configuration management commands.
+"""Configuration management commands.
 """
 
-import click
 import json
-from api.cli.config import load_config, set_config_value, CONFIG_FILE
+
+import click
+
 from api.cli.completion import complete_config_keys
+from api.cli.config import CONFIG_FILE, load_config, set_config_value
 from api.utils.mode import (
-    is_server_mode,
-    get_server_url,
     check_server_health,
+    get_server_url,
+    is_server_mode,
     should_fallback,
 )
 
@@ -17,7 +18,6 @@ from api.utils.mode import (
 @click.group(name="config")
 def config():
     """Manage DeepWiki CLI configuration."""
-    pass
 
 
 @config.command(name="show")
@@ -49,18 +49,18 @@ def show_config():
                     try:
                         if should_fallback():
                             click.echo(
-                                "Fallback: ✓ Auto-fallback enabled (will use standalone)"
+                                "Fallback: ✓ Auto-fallback enabled (will use standalone)",
                             )
                         else:
                             click.echo("Fallback: ✗ Auto-fallback disabled")
                     except Exception as e:
                         click.echo(
-                            f"Fallback: ✗ Error checking fallback: {e}", err=True
+                            f"Fallback: ✗ Error checking fallback: {e}", err=True,
                         )
             except Exception as e:
                 click.echo(f"Status: ✗ Error checking server health: {e}", err=True)
                 click.echo(
-                    "Note: Server health check failed. Configuration may still be valid."
+                    "Note: Server health check failed. Configuration may still be valid.",
                 )
         else:
             click.echo("Mode: Standalone")
@@ -76,8 +76,7 @@ def show_config():
 @click.argument("key", shell_complete=complete_config_keys)
 @click.argument("value")
 def set_config(key: str, value: str):
-    """
-    Set a configuration value.
+    """Set a configuration value.
 
     KEY: Configuration key (e.g., 'default_provider' or 'file_filters.excluded_dirs')
     VALUE: Value to set (will be parsed as JSON if possible)

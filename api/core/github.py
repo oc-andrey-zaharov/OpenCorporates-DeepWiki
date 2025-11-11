@@ -1,5 +1,4 @@
-"""
-GitHub API core functionality.
+"""GitHub API core functionality.
 
 This module provides synchronous GitHub repository structure fetching
 that can be used by both CLI and server.
@@ -7,7 +6,6 @@ that can be used by both CLI and server.
 
 import base64
 import logging
-from typing import Dict, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -21,11 +19,10 @@ logger = logging.getLogger(__name__)
 def get_github_repo_structure_standalone(
     owner: str,
     repo: str,
-    repo_url: Optional[str] = None,
-    access_token: Optional[str] = None,
-) -> Dict[str, str]:
-    """
-    Get GitHub repository structure (file tree and README) synchronously.
+    repo_url: str | None = None,
+    access_token: str | None = None,
+) -> dict[str, str]:
+    """Get GitHub repository structure (file tree and README) synchronously.
 
     Args:
         owner: Repository owner
@@ -68,14 +65,14 @@ def get_github_repo_structure_standalone(
         logger.info("Using GitHub token for repository access")
     else:
         logger.warning(
-            "No GitHub token provided. Requests may fail for private repositories."
+            "No GitHub token provided. Requests may fail for private repositories.",
         )
 
     # First, try to get the default branch from the repository info
     default_branch = "main"
     try:
         repo_info_response = requests.get(
-            f"{api_base}/repos/{owner}/{repo}", headers=headers, timeout=30
+            f"{api_base}/repos/{owner}/{repo}", headers=headers, timeout=30,
         )
 
         if repo_info_response.ok:
@@ -84,7 +81,7 @@ def get_github_repo_structure_standalone(
             logger.info(f"Found default branch: {default_branch}")
         else:
             logger.warning(
-                f"Could not fetch repository info: {repo_info_response.status_code}"
+                f"Could not fetch repository info: {repo_info_response.status_code}",
             )
     except Exception as e:
         logger.warning(f"Error fetching repository info: {e}")
@@ -93,7 +90,7 @@ def get_github_repo_structure_standalone(
     tree_data = None
     branches_to_try = [default_branch, "main", "master"]
     branches_to_try = list(
-        dict.fromkeys(branches_to_try)
+        dict.fromkeys(branches_to_try),
     )  # Remove duplicates while preserving order
 
     for branch in branches_to_try:
@@ -107,11 +104,10 @@ def get_github_repo_structure_standalone(
                 tree_data = response.json()
                 logger.info("Successfully fetched repository structure")
                 break
-            else:
-                error_data = response.text
-                logger.warning(
-                    f"Error fetching branch {branch}: {response.status_code} - {error_data}"
-                )
+            error_data = response.text
+            logger.warning(
+                f"Error fetching branch {branch}: {response.status_code} - {error_data}",
+            )
         except RequestException as e:
             logger.error(f"Network error fetching branch {branch}: {e}")
 
@@ -139,7 +135,7 @@ def get_github_repo_structure_standalone(
     readme_content = ""
     try:
         readme_response = requests.get(
-            f"{api_base}/repos/{owner}/{repo}/readme", headers=headers, timeout=30
+            f"{api_base}/repos/{owner}/{repo}/readme", headers=headers, timeout=30,
         )
 
         if readme_response.ok:
@@ -148,7 +144,7 @@ def get_github_repo_structure_standalone(
             logger.info("Successfully fetched README.md")
         else:
             logger.warning(
-                f"Could not fetch README.md, status: {readme_response.status_code}"
+                f"Could not fetch README.md, status: {readme_response.status_code}",
             )
     except Exception as e:
         logger.warning(f"Error fetching README.md: {e}")

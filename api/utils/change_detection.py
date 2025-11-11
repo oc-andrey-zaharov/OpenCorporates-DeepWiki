@@ -8,7 +8,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from api.models import (
     RepoSnapshot,
@@ -20,9 +19,8 @@ from api.models import (
 logger = logging.getLogger(__name__)
 
 
-def _hash_file(path: str, chunk_size: int = 65536) -> Optional[str]:
+def _hash_file(path: str, chunk_size: int = 65536) -> str | None:
     """Compute a sha256 hash for a file, handling errors gracefully."""
-
     try:
         digest = hashlib.sha256()
         with open(path, "rb") as handle:
@@ -37,10 +35,9 @@ def _hash_file(path: str, chunk_size: int = 65536) -> Optional[str]:
         return None
 
 
-def build_snapshot_from_local(repo_path: str, files: List[str]) -> RepoSnapshot:
+def build_snapshot_from_local(repo_path: str, files: list[str]) -> RepoSnapshot:
     """Create a repository snapshot from local files."""
-
-    snapshot_files: Dict[str, RepoSnapshotFile] = {}
+    snapshot_files: dict[str, RepoSnapshotFile] = {}
     for absolute_path in files:
         try:
             rel_path = os.path.relpath(absolute_path, repo_path)
@@ -69,12 +66,11 @@ def build_snapshot_from_local(repo_path: str, files: List[str]) -> RepoSnapshot:
 
 
 def build_snapshot_from_tree(
-    tree_entries: Optional[List[Dict[str, str]]],
-    reference: Optional[str] = None,
+    tree_entries: list[dict[str, str]] | None,
+    reference: str | None = None,
 ) -> RepoSnapshot:
     """Create a snapshot from GitHub tree metadata."""
-
-    snapshot_files: Dict[str, RepoSnapshotFile] = {}
+    snapshot_files: dict[str, RepoSnapshotFile] = {}
     if tree_entries:
         for entry in tree_entries:
             path = entry.get("path")
@@ -94,9 +90,8 @@ def build_snapshot_from_tree(
     )
 
 
-def load_existing_cache(cache_file: Path) -> Optional[WikiCacheData]:
+def load_existing_cache(cache_file: Path) -> WikiCacheData | None:
     """Load cache data from disk safely."""
-
     if not cache_file or not cache_file.exists():
         return None
 
@@ -128,12 +123,11 @@ def _file_changed(previous: RepoSnapshotFile, current: RepoSnapshotFile) -> bool
 
 
 def detect_repo_changes(
-    repo_path: Optional[str],
-    existing_cache: Optional[WikiCacheData],
-    current_snapshot: Optional[RepoSnapshot],
-) -> Dict[str, List[str]]:
+    repo_path: str | None,
+    existing_cache: WikiCacheData | None,
+    current_snapshot: RepoSnapshot | None,
+) -> dict[str, list[str]]:
     """Compare snapshots and return change summary."""
-
     summary = {
         "changed_files": [],
         "new_files": [],
@@ -171,16 +165,15 @@ def detect_repo_changes(
 
 
 def find_affected_pages(
-    changed_files: List[str],
-    wiki_structure: Optional[WikiStructureModel],
-) -> List[str]:
+    changed_files: list[str],
+    wiki_structure: WikiStructureModel | None,
+) -> list[str]:
     """Return page IDs whose file mappings intersect with changed files."""
-
     if not changed_files or not wiki_structure:
         return []
 
     changed_set = {path.strip() for path in changed_files if path}
-    affected: List[str] = []
+    affected: list[str] = []
 
     for page in wiki_structure.pages:
         page_files = {fp.strip() for fp in page.filePaths}

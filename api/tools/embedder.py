@@ -16,9 +16,9 @@ def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = Fals
     """
     # Determine which embedder config to use
     if embedder_type:
-        if embedder_type == 'ollama':
+        if embedder_type == "ollama":
             embedder_config = configs["embedder_ollama"]
-        elif embedder_type == 'google':
+        elif embedder_type == "google":
             embedder_config = configs["embedder_google"]
         else:  # default to openai
             embedder_config = configs["embedder"]
@@ -29,9 +29,9 @@ def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = Fals
     else:
         # Auto-detect based on current configuration
         current_type = get_embedder_type()
-        if current_type == 'ollama':
+        if current_type == "ollama":
             embedder_config = configs["embedder_ollama"]
-        elif current_type == 'google':
+        elif current_type == "google":
             embedder_config = configs["embedder_google"]
         else:
             embedder_config = configs["embedder"]
@@ -42,12 +42,12 @@ def get_embedder(is_local_ollama: bool = False, use_google_embedder: bool = Fals
         model_client = model_client_class(**embedder_config["initialize_kwargs"])
     else:
         model_client = model_client_class()
-    
+
     # Create embedder with basic parameters
     embedder_kwargs = {"model_client": model_client, "model_kwargs": embedder_config["model_kwargs"]}
-    
+
     embedder = adal.Embedder(**embedder_kwargs)
-    
+
     # Set batch_size as an attribute if available (not a constructor parameter)
     if "batch_size" in embedder_config:
         embedder.batch_size = embedder_config["batch_size"]

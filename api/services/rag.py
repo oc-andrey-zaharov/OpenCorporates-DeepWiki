@@ -1,13 +1,13 @@
 import logging
 import weakref
 from dataclasses import dataclass
-from typing import List, Dict
 from uuid import uuid4
 
 import adalflow as adal
 
+from api.prompts import RAG_SYSTEM_PROMPT as system_prompt
+from api.prompts import RAG_TEMPLATE
 from api.tools.embedder import get_embedder
-from api.prompts import RAG_SYSTEM_PROMPT as system_prompt, RAG_TEMPLATE
 
 
 # Create our own implementation of the conversation classes
@@ -43,6 +43,7 @@ class CustomConversation:
 
 # Import other adalflow components
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
+
 from api.config import configs
 from api.services.data_pipeline import DatabaseManager, count_tokens
 
@@ -61,7 +62,7 @@ class Memory(adal.core.component.DataComponent):
         # Use our custom implementation instead of the original Conversation class
         self.current_conversation = CustomConversation()
 
-    def call(self) -> Dict:
+    def call(self) -> dict:
         """Return the conversation history as a dictionary."""
         all_dialog_turns = {}
         try:
@@ -69,17 +70,17 @@ class Memory(adal.core.component.DataComponent):
             if hasattr(self.current_conversation, "dialog_turns"):
                 if self.current_conversation.dialog_turns:
                     logger.info(
-                        f"Memory content: {len(self.current_conversation.dialog_turns)} turns"
+                        f"Memory content: {len(self.current_conversation.dialog_turns)} turns",
                     )
                     for i, turn in enumerate(self.current_conversation.dialog_turns):
                         if hasattr(turn, "id") and turn.id is not None:
                             all_dialog_turns[turn.id] = turn
                             logger.info(
-                                f"Added turn {i + 1} with ID {turn.id} to memory"
+                                f"Added turn {i + 1} with ID {turn.id} to memory",
                             )
                         else:
                             logger.warning(
-                                f"Skipping invalid turn object in memory: {turn}"
+                                f"Skipping invalid turn object in memory: {turn}",
                             )
                 else:
                     logger.info("Dialog turns list exists but is empty")
@@ -88,20 +89,19 @@ class Memory(adal.core.component.DataComponent):
                 # Try to initialize it
                 self.current_conversation.dialog_turns = []
         except Exception as e:
-            logger.error(f"Error accessing dialog turns: {str(e)}")
+            logger.error(f"Error accessing dialog turns: {e!s}")
             # Try to recover
             try:
                 self.current_conversation = CustomConversation()
                 logger.info("Recovered by creating new conversation")
             except Exception as e2:
-                logger.error(f"Failed to recover: {str(e2)}")
+                logger.error(f"Failed to recover: {e2!s}")
 
         logger.info(f"Returning {len(all_dialog_turns)} dialog turns from memory")
         return all_dialog_turns
 
     def add_dialog_turn(self, user_query: str, assistant_response: str) -> bool:
-        """
-        Add a dialog turn to the conversation history.
+        """Add a dialog turn to the conversation history.
 
         Args:
             user_query: The user's query
@@ -121,7 +121,7 @@ class Memory(adal.core.component.DataComponent):
             # Make sure the current_conversation has the append_dialog_turn method
             if not hasattr(self.current_conversation, "append_dialog_turn"):
                 logger.warning(
-                    "current_conversation does not have append_dialog_turn method, creating new one"
+                    "current_conversation does not have append_dialog_turn method, creating new one",
                 )
                 # Initialize a new conversation if needed
                 self.current_conversation = CustomConversation()
@@ -134,12 +134,12 @@ class Memory(adal.core.component.DataComponent):
             # Safely append the dialog turn
             self.current_conversation.dialog_turns.append(dialog_turn)
             logger.info(
-                f"Successfully added dialog turn, now have {len(self.current_conversation.dialog_turns)} turns"
+                f"Successfully added dialog turn, now have {len(self.current_conversation.dialog_turns)} turns",
             )
             return True
 
         except Exception as e:
-            logger.error(f"Error adding dialog turn: {str(e)}")
+            logger.error(f"Error adding dialog turn: {e!s}")
             # Try to recover by creating a new conversation
             try:
                 self.current_conversation = CustomConversation()
@@ -147,14 +147,14 @@ class Memory(adal.core.component.DataComponent):
                     id=str(uuid4()),
                     user_query=UserQuery(query_str=user_query),
                     assistant_response=AssistantResponse(
-                        response_str=assistant_response
+                        response_str=assistant_response,
                     ),
                 )
                 self.current_conversation.dialog_turns.append(dialog_turn)
                 logger.info("Recovered from error by creating new conversation")
                 return True
             except Exception as e2:
-                logger.error(f"Failed to recover from error: {str(e2)}")
+                logger.error(f"Failed to recover from error: {e2!s}")
                 return False
 
 
@@ -164,12 +164,12 @@ from dataclasses import dataclass, field
 @dataclass
 class RAGAnswer(adal.DataClass):
     rationale: str = field(
-        default="", metadata={"desc": "Chain of thoughts for the answer."}
+        default="", metadata={"desc": "Chain of thoughts for the answer."},
     )
     answer: str = field(
         default="",
         metadata={
-            "desc": "Answer to the user query, formatted in markdown for beautiful rendering with react-markdown. DO NOT include ``` triple backticks fences at the beginning or end of your answer."
+            "desc": "Answer to the user query, formatted in markdown for beautiful rendering with react-markdown. DO NOT include ``` triple backticks fences at the beginning or end of your answer.",
         },
     )
 
@@ -178,11 +178,11 @@ class RAGAnswer(adal.DataClass):
 
 class RAG(adal.Component):
     """RAG with one repo.
-    If you want to load a new repos, call prepare_retriever(repo_url_or_path) first."""
+    If you want to load a new repos, call prepare_retriever(repo_url_or_path) first.
+    """
 
-    def __init__(self, provider="google", model=None, use_s3: bool = False):  # noqa: F841 - use_s3 is kept for compatibility
-        """
-        Initialize the RAG component.
+    def __init__(self, provider="google", model=None, use_s3: bool = False):
+        """Initialize the RAG component.
 
         Args:
             provider: Model provider to use (google, openai, openrouter, ollama)
@@ -212,7 +212,7 @@ class RAG(adal.Component):
                 model_name = embedder_config["model_kwargs"]["model"]
                 if not check_ollama_model_exists(model_name):
                     raise Exception(
-                        f"Ollama model '{model_name}' not found. Please run 'ollama pull {model_name}' to install it."
+                        f"Ollama model '{model_name}' not found. Please run 'ollama pull {model_name}' to install it.",
                     )
 
         # Initialize components
@@ -285,9 +285,8 @@ IMPORTANT FORMATTING RULES:
         self.db_manager = DatabaseManager()
         self.transformed_docs = []
 
-    def _validate_and_filter_embeddings(self, documents: List) -> List:
-        """
-        Validate embeddings and filter out documents with invalid or mismatched embedding sizes.
+    def _validate_and_filter_embeddings(self, documents: list) -> list:
+        """Validate embeddings and filter out documents with invalid or mismatched embedding sizes.
 
         Args:
             documents: List of documents with embeddings
@@ -321,7 +320,7 @@ IMPORTANT FORMATTING RULES:
                     embedding_size = len(doc.vector)
                 else:
                     logger.warning(
-                        f"Document {i} has invalid embedding vector type: {type(doc.vector)}, skipping"
+                        f"Document {i} has invalid embedding vector type: {type(doc.vector)}, skipping",
                     )
                     continue
 
@@ -335,7 +334,7 @@ IMPORTANT FORMATTING RULES:
 
             except Exception as e:
                 logger.warning(
-                    f"Error checking embedding size for document {i}: {str(e)}, skipping"
+                    f"Error checking embedding size for document {i}: {e!s}, skipping",
                 )
                 continue
 
@@ -346,14 +345,14 @@ IMPORTANT FORMATTING RULES:
         # Find the most common embedding size (this should be the correct one)
         target_size = max(embedding_sizes.keys(), key=lambda k: embedding_sizes[k])
         logger.info(
-            f"Target embedding size: {target_size} (found in {embedding_sizes[target_size]} documents)"
+            f"Target embedding size: {target_size} (found in {embedding_sizes[target_size]} documents)",
         )
 
         # Log all embedding sizes found
         for size, count in embedding_sizes.items():
             if size != target_size:
                 logger.warning(
-                    f"Found {count} documents with incorrect embedding size {size}, will be filtered out"
+                    f"Found {count} documents with incorrect embedding size {size}, will be filtered out",
                 )
 
         # Second pass: filter documents with the target embedding size
@@ -391,23 +390,23 @@ IMPORTANT FORMATTING RULES:
                 else:
                     # Log which document is being filtered out
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", f"document_{i}"
+                        "file_path", f"document_{i}",
                     )
                     logger.warning(
-                        f"Filtering out document '{file_path}' due to embedding size mismatch: {embedding_size} != {target_size}"
+                        f"Filtering out document '{file_path}' due to embedding size mismatch: {embedding_size} != {target_size}",
                     )
 
             except Exception as e:
                 file_path = getattr(doc, "meta_data", {}).get(
-                    "file_path", f"document_{i}"
+                    "file_path", f"document_{i}",
                 )
                 logger.warning(
-                    f"Error validating embedding for document '{file_path}': {str(e)}, skipping"
+                    f"Error validating embedding for document '{file_path}': {e!s}, skipping",
                 )
                 continue
 
         logger.info(
-            f"Embedding validation complete: {len(valid_documents)}/{len(documents)} documents have valid embeddings"
+            f"Embedding validation complete: {len(valid_documents)}/{len(documents)} documents have valid embeddings",
         )
 
         if len(valid_documents) == 0:
@@ -415,14 +414,13 @@ IMPORTANT FORMATTING RULES:
         elif len(valid_documents) < len(documents):
             filtered_count = len(documents) - len(valid_documents)
             logger.warning(
-                f"Filtered out {filtered_count} documents due to embedding issues"
+                f"Filtered out {filtered_count} documents due to embedding issues",
             )
 
         return valid_documents
 
     def _truncate_query_by_tokens(self, query: str, max_tokens: int) -> str:
-        """
-        Truncate a query string to fit within the maximum token limit.
+        """Truncate a query string to fit within the maximum token limit.
 
         Uses binary search to efficiently find the truncation point that results
         in exactly max_tokens or fewer tokens.
@@ -479,7 +477,7 @@ IMPORTANT FORMATTING RULES:
         logger.warning(
             f"Query truncated from {token_count} tokens to "
             f"{count_tokens(best_truncated, embedder_type=self.embedder_type)} tokens "
-            f"(limit: {max_tokens} tokens)"
+            f"(limit: {max_tokens} tokens)",
         )
 
         return best_truncated
@@ -489,13 +487,12 @@ IMPORTANT FORMATTING RULES:
         repo_url_or_path: str,
         type: str = "github",
         access_token: str = None,
-        excluded_dirs: List[str] = None,
-        excluded_files: List[str] = None,
-        included_dirs: List[str] = None,
-        included_files: List[str] = None,
+        excluded_dirs: list[str] = None,
+        excluded_files: list[str] = None,
+        included_dirs: list[str] = None,
+        included_files: list[str] = None,
     ):
-        """
-        Prepare the retriever for a repository.
+        """Prepare the retriever for a repository.
         Will load database from local storage if available.
 
         Args:
@@ -528,16 +525,16 @@ IMPORTANT FORMATTING RULES:
 
         # Validate and filter embeddings to ensure consistent sizes
         self.transformed_docs = self._validate_and_filter_embeddings(
-            self.transformed_docs
+            self.transformed_docs,
         )
 
         if not self.transformed_docs:
             raise ValueError(
-                "No valid documents with embeddings found. Cannot create retriever."
+                "No valid documents with embeddings found. Cannot create retriever.",
             )
 
         logger.info(
-            f"Using {len(self.transformed_docs)} documents with valid embeddings for retrieval"
+            f"Using {len(self.transformed_docs)} documents with valid embeddings for retrieval",
         )
 
         try:
@@ -554,10 +551,10 @@ IMPORTANT FORMATTING RULES:
             for doc in self.transformed_docs:
                 if not hasattr(doc, "vector") or doc.vector is None:
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", "unknown"
+                        "file_path", "unknown",
                     )
                     logger.warning(
-                        f"Document '{file_path}' has no vector attribute, skipping"
+                        f"Document '{file_path}' has no vector attribute, skipping",
                     )
                     continue
 
@@ -573,20 +570,20 @@ IMPORTANT FORMATTING RULES:
                         vector_list = list(doc.vector)
                     else:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown"
+                            "file_path", "unknown",
                         )
                         logger.warning(
-                            f"Document '{file_path}' has invalid vector type {type(doc.vector)}, skipping"
+                            f"Document '{file_path}' has invalid vector type {type(doc.vector)}, skipping",
                         )
                         continue
 
                     # Check for empty vectors
                     if len(vector_list) == 0:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown"
+                            "file_path", "unknown",
                         )
                         logger.warning(
-                            f"Document '{file_path}' has empty vector, skipping"
+                            f"Document '{file_path}' has empty vector, skipping",
                         )
                         continue
 
@@ -597,10 +594,10 @@ IMPORTANT FORMATTING RULES:
                     # Verify dimension consistency
                     if len(vector_list) != embedding_dim:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown"
+                            "file_path", "unknown",
                         )
                         logger.warning(
-                            f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping"
+                            f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping",
                         )
                         continue
 
@@ -610,27 +607,27 @@ IMPORTANT FORMATTING RULES:
 
                 except Exception as e:
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", "unknown"
+                        "file_path", "unknown",
                     )
                     logger.warning(
-                        f"Error processing vector for {file_path}: {e}, skipping document"
+                        f"Error processing vector for {file_path}: {e}, skipping document",
                     )
                     continue
 
             # Update transformed_docs to only include valid documents
             if len(valid_docs) < len(self.transformed_docs):
                 logger.info(
-                    f"Filtered {len(self.transformed_docs) - len(valid_docs)} documents with invalid vectors"
+                    f"Filtered {len(self.transformed_docs) - len(valid_docs)} documents with invalid vectors",
                 )
             self.transformed_docs = valid_docs
 
             if not self.transformed_docs:
                 raise ValueError(
-                    "No valid documents with vectors found. Cannot create retriever."
+                    "No valid documents with vectors found. Cannot create retriever.",
                 )
 
             logger.info(
-                f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})"
+                f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})",
             )
 
             num_docs = len(self.transformed_docs)
@@ -640,7 +637,7 @@ IMPORTANT FORMATTING RULES:
             # Log retriever config for debugging
             logger.info(f"Retriever config: {retriever_config}")
             logger.info(
-                f"Creating FAISS retriever with {num_docs} documents (dim={embedding_dim})"
+                f"Creating FAISS retriever with {num_docs} documents (dim={embedding_dim})",
             )
 
             # Extract vectors from documents for FAISSRetriever
@@ -649,7 +646,7 @@ IMPORTANT FORMATTING RULES:
             document_vectors = [doc.vector for doc in self.transformed_docs]
 
             logger.info(
-                f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing"
+                f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing",
             )
 
             # Create FAISSRetriever with list of lists (Python format)
@@ -667,12 +664,12 @@ IMPORTANT FORMATTING RULES:
             # Try to provide more specific error information
             if "All embeddings should be of the same size" in error_msg:
                 logger.error(
-                    "Embedding size validation failed. This suggests there are still inconsistent embedding sizes."
+                    "Embedding size validation failed. This suggests there are still inconsistent embedding sizes.",
                 )
                 # Log embedding sizes for debugging
                 sizes = []
                 for i, doc in enumerate(
-                    self.transformed_docs[:10]
+                    self.transformed_docs[:10],
                 ):  # Check first 10 docs
                     if hasattr(doc, "vector") and doc.vector is not None:
                         try:
@@ -694,9 +691,8 @@ IMPORTANT FORMATTING RULES:
                 logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
             raise
 
-    def call(self, query: str) -> List:
-        """
-        Process a query using RAG.
+    def call(self, query: str) -> list:
+        """Process a query using RAG.
 
         Args:
             query: The user's query
@@ -711,7 +707,7 @@ IMPORTANT FORMATTING RULES:
 
             if query != original_query:
                 logger.info(
-                    f"Query was truncated due to token limit ({MAX_INPUT_TOKENS} tokens)"
+                    f"Query was truncated due to token limit ({MAX_INPUT_TOKENS} tokens)",
                 )
 
             retrieved_documents = self.retriever(query)
@@ -725,11 +721,11 @@ IMPORTANT FORMATTING RULES:
             return retrieved_documents
 
         except Exception as e:
-            logger.error(f"Error in RAG call: {str(e)}")
+            logger.error(f"Error in RAG call: {e!s}")
 
             # Create error response
             # Preserve structured error logging while returning empty results for callers
             logger.debug(
-                "Returning empty document list due to RAG error for query: %s", query
+                "Returning empty document list due to RAG error for query: %s", query,
             )
             return []

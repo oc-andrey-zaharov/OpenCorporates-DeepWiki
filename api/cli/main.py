@@ -1,10 +1,10 @@
-"""
-Main CLI entry point for DeepWiki.
+"""Main CLI entry point for DeepWiki.
 """
 
+import logging
 import os
 import sys
-import logging
+
 import click
 from dotenv import load_dotenv
 
@@ -37,8 +37,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def cli(ctx, verbose):
-    """
-    DeepWiki CLI - Generate comprehensive wikis from code repositories.
+    """DeepWiki CLI - Generate comprehensive wikis from code repositories.
 
     Interactive tool for creating, managing, and exporting documentation
     from GitHub repositories and local codebases.
@@ -73,7 +72,7 @@ def cli(ctx, verbose):
 
 
 # Import commands after the CLI group is defined
-from api.cli.commands import generate, list_wikis, export, config_cmd, delete
+from api.cli.commands import config_cmd, delete, export, generate, list_wikis
 
 cli.add_command(generate.generate)
 cli.add_command(list_wikis.list_wikis)

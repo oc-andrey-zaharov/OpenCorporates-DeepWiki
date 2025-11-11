@@ -1,14 +1,12 @@
-"""
-Utility functions for DeepWiki CLI.
+"""Utility functions for DeepWiki CLI.
 """
 
+import inspect
+import logging
 import os
 import re
-import logging
 import sys
-import inspect
 from pathlib import Path
-from typing import Optional, Tuple, List
 from urllib.parse import urlparse
 
 try:
@@ -21,9 +19,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def validate_github_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
-    """
-    Validate a GitHub repository URL.
+def validate_github_url(url: str) -> tuple[bool, str | None, str | None]:
+    """Validate a GitHub repository URL.
 
     Args:
         url: URL to validate
@@ -53,9 +50,8 @@ def validate_github_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
 
 def validate_github_shorthand(
     shorthand: str,
-) -> Tuple[bool, Optional[str], Optional[str]]:
-    """
-    Validate GitHub shorthand format (owner/repo).
+) -> tuple[bool, str | None, str | None]:
+    """Validate GitHub shorthand format (owner/repo).
 
     Enforces GitHub naming rules:
     - Owner and repo names must start and end with alphanumeric characters
@@ -86,8 +82,7 @@ def validate_github_shorthand(
 
 
 def validate_local_path(path: str) -> bool:
-    """
-    Validate a local file system path.
+    """Validate a local file system path.
 
     Args:
         path: Path to validate
@@ -100,9 +95,8 @@ def validate_local_path(path: str) -> bool:
 
 def parse_repository_input(
     repo_input: str,
-) -> Tuple[str, str, Optional[str], Optional[str]]:
-    """
-    Parse repository input and determine type.
+) -> tuple[str, str, str | None, str | None]:
+    """Parse repository input and determine type.
 
     Args:
         repo_input: User input (URL, shorthand, or local path)
@@ -130,13 +124,12 @@ def parse_repository_input(
     raise ValueError(
         f"Invalid repository input: '{repo_input}'. "
         "Expected a GitHub URL (https://github.com/owner/repo), "
-        "shorthand (owner/repo), or local directory path."
+        "shorthand (owner/repo), or local directory path.",
     )
 
 
 def format_file_size(size_bytes: int) -> str:
-    """
-    Format file size in human-readable format.
+    """Format file size in human-readable format.
 
     Args:
         size_bytes: Size in bytes
@@ -152,8 +145,7 @@ def format_file_size(size_bytes: int) -> str:
 
 
 def get_cache_path() -> Path:
-    """
-    Get the path to the wiki cache directory.
+    """Get the path to the wiki cache directory.
 
     Returns:
         Path to cache directory
@@ -170,8 +162,7 @@ def ensure_cache_dir():
 
 
 def truncate_string(s: str, max_length: int = 50, suffix: str = "...") -> str:
-    """
-    Truncate a string to a maximum length.
+    """Truncate a string to a maximum length.
 
     Args:
         s: String to truncate
@@ -198,12 +189,11 @@ def truncate_string(s: str, max_length: int = 50, suffix: str = "...") -> str:
 
 def select_from_list(
     prompt_text: str,
-    choices: List[str],
-    default: Optional[str] = None,
+    choices: list[str],
+    default: str | None = None,
     allow_custom: bool = False,
 ) -> str:
-    """
-    Interactive list selection using arrow keys (simple-term-menu).
+    """Interactive list selection using arrow keys (simple-term-menu).
 
     Args:
         prompt_text: The prompt/question to display.
@@ -238,14 +228,11 @@ def select_from_list(
                 default=default or "",
                 show_default=bool(default),
             )
-            if user_input in choices:
+            if user_input in choices or (allow_custom and user_input):
                 return user_input
-            elif allow_custom and user_input:
-                return user_input
-            else:
-                click.echo(
-                    f"✗ Invalid selection. Please choose from: {', '.join(choices)}"
-                )
+            click.echo(
+                f"✗ Invalid selection. Please choose from: {', '.join(choices)}",
+            )
 
     # Handle custom input option
     CUSTOM_OPTION = "(Enter custom value...)"
@@ -304,10 +291,9 @@ def select_from_list(
 
 def select_multiple_from_list(
     prompt_text: str,
-    choices: List[str],
-) -> List[str]:
+    choices: list[str],
+) -> list[str]:
     """Interactive helper to pick multiple options."""
-
     if not choices:
         raise ValueError("No choices provided")
 
@@ -396,8 +382,7 @@ def confirm_action(
     prompt_text: str,
     default: bool = True,
 ) -> bool:
-    """
-    Interactive yes/no confirmation using arrow keys (simple-term-menu).
+    """Interactive yes/no confirmation using arrow keys (simple-term-menu).
 
     Args:
         prompt_text: The prompt/question to display.
@@ -442,11 +427,10 @@ def confirm_action(
 
 def prompt_text_input(
     prompt_text: str,
-    default: Optional[str] = None,
+    default: str | None = None,
     show_default: bool = True,
 ) -> str:
-    """
-    Prompt for text input with optional menu-based type selection.
+    """Prompt for text input with optional menu-based type selection.
     For repository input, shows a menu to select input type first.
 
     Args:
@@ -501,11 +485,10 @@ def prompt_text_input(
 
 
 def select_wiki_from_list(
-    wikis: List[dict],
+    wikis: list[dict],
     prompt_text: str = "Select wiki",
 ) -> dict:
-    """
-    Display wikis in a menu format for selection.
+    """Display wikis in a menu format for selection.
 
     Args:
         wikis: List of wiki dictionaries, each containing at least 'index' and 'name' keys.
@@ -544,13 +527,12 @@ def select_wiki_from_list(
                 selection = click.prompt("\nSelect wiki (enter number)", type=int)
                 if 1 <= selection <= len(wikis):
                     return wikis[selection - 1]
-                else:
-                    click.echo(f"✗ Invalid selection. Please choose 1-{len(wikis)}")
+                click.echo(f"✗ Invalid selection. Please choose 1-{len(wikis)}")
             except click.Abort:
                 raise
             except (ValueError, TypeError):
                 click.echo(
-                    f"✗ Invalid input. Please enter a number between 1 and {len(wikis)}"
+                    f"✗ Invalid input. Please enter a number between 1 and {len(wikis)}",
                 )
 
     try:

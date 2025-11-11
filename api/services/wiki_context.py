@@ -1,11 +1,10 @@
-"""
-Helpers for reusing RAG state across multiple wiki generation steps.
+"""Helpers for reusing RAG state across multiple wiki generation steps.
 """
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Dict, Generator, List, Optional
 
 from api.core.chat import generate_chat_completion_core
 from api.services.rag import RAG
@@ -20,11 +19,11 @@ class WikiGenerationContext:
     provider: str
     model: str
     _rag: RAG = field(repr=False)
-    token: Optional[str] = None
-    excluded_dirs: Optional[List[str]] = None
-    excluded_files: Optional[List[str]] = None
-    included_dirs: Optional[List[str]] = None
-    included_files: Optional[List[str]] = None
+    token: str | None = None
+    excluded_dirs: list[str] | None = None
+    excluded_files: list[str] | None = None
+    included_dirs: list[str] | None = None
+    included_files: list[str] | None = None
 
     @classmethod
     def prepare(
@@ -33,12 +32,12 @@ class WikiGenerationContext:
         repo_type: str,
         provider: str,
         model: str,
-        token: Optional[str] = None,
-        excluded_dirs: Optional[List[str]] = None,
-        excluded_files: Optional[List[str]] = None,
-        included_dirs: Optional[List[str]] = None,
-        included_files: Optional[List[str]] = None,
-    ) -> "WikiGenerationContext":
+        token: str | None = None,
+        excluded_dirs: list[str] | None = None,
+        excluded_files: list[str] | None = None,
+        included_dirs: list[str] | None = None,
+        included_files: list[str] | None = None,
+    ) -> WikiGenerationContext:
         """Build and prime a context for repeated completions."""
         rag = RAG(provider=provider, model=model)
         rag.prepare_retriever(
@@ -65,10 +64,10 @@ class WikiGenerationContext:
 
     def stream_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
-        file_path: Optional[str] = None,
-    ) -> Generator[str, None, None]:
+        file_path: str | None = None,
+    ) -> Generator[str]:
         """Yield completion chunks using the cached retriever."""
         return generate_chat_completion_core(
             repo_url=self.repo_url,

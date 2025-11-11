@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -25,19 +24,19 @@ class Provider(BaseModel):
 
     id: str = Field(..., description="Provider identifier")
     name: str = Field(..., description="Display name for the provider")
-    models: List[Model] = Field(
-        ..., description="List of available models for this provider"
+    models: list[Model] = Field(
+        ..., description="List of available models for this provider",
     )
-    supportsCustomModel: Optional[bool] = Field(
-        False, description="Whether this provider supports custom models"
+    supportsCustomModel: bool | None = Field(
+        False, description="Whether this provider supports custom models",
     )
 
 
 class ModelConfig(BaseModel):
     """Complete model configuration payload returned to clients."""
 
-    providers: List[Provider] = Field(
-        ..., description="List of available model providers"
+    providers: list[Provider] = Field(
+        ..., description="List of available model providers",
     )
     defaultProvider: str = Field(..., description="ID of the default provider")
 
@@ -49,7 +48,7 @@ router = APIRouter(prefix="/models", tags=["models"])
 async def get_model_config():
     """Return available model providers and their models."""
     try:
-        providers: List[Provider] = []
+        providers: list[Provider] = []
         default_provider = configs.get("default_provider", "google")
 
         for provider_id, provider_config in configs["providers"].items():
@@ -63,7 +62,7 @@ async def get_model_config():
                     name=provider_id.capitalize(),
                     supportsCustomModel=provider_config.get("supportsCustomModel", False),
                     models=models,
-                )
+                ),
             )
 
         return ModelConfig(providers=providers, defaultProvider=default_provider)
@@ -77,10 +76,10 @@ async def get_model_config():
                     name="Google",
                     supportsCustomModel=True,
                     models=[Model(id="gemini-2.5-flash", name="Gemini 2.5 Flash")],
-                )
+                ),
             ],
             defaultProvider="google",
         )
 
 
-__all__ = ["router", "ModelConfig"]
+__all__ = ["ModelConfig", "router"]

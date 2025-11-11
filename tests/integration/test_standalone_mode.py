@@ -1,13 +1,13 @@
-"""
-Integration tests for standalone mode CLI functionality.
+"""Integration tests for standalone mode CLI functionality.
 
 These tests verify that the CLI works correctly in standalone mode
 without requiring a server to be running.
 """
 
-import pytest
 import tempfile
 from unittest.mock import patch
+
+import pytest
 
 
 class TestStandaloneMode:
@@ -24,7 +24,7 @@ class TestStandaloneMode:
 
     def test_config_loading(self):
         """Test that configuration can be loaded."""
-        from api.cli.config import load_config, DEFAULT_CONFIG
+        from api.cli.config import DEFAULT_CONFIG, load_config
 
         config = load_config()
         assert isinstance(config, dict)
@@ -44,7 +44,6 @@ class TestStandaloneMode:
         """
         # This would test actual wiki generation
         # For now, it's a placeholder
-        pass
 
     def test_cache_path_resolution(self):
         """Test cache path is correctly resolved."""
@@ -53,7 +52,7 @@ class TestStandaloneMode:
         # Mock get_adalflow_default_root_path to return a temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch(
-                "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir
+                "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir,
             ):
                 cache_path = get_cache_path()
                 # Verify the path is constructed correctly

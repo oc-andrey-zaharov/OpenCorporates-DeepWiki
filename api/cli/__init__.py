@@ -1,5 +1,4 @@
-"""
-DeepWiki CLI - Command-line interface for wiki generation.
+"""DeepWiki CLI - Command-line interface for wiki generation.
 
 This package provides a comprehensive CLI tool for generating, managing,
 and exporting wikis from GitHub repositories and local paths.

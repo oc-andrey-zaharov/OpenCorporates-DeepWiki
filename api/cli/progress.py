@@ -1,24 +1,22 @@
-"""
-Progress display system using Enlighten library.
+"""Progress display system using Enlighten library.
 """
 
-import enlighten
 import logging
-from typing import Dict
+
+import enlighten
 
 logger = logging.getLogger(__name__)
 
 
 class ProgressManager:
-    """
-    Manages multiple progress bars for wiki generation.
+    """Manages multiple progress bars for wiki generation.
     """
 
     def __init__(self):
         self.manager = enlighten.get_manager()
         self.status_bar = None
         self.overall_bar = None
-        self.page_bars: Dict[str, enlighten.Counter] = {}
+        self.page_bars: dict[str, enlighten.Counter] = {}
         self.completed = 0
         self.total = 0
 
@@ -49,8 +47,7 @@ class ProgressManager:
         )
 
     def add_page_progress(self, page_id: str, page_title: str) -> enlighten.Counter:
-        """
-        Add a progress bar for a specific page.
+        """Add a progress bar for a specific page.
 
         Args:
             page_id: Unique identifier for the page
@@ -122,7 +119,7 @@ class SimpleProgressBar:
     def __init__(self, total: int, desc: str = "Progress"):
         self.manager = enlighten.get_manager()
         self.bar = self.manager.counter(
-            total=total, desc=desc, unit="items", color="green"
+            total=total, desc=desc, unit="items", color="green",
         )
 
     def update(self, count: int = 1):

@@ -1,12 +1,11 @@
-"""
-Configuration management for DeepWiki CLI.
+"""Configuration management for DeepWiki CLI.
 """
 
 import copy
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +32,8 @@ def ensure_config_dir():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Deep merge two dictionaries recursively.
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two dictionaries recursively.
 
     Args:
         base: Base dictionary (defaults)
@@ -57,9 +55,8 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     return result
 
 
-def load_config() -> Dict[str, Any]:
-    """
-    Load configuration from file.
+def load_config() -> dict[str, Any]:
+    """Load configuration from file.
 
     Returns:
         Dictionary with configuration values, or defaults if file doesn't exist.
@@ -68,7 +65,7 @@ def load_config() -> Dict[str, Any]:
         return DEFAULT_CONFIG.copy()
 
     try:
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE) as f:
             config = json.load(f)
             # Deep merge with defaults to ensure all keys exist
             merged = _deep_merge(DEFAULT_CONFIG, config)
@@ -78,9 +75,8 @@ def load_config() -> Dict[str, Any]:
         return DEFAULT_CONFIG.copy()
 
 
-def save_config(config: Dict[str, Any]):
-    """
-    Save configuration to file.
+def save_config(config: dict[str, Any]):
+    """Save configuration to file.
 
     Args:
         config: Configuration dictionary to save.
@@ -97,8 +93,7 @@ def save_config(config: Dict[str, Any]):
 
 
 def get_config_value(key: str, default: Any = None) -> Any:
-    """
-    Get a configuration value by key.
+    """Get a configuration value by key.
 
     Args:
         key: Configuration key (supports nested keys with dots, e.g., 'file_filters.excluded_dirs')
@@ -122,8 +117,7 @@ def get_config_value(key: str, default: Any = None) -> Any:
 
 
 def set_config_value(key: str, value: Any):
-    """
-    Set a configuration value.
+    """Set a configuration value.
 
     Args:
         key: Configuration key (supports nested keys with dots)
@@ -149,7 +143,7 @@ def set_config_value(key: str, value: Any):
             path = ".".join(path_parts)
             raise TypeError(
                 f"Configuration key '{path}' exists but is not a dictionary. "
-                f"Cannot set nested key '{key}'. Current value type: {type(target[k]).__name__}"
+                f"Cannot set nested key '{key}'. Current value type: {type(target[k]).__name__}",
             )
         target = target[k]
 
@@ -157,9 +151,8 @@ def set_config_value(key: str, value: Any):
     save_config(config)
 
 
-def get_provider_models() -> Dict[str, list]:
-    """
-    Get available models for each provider from api.config.
+def get_provider_models() -> dict[str, list]:
+    """Get available models for each provider from api.config.
 
     Returns:
         Dictionary mapping provider names to lists of available models.

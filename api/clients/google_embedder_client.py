@@ -1,19 +1,20 @@
 """Google AI Embeddings ModelClient integration."""
 
-import os
 import logging
-import backoff
-from typing import Dict, Any, Optional, Sequence
+import os
+from collections.abc import Sequence
+from typing import Any
 
+import backoff
 from adalflow.core.model_client import ModelClient
-from adalflow.core.types import ModelType, EmbedderOutput
+from adalflow.core.types import EmbedderOutput, ModelType
 
 try:
     import google.generativeai as genai
-    from google.generativeai.types.text_types import EmbeddingDict, BatchEmbeddingDict
+    from google.generativeai.types.text_types import BatchEmbeddingDict, EmbeddingDict
 except ImportError:
     raise ImportError(
-        "google-generativeai is required. Install it with 'pip install google-generativeai'"
+        "google-generativeai is required. Install it with 'pip install google-generativeai'",
     )
 
 log = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class GoogleEmbedderClient(ModelClient):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         env_api_key_name: str = "GOOGLE_API_KEY",
     ):
         """Initialize Google AI Embeddings client.
@@ -73,7 +74,7 @@ class GoogleEmbedderClient(ModelClient):
         api_key = self._api_key or os.getenv(self._env_api_key_name)
         if not api_key:
             raise ValueError(
-                f"Environment variable {self._env_api_key_name} must be set"
+                f"Environment variable {self._env_api_key_name} must be set",
             )
         genai.configure(api_key=api_key)
 
@@ -99,7 +100,7 @@ class GoogleEmbedderClient(ModelClient):
                         if isinstance(embedding_value[0], (int, float)):
                             # Single embedding response: {'embedding': [float, ...]}
                             embedding_data = [
-                                Embedding(embedding=embedding_value, index=0)
+                                Embedding(embedding=embedding_value, index=0),
                             ]
                         else:
                             # Batch embeddings response: {'embedding': [[float, ...], [float, ...], ...]}
@@ -109,7 +110,7 @@ class GoogleEmbedderClient(ModelClient):
                             ]
                     else:
                         log.warning(
-                            f"Empty or invalid embedding data: {embedding_value}"
+                            f"Empty or invalid embedding data: {embedding_value}",
                         )
                         embedding_data = []
                 elif "embeddings" in response:
@@ -132,7 +133,7 @@ class GoogleEmbedderClient(ModelClient):
                 embedding_data = []
 
             return EmbedderOutput(
-                data=embedding_data, error=None, raw_response=response
+                data=embedding_data, error=None, raw_response=response,
             )
         except Exception as e:
             log.error(f"Error parsing Google AI embedding response: {e}")
@@ -140,10 +141,10 @@ class GoogleEmbedderClient(ModelClient):
 
     def convert_inputs_to_api_kwargs(
         self,
-        input: Optional[Any] = None,
-        model_kwargs: Dict = {},
+        input: Any | None = None,
+        model_kwargs: dict = {},
         model_type: ModelType = ModelType.UNDEFINED,
-    ) -> Dict:
+    ) -> dict:
         """Convert inputs to Google AI API format.
 
         Args:
@@ -156,7 +157,7 @@ class GoogleEmbedderClient(ModelClient):
         """
         if model_type != ModelType.EMBEDDER:
             raise ValueError(
-                f"GoogleEmbedderClient only supports EMBEDDER model type, got {model_type}"
+                f"GoogleEmbedderClient only supports EMBEDDER model type, got {model_type}",
             )
 
         # Ensure input is a list
@@ -190,7 +191,7 @@ class GoogleEmbedderClient(ModelClient):
         (Exception,),  # Google AI may raise various exceptions
         max_time=5,
     )
-    def call(self, api_kwargs: Dict = {}, model_type: ModelType = ModelType.UNDEFINED):
+    def call(self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED):
         """Call Google AI embedding API.
 
         Args:
@@ -224,7 +225,7 @@ class GoogleEmbedderClient(ModelClient):
             raise
 
     async def acall(
-        self, api_kwargs: Dict = {}, model_type: ModelType = ModelType.UNDEFINED
+        self, api_kwargs: dict = {}, model_type: ModelType = ModelType.UNDEFINED,
     ):
         """Async call to Google AI embedding API.
 

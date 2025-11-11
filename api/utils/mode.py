@@ -1,5 +1,4 @@
-"""
-Mode detection and server health checking utilities.
+"""Mode detection and server health checking utilities.
 
 This module provides functions to detect whether to use server mode
 or standalone mode, and to check server health.
@@ -7,7 +6,6 @@ or standalone mode, and to check server health.
 
 import logging
 import time
-from typing import Optional
 
 import requests
 from requests.exceptions import RequestException, Timeout
@@ -18,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_server_mode() -> bool:
-    """
-    Check if server mode is enabled in configuration.
+    """Check if server mode is enabled in configuration.
 
     Returns:
         True if server mode is enabled, False otherwise
@@ -29,8 +26,7 @@ def is_server_mode() -> bool:
 
 
 def get_server_url() -> str:
-    """
-    Get the configured server URL.
+    """Get the configured server URL.
 
     Returns:
         Server URL string
@@ -40,8 +36,7 @@ def get_server_url() -> str:
 
 
 def should_fallback() -> bool:
-    """
-    Check if auto-fallback is enabled in configuration.
+    """Check if auto-fallback is enabled in configuration.
 
     Returns:
         True if auto-fallback is enabled, False otherwise
@@ -50,9 +45,8 @@ def should_fallback() -> bool:
     return config.get("auto_fallback", True)
 
 
-def check_server_health(server_url: Optional[str] = None, timeout: int = 5) -> bool:
-    """
-    Check if the server is available and healthy.
+def check_server_health(server_url: str | None = None, timeout: int = 5) -> bool:
+    """Check if the server is available and healthy.
 
     Args:
         server_url: Optional server URL (defaults to configured URL)
@@ -73,13 +67,12 @@ def check_server_health(server_url: Optional[str] = None, timeout: int = 5) -> b
 
 
 def check_server_health_with_retry(
-    server_url: Optional[str] = None,
+    server_url: str | None = None,
     timeout: int = 5,
     max_retries: int = 3,
     initial_backoff: float = 0.5,
 ) -> bool:
-    """
-    Check server health with exponential backoff retry logic.
+    """Check server health with exponential backoff retry logic.
 
     Args:
         server_url: Optional server URL (defaults to configured URL)
@@ -101,7 +94,7 @@ def check_server_health_with_retry(
         if attempt < max_retries - 1:
             logger.debug(
                 f"Server health check failed (attempt {attempt + 1}/{max_retries}), "
-                f"retrying in {backoff}s..."
+                f"retrying in {backoff}s...",
             )
             time.sleep(backoff)
             backoff *= 2  # Exponential backoff

@@ -1,5 +1,4 @@
-"""
-Server-related code for FastAPI and WebSocket endpoints.
+"""Server-related code for FastAPI and WebSocket endpoints.
 """
 
 from api.server.server import app

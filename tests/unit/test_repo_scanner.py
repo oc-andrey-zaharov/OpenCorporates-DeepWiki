@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ from api.utils.repo_scanner import collect_repository_files
 
 
 @pytest.mark.unit
-def test_collect_repository_files_respects_gitignore(tmp_path):
+def test_collect_repository_files_respects_gitignore(tmp_path: Path) -> None:
     """Ensure .gitignore patterns are honored when walking the tree."""
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -31,19 +32,25 @@ def test_collect_repository_files_respects_gitignore(tmp_path):
 
 
 @pytest.mark.unit
-def test_collect_repository_files_prefers_git_ls_files(tmp_path):
+def test_collect_repository_files_prefers_git_ls_files(tmp_path: Path) -> None:
     """When git metadata is available, only tracked files should be returned."""
-    if shutil.which("git") is None:
+    git_path = shutil.which("git")
+    if git_path is None:
         pytest.skip("git executable not available")
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run([git_path, "init"], cwd=repo, check=True, capture_output=True)  # noqa: S603
 
     tracked = repo / "tracked.py"
     tracked.write_text("print('tracked')", encoding="utf-8")
-    subprocess.run(["git", "add", tracked.name], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-m", "add tracked"], cwd=repo, check=True, capture_output=True)
+    subprocess.run([git_path, "add", tracked.name], cwd=repo, check=True)  # noqa: S603
+    subprocess.run(
+        [git_path, "commit", "-m", "add tracked"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
 
     untracked = repo / "untracked.py"
     untracked.write_text("print('tmp')", encoding="utf-8")

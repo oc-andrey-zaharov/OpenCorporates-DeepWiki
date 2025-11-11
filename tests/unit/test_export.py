@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for api/utils/export.py
+"""Unit tests for api/utils/export.py.
 
 Tests export functions for generating markdown and JSON exports.
 """
@@ -21,10 +21,10 @@ from api.utils import export
 
 @pytest.mark.unit
 class TestGenerateMarkdownExport:
-    """Tests for generate_markdown_export function"""
+    """Tests for generate_markdown_export function."""
 
-    def test_generate_markdown_export_single_page(self):
-        """Test generating markdown export with single page"""
+    def test_generate_markdown_export_single_page(self) -> None:
+        """Test generating markdown export with single page."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -45,8 +45,8 @@ class TestGenerateMarkdownExport:
         assert "Content of page 1" in result
         assert "Table of Contents" in result
 
-    def test_generate_markdown_export_multiple_pages(self):
-        """Test generating markdown export with multiple pages"""
+    def test_generate_markdown_export_multiple_pages(self) -> None:
+        """Test generating markdown export with multiple pages."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -76,8 +76,8 @@ class TestGenerateMarkdownExport:
         assert "Related Pages" in result
         assert "[Page 2](#page2)" in result
 
-    def test_generate_markdown_export_with_related_pages(self):
-        """Test markdown export includes related pages links"""
+    def test_generate_markdown_export_with_related_pages(self) -> None:
+        """Test markdown export includes related pages links."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -113,8 +113,8 @@ class TestGenerateMarkdownExport:
         assert "[Page 3](#page3)" in result
         assert "Related topics:" in result
 
-    def test_generate_markdown_export_empty_pages(self):
-        """Test generating markdown export with empty pages list"""
+    def test_generate_markdown_export_empty_pages(self) -> None:
+        """Test generating markdown export with empty pages list."""
         repo_url = "https://github.com/owner/repo"
         pages = []
 
@@ -125,8 +125,8 @@ class TestGenerateMarkdownExport:
         assert "Table of Contents" in result
         assert "##" not in result.split("Table of Contents")[1]  # No pages after TOC
 
-    def test_generate_markdown_export_includes_timestamp(self):
-        """Test that markdown export includes generation timestamp"""
+    def test_generate_markdown_export_includes_timestamp(self) -> None:
+        """Test that markdown export includes generation timestamp."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -145,8 +145,8 @@ class TestGenerateMarkdownExport:
         # Check for date format YYYY-MM-DD
         assert "20" in result  # Year should be present
 
-    def test_generate_markdown_export_page_anchors(self):
-        """Test that markdown export includes page anchors"""
+    def test_generate_markdown_export_page_anchors(self) -> None:
+        """Test that markdown export includes page anchors."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -167,10 +167,10 @@ class TestGenerateMarkdownExport:
 
 @pytest.mark.unit
 class TestGenerateJsonExport:
-    """Tests for generate_json_export function"""
+    """Tests for generate_json_export function."""
 
-    def test_generate_json_export_single_page(self):
-        """Test generating JSON export with single page"""
+    def test_generate_json_export_single_page(self) -> None:
+        """Test generating JSON export with single page."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -194,8 +194,8 @@ class TestGenerateJsonExport:
         assert data["pages"][0]["id"] == "page1"
         assert data["pages"][0]["title"] == "Page 1"
 
-    def test_generate_json_export_multiple_pages(self):
-        """Test generating JSON export with multiple pages"""
+    def test_generate_json_export_multiple_pages(self) -> None:
+        """Test generating JSON export with multiple pages."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -219,13 +219,14 @@ class TestGenerateJsonExport:
         result = export.generate_json_export(repo_url, pages)
         data = json.loads(result)
 
-        assert data["metadata"]["page_count"] == 2
-        assert len(data["pages"]) == 2
+        expected_page_count = 2
+        assert data["metadata"]["page_count"] == expected_page_count
+        assert len(data["pages"]) == expected_page_count
         assert data["pages"][0]["id"] == "page1"
         assert data["pages"][1]["id"] == "page2"
 
-    def test_generate_json_export_empty_pages(self):
-        """Test generating JSON export with empty pages list"""
+    def test_generate_json_export_empty_pages(self) -> None:
+        """Test generating JSON export with empty pages list."""
         repo_url = "https://github.com/owner/repo"
         pages = []
 
@@ -236,8 +237,8 @@ class TestGenerateJsonExport:
         assert data["metadata"]["page_count"] == 0
         assert len(data["pages"]) == 0
 
-    def test_generate_json_export_includes_timestamp(self):
-        """Test that JSON export includes generation timestamp"""
+    def test_generate_json_export_includes_timestamp(self) -> None:
+        """Test that JSON export includes generation timestamp."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -257,8 +258,8 @@ class TestGenerateJsonExport:
         # Verify it's a valid ISO format timestamp
         datetime.fromisoformat(data["metadata"]["generated_at"])
 
-    def test_generate_json_export_pretty_formatting(self):
-        """Test that JSON export is pretty formatted"""
+    def test_generate_json_export_pretty_formatting(self) -> None:
+        """Test that JSON export is pretty formatted."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(
@@ -279,8 +280,8 @@ class TestGenerateJsonExport:
         data = json.loads(result)
         assert isinstance(data, dict)
 
-    def test_generate_json_export_preserves_page_data(self):
-        """Test that JSON export preserves all page data"""
+    def test_generate_json_export_preserves_page_data(self) -> None:
+        """Test that JSON export preserves all page data."""
         repo_url = "https://github.com/owner/repo"
         pages = [
             WikiPage(

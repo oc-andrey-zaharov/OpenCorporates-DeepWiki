@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Test script to reproduce and fix Google embedder 'list' object has no attribute 'embedding' error.
-"""
+"""Test script to reproduce and fix Google embedder 'list' object has no attribute 'embedding' error."""
 
 import logging
 import sys
@@ -22,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def test_google_embedder_client():
+def test_google_embedder_client() -> bool | None:
     """Test the Google embedder client directly."""
     logger.info("Testing Google embedder client...")
 
@@ -85,14 +84,14 @@ def test_google_embedder_client():
         return True
 
     except Exception as e:
-        logger.error(f"Error testing Google embedder client: {e}")
+        logger.exception(f"Error testing Google embedder client: {e}")
         import traceback
 
         traceback.print_exc()
         return False
 
 
-def test_adalflow_embedder():
+def test_adalflow_embedder() -> bool | None:
     """Test the AdalFlow embedder with Google client."""
     logger.info("Testing AdalFlow embedder with Google client...")
 
@@ -123,7 +122,7 @@ def test_adalflow_embedder():
         return True
 
     except Exception as e:
-        logger.error(f"Error testing AdalFlow embedder: {e}")
+        logger.exception(f"Error testing AdalFlow embedder: {e}")
         import traceback
 
         traceback.print_exc()
@@ -179,14 +178,14 @@ def test_document_processing():
         return transformed_docs
 
     except Exception as e:
-        logger.error(f"Error testing document processing: {e}")
+        logger.exception(f"Error testing document processing: {e}")
         import traceback
 
         traceback.print_exc()
         return False
 
 
-def main():
+def main() -> bool:
     """Main test function."""
     logger.info("Starting Google embedder tests...")
 

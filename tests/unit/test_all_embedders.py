@@ -3,11 +3,14 @@
 This test file validates the embedder system before any modifications are made.
 """
 
+import importlib
 import logging
 import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
+
+import api.config
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent
@@ -20,38 +23,45 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
 # Simple test framework without pytest
 class TestRunner:
-    def __init__(self):
+    def __init__(self) -> None:
         self.tests_run = 0
         self.tests_passed = 0
         self.tests_failed = 0
         self.failures = []
 
-    def run_test(self, test_func, test_name=None):
+    def run_test(self, test_func, test_name=None) -> bool | None:
         """Run a single test function."""
         if test_name is None:
             test_name = test_func.__name__
 
         self.tests_run += 1
         try:
-            logger.info(f"Running test: {test_name}")
+            logger.info("Running test: %s", test_name)
             test_func()
             self.tests_passed += 1
-            logger.info(f"✅ {test_name} PASSED")
+            logger.info("✅ %s PASSED", test_name)
             return True
-        except Exception as e:
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            ValueError,
+            TypeError,
+        ) as e:
             self.tests_failed += 1
             self.failures.append((test_name, str(e)))
-            logger.error(f"❌ {test_name} FAILED: {e}")
+            logger.exception("❌ %s FAILED", test_name)
             return False
 
-    def run_test_class(self, test_class):
+    def run_test_class(self, test_class) -> None:
         """Run all test methods in a test class."""
         instance = test_class()
         test_methods = [
@@ -64,26 +74,26 @@ class TestRunner:
             test_name = f"{test_class.__name__}.{test_method.__name__}"
             self.run_test(test_method, test_name)
 
-    def run_parametrized_test(self, test_func, parameters, test_name_base=None):
+    def run_parametrized_test(self, test_func, parameters, test_name_base=None) -> None:
         """Run a test function with multiple parameter sets."""
         if test_name_base is None:
             test_name_base = test_func.__name__
 
-        for i, param in enumerate(parameters):
+        for _i, param in enumerate(parameters):
             test_name = f"{test_name_base}[{param}]"
             self.run_test(lambda: test_func(param), test_name)
 
     def summary(self):
         """Print test summary."""
         logger.info("\n📊 Test Summary:")
-        logger.info(f"Tests run: {self.tests_run}")
-        logger.info(f"Passed: {self.tests_passed}")
-        logger.info(f"Failed: {self.tests_failed}")
+        logger.info("Tests run: %s", self.tests_run)
+        logger.info("Passed: %s", self.tests_passed)
+        logger.info("Failed: %s", self.tests_failed)
 
         if self.failures:
             logger.error("\n❌ Failed tests:")
             for test_name, error in self.failures:
-                logger.error(f"  - {test_name}: {error}")
+                logger.error("  - %s: %s", test_name, error)
 
         return self.tests_failed == 0
 
@@ -91,7 +101,7 @@ class TestRunner:
 class TestEmbedderConfiguration:
     """Test embedder configuration system."""
 
-    def test_config_loading(self):
+    def test_config_loading(self) -> None:
         """Test that all embedder configurations load properly."""
         from api.config import CLIENT_CLASSES, configs
 
@@ -111,7 +121,7 @@ class TestEmbedderConfiguration:
             "OllamaClient missing from CLIENT_CLASSES"
         )
 
-    def test_embedder_type_detection(self):
+    def test_embedder_type_detection(self) -> None:
         """Test embedder type detection functions."""
         from api.config import get_embedder_type, is_google_embedder, is_ollama_embedder
 
@@ -129,13 +139,16 @@ class TestEmbedderConfiguration:
 
         # Only one should be true at a time (unless using openai default)
         if current_type == "ollama":
-            assert is_ollama and not is_google
+            assert is_ollama
+            assert not is_google
         elif current_type == "google":
-            assert not is_ollama and is_google
+            assert not is_ollama
+            assert is_google
         else:  # openai
-            assert not is_ollama and not is_google
+            assert not is_ollama
+            assert not is_google
 
-    def test_get_embedder_config(self, embedder_type=None):
+    def test_get_embedder_config(self, embedder_type=None) -> None:
         """Test getting embedder config for each type."""
         from api.config import get_embedder_config
 
@@ -161,7 +174,7 @@ class TestEmbedderConfiguration:
 class TestEmbedderFactory:
     """Test the embedder factory function."""
 
-    def test_get_embedder_with_explicit_type(self):
+    def test_get_embedder_with_explicit_type(self) -> None:
         """Test get_embedder with explicit embedder_type parameter."""
         from api.tools.embedder import get_embedder
 
@@ -177,12 +190,13 @@ class TestEmbedderFactory:
         try:
             ollama_embedder = get_embedder(embedder_type="ollama")
             assert ollama_embedder is not None, "Ollama embedder should be created"
-        except Exception as e:
+        except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
-                f"Ollama embedder creation failed (expected if Ollama not available): {e}",
+                "Ollama embedder creation failed (expected if Ollama not available): %s",
+                e,
             )
 
-    def test_get_embedder_with_legacy_params(self):
+    def test_get_embedder_with_legacy_params(self) -> None:
         """Test get_embedder with legacy boolean parameters."""
         from api.tools.embedder import get_embedder
 
@@ -198,12 +212,13 @@ class TestEmbedderFactory:
             assert ollama_embedder is not None, (
                 "Ollama embedder should be created with is_local_ollama=True"
             )
-        except Exception as e:
+        except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
-                f"Ollama embedder creation failed (expected if Ollama not available): {e}",
+                "Ollama embedder creation failed (expected if Ollama not available): %s",
+                e,
             )
 
-    def test_get_embedder_auto_detection(self):
+    def test_get_embedder_auto_detection(self) -> None:
         """Test get_embedder with automatic type detection."""
         from api.tools.embedder import get_embedder
 
@@ -215,7 +230,7 @@ class TestEmbedderFactory:
 class TestEmbedderClients:
     """Test individual embedder clients."""
 
-    def test_google_embedder_client(self):
+    def test_google_embedder_client(self) -> None:
         """Test Google embedder client directly."""
         if not os.getenv("GOOGLE_API_KEY"):
             logger.warning(
@@ -252,7 +267,7 @@ class TestEmbedderClients:
 class TestDataPipelineFunctions:
     """Test data pipeline functions that use embedders."""
 
-    def test_count_tokens(self, embedder_type=None):
+    def test_count_tokens(self, embedder_type=None) -> None:
         """Test token counting with different embedder types."""
         from api.services.data_pipeline import count_tokens
 
@@ -270,7 +285,7 @@ class TestDataPipelineFunctions:
                 assert isinstance(token_count, int), "Token count should be an integer"
                 assert token_count > 0, "Token count should be positive"
 
-    def test_prepare_data_pipeline(self, is_ollama=None):
+    def test_prepare_data_pipeline(self, is_ollama=None) -> None:
         """Test data pipeline preparation with different embedder types."""
         from api.services.data_pipeline import prepare_data_pipeline
 
@@ -279,9 +294,9 @@ class TestDataPipelineFunctions:
                 pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama)
                 assert pipeline is not None, "Data pipeline should be created"
                 assert callable(pipeline), "Pipeline should be callable"
-            except Exception as e:
+            except (ImportError, ValueError, RuntimeError) as e:
                 # Some configurations might fail if services aren't available
-                logger.warning(f"Pipeline creation failed (might be expected): {e}")
+                logger.warning("Pipeline creation failed (might be expected): %s", e)
         else:
             # Test with all values
             for is_ollama_val in [None, True, False]:
@@ -289,16 +304,18 @@ class TestDataPipelineFunctions:
                     pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama_val)
                     assert pipeline is not None, "Data pipeline should be created"
                     assert callable(pipeline), "Pipeline should be callable"
-                except Exception as e:
+                except (ImportError, ValueError, RuntimeError) as e:
                     logger.warning(
-                        f"Pipeline creation failed for is_ollama={is_ollama_val}: {e}",
+                        "Pipeline creation failed for is_ollama=%s: %s",
+                        is_ollama_val,
+                        e,
                     )
 
 
 class TestRAGIntegration:
     """Test RAG class integration with different embedders."""
 
-    def test_rag_initialization(self):
+    def test_rag_initialization(self) -> None:
         """Test RAG initialization with different embedder configurations."""
         from api.services.rag import RAG
 
@@ -310,12 +327,13 @@ class TestRAGIntegration:
             assert hasattr(rag, "is_ollama_embedder"), (
                 "RAG should have is_ollama_embedder attribute"
             )
-        except Exception as e:
+        except (ImportError, ValueError, RuntimeError, TypeError) as e:
             logger.warning(
-                f"RAG initialization failed (might be expected if keys missing): {e}",
+                "RAG initialization failed (might be expected if keys missing): %s",
+                e,
             )
 
-    def test_rag_embedder_type_detection(self):
+    def test_rag_embedder_type_detection(self) -> None:
         """Test that RAG correctly detects embedder type."""
         from api.services.rag import RAG
 
@@ -326,14 +344,14 @@ class TestRAGIntegration:
             assert isinstance(rag.is_ollama_embedder, bool), (
                 "is_ollama_embedder should be boolean"
             )
-        except Exception as e:
-            logger.warning(f"RAG initialization failed: {e}")
+        except (ImportError, ValueError, RuntimeError, TypeError) as e:
+            logger.warning("RAG initialization failed: %s", e)
 
 
 class TestEnvironmentVariableHandling:
     """Test embedder selection via environment variables."""
 
-    def test_embedder_type_env_var(self, embedder_type=None):
+    def test_embedder_type_env_var(self, embedder_type=None) -> None:
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
         if embedder_type:
             # Test specific embedder type
@@ -343,12 +361,8 @@ class TestEnvironmentVariableHandling:
             for et in ["openai", "google", "ollama"]:
                 self._test_single_embedder_type(et)
 
-    def _test_single_embedder_type(self, embedder_type):
+    def _test_single_embedder_type(self, embedder_type: str) -> None:
         """Test a single embedder type."""
-        import importlib
-
-        import api.config
-
         # Save original value
         original_value = os.environ.get("DEEPWIKI_EMBEDDER_TYPE")
 
@@ -382,7 +396,7 @@ class TestEnvironmentVariableHandling:
 class TestIssuesIdentified:
     """Test the specific issues identified in the codebase."""
 
-    def test_binary_assumptions_in_rag(self):
+    def test_binary_assumptions_in_rag(self) -> None:
         """Test that RAG doesn't make binary assumptions about embedders."""
         from api.services.rag import RAG
 
@@ -399,10 +413,10 @@ class TestIssuesIdentified:
             # This is the issue: no explicit support for Google embedder detection
             # The fix should add proper embedder type detection
 
-        except Exception as e:
-            logger.warning(f"RAG test failed: {e}")
+        except (ImportError, ValueError, RuntimeError, TypeError) as e:
+            logger.warning("RAG test failed: %s", e)
 
-    def test_binary_assumptions_in_data_pipeline(self):
+    def test_binary_assumptions_in_data_pipeline(self) -> None:
         """Test binary assumptions in data pipeline functions."""
         from api.services.data_pipeline import count_tokens, prepare_data_pipeline
 
@@ -423,11 +437,11 @@ class TestIssuesIdentified:
 
             assert pipeline_ollama is not None
             assert pipeline_other is not None
-        except Exception as e:
-            logger.warning(f"Pipeline creation failed: {e}")
+        except (ImportError, ValueError, RuntimeError) as e:
+            logger.warning("Pipeline creation failed: %s", e)
 
 
-def run_all_tests():
+def run_all_tests() -> bool:
     """Run all tests and return results."""
     logger.info("Running comprehensive embedder tests...")
 
@@ -446,7 +460,7 @@ def run_all_tests():
 
     # Run all test classes
     for test_class in test_classes:
-        logger.info(f"\n🧪 Running {test_class.__name__}...")
+        logger.info("\n🧪 Running %s...", test_class.__name__)
         runner.run_test_class(test_class)
 
     # Run parametrized tests manually

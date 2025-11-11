@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused test script for the _extract_repo_name_from_url method
+"""Focused test script for the _extract_repo_name_from_url method.
 
 Run this script to test only the repository name extraction functionality.
 Usage: python test_extract_repo_name.py
@@ -18,13 +18,13 @@ from api.services.data_pipeline import DatabaseManager
 
 
 class TestExtractRepoNameFromUrl:
-    """Comprehensive tests for the _extract_repo_name_from_url method"""
+    """Comprehensive tests for the _extract_repo_name_from_url method."""
 
-    def setup_method(self):
+    def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         self.db_manager = DatabaseManager()
 
-    def test_extract_repo_name_github_standard_url(self):
+    def test_extract_repo_name_github_standard_url(self) -> None:
         # Test standard GitHub URL
         github_url = "https://github.com/owner/repo"
         result = self.db_manager._extract_repo_name_from_url(github_url, "github")
@@ -40,8 +40,8 @@ class TestExtractRepoNameFromUrl:
         result = self.db_manager._extract_repo_name_from_url(github_url_slash, "github")
         assert result == "owner_repo"
 
-    def test_extract_repo_name_local_paths(self):
-        """Test repository name extraction from local paths"""
+    def test_extract_repo_name_local_paths(self) -> None:
+        """Test repository name extraction from local paths."""
         result = self.db_manager._extract_repo_name_from_url(
             "/home/user/projects/my-repo", "local",
         )
@@ -52,15 +52,15 @@ class TestExtractRepoNameFromUrl:
         )
         assert result == "project"
 
-    def test_extract_repo_name_current_implementation_bug(self):
-        """Test that demonstrates the current implementation bug"""
+    def test_extract_repo_name_current_implementation_bug(self) -> None:
+        """Test that demonstrates the current implementation bug."""
         # The current implementation references 'type' which is not in scope
         # This should raise a NameError or TypeError due to undefined 'type' variable
         with pytest.raises((NameError, TypeError)):
             self.db_manager._extract_repo_name_from_url("https://github.com/owner/repo")
 
-    def test_extract_repo_name_edge_cases(self):
-        """Test edge cases for repository name extraction"""
+    def test_extract_repo_name_edge_cases(self) -> None:
+        """Test edge cases for repository name extraction."""
         # Test URL with insufficient parts (should use fallback)
         short_url = "https://github.com/repo"
         result = self.db_manager._extract_repo_name_from_url(short_url, "github")

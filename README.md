@@ -75,6 +75,7 @@ To access private GitHub repositories, you need to create a GitHub Personal Acce
      - `read:org` - Read org membership (optional, if accessing org repos)
 4. **Generate and Copy**: Click "Generate token" and copy the token immediately (you won't be able to see it again)
 5. **Add to .env**: Add the token to your `.env` file:
+
    ```bash
    GITHUB_TOKEN=ghp_your_token_here
    ```
@@ -119,6 +120,7 @@ deepwiki wiki generate
 ```
 
 You'll be prompted for:
+
 - Repository (GitHub URL, owner/repo shorthand, or local path)
 - Model provider (google, openai, openrouter, ollama, etc.)
 - Model selection
@@ -180,6 +182,7 @@ deepwiki config set <key> <value>      # Set a configuration value
 ```
 
 Examples:
+
 ```bash
 deepwiki config set default_provider google
 deepwiki config set default_model gemini-2.0-flash-exp
@@ -193,6 +196,7 @@ DeepWiki CLI supports shell completion for Bash, Zsh, and Fish shells, providing
 #### Setup Instructions
 
 First, find the correct completion variable name by running:
+
 ```bash
 deepwiki --help | head -1
 ```
@@ -202,11 +206,13 @@ The completion variable is typically `_<COMMAND>_COMPLETE` where `<COMMAND>` is 
 **Bash (>= 4.4):**
 
 Add to your `~/.bashrc`:
+
 ```bash
 eval "$(_DEEPWIKI_COMPLETE=bash_source deepwiki)"
 ```
 
 Then reload your shell:
+
 ```bash
 source ~/.bashrc
 ```
@@ -214,11 +220,13 @@ source ~/.bashrc
 **Zsh:**
 
 Add to your `~/.zshrc`:
+
 ```zsh
 eval "$(_DEEPWIKI_COMPLETE=zsh_source deepwiki)"
 ```
 
 Then reload your shell:
+
 ```zsh
 source ~/.zshrc
 ```
@@ -226,16 +234,19 @@ source ~/.zshrc
 **Fish:**
 
 Add to your `~/.config/fish/config.fish`:
+
 ```fish
 _DEEPWIKI_COMPLETE=fish_source deepwiki | source
 ```
 
 Or save to a file for automatic loading:
+
 ```fish
 _DEEPWIKI_COMPLETE=fish_source deepwiki > ~/.config/fish/completions/deepwiki.fish
 ```
 
 **Note:** If `_DEEPWIKI_COMPLETE` doesn't work, try checking what Click generates by running:
+
 ```bash
 _DEEPWIKI_COMPLETE=bash_source deepwiki
 ```
@@ -250,7 +261,7 @@ This will show you the completion script. The variable name format may vary slig
 - **File Paths**: File path completion for `--output` and other path options
 - **Choices**: Autocomplete for predefined choices (e.g., `--format` with `markdown`/`json`)
 
-After setup, restart your shell or reload your configuration file. Then try typing `deepwiki ` and press Tab to see completion in action!
+After setup, restart your shell or reload your configuration file. Then try typing `deepwiki` and press Tab to see completion in action!
 
 ### Standalone Mode (Default)
 
@@ -265,6 +276,7 @@ deepwiki wiki generate
 To use server mode for shared resources and caching:
 
 1. Start the FastAPI server:
+
    ```bash
    make dev
    # or
@@ -272,12 +284,14 @@ To use server mode for shared resources and caching:
    ```
 
 2. Configure CLI to use server:
+
    ```bash
    deepwiki config set use_server true
    deepwiki config set server_url http://localhost:8001
    ```
 
 3. Now CLI will use server endpoints:
+
    ```bash
    deepwiki wiki generate
    ```
@@ -313,6 +327,7 @@ deepwiki config set key value  # Set a configuration value
 ```
 
 Server mode settings:
+
 - `use_server` - Enable server mode (default: `false`)
 - `server_url` - Server URL (default: `http://localhost:8001`)
 - `server_timeout` - Request timeout in seconds (default: `300`)
@@ -338,6 +353,7 @@ make cli               # Run CLI (pass arguments after '--')
 The FastAPI server provides HTTP API access and shared caching. It's optional - the CLI works standalone by default.
 
 **Start the server:**
+
 ```bash
 make dev
 # or
@@ -345,6 +361,7 @@ poetry run python -m api.server.main
 ```
 
 **Use cases:**
+
 - Teams sharing embedding cache
 - Centralized wiki generation service
 - Multiple users accessing same repositories
@@ -355,6 +372,7 @@ poetry run python -m api.server.main
 The WebSocket server (`api/websocket_wiki.py`) provides real-time wiki generation updates. It's an optional service for advanced use cases.
 
 **Use cases:**
+
 - Real-time progress updates for team dashboards
 - WebSocket-based wiki generation monitoring
 - Integration with external monitoring systems
@@ -418,17 +436,20 @@ Logs are written to `api/logs/application.log` by default. You can configure log
 ### Running Tests
 
 #### All Tests
+
 ```bash
 # From project root
 poetry run pytest tests -v
 ```
 
 #### Unit Tests Only
+
 ```bash
 poetry run pytest tests/unit -v
 ```
 
 #### Integration Tests Only
+
 ```bash
 poetry run pytest tests/integration -v
 ```
@@ -442,6 +463,7 @@ tests/
 ```
 
 Integration tests require valid API keys in `.env`:
+
 - `GOOGLE_API_KEY`
 - `OPENAI_API_KEY`
 - `DEEPWIKI_EMBEDDER_TYPE` (set to `google` for Google embedder tests)

@@ -107,6 +107,9 @@ select = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "FBT003", "PT019", "PLR2004", "ERA001"]  # Allow assert statements, boolean positional args in @patch decorators, mock parameters that look like fixtures in tests, magic values in tests, and commented code in tests
+
 [tool.ruff.format]
 quote-style = "double" # Use double quotes for strings.
 indent-style = "space" # Indent with spaces, rather than tabs.

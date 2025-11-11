@@ -12,7 +12,7 @@ import pytest
 class TestFallbackScenarios:
     """Test fallback behavior when server is unavailable."""
 
-    def test_fallback_when_server_unavailable(self):
+    def test_fallback_when_server_unavailable(self) -> None:
         """Test that CLI falls back to standalone when server is down."""
         # Verify the function exists
         try:
@@ -33,7 +33,7 @@ class TestFallbackScenarios:
             # Module may not exist yet (from Phase 3)
             pytest.skip(f"Mode utilities not yet implemented: {e}")
 
-    def test_auto_fallback_config(self):
+    def test_auto_fallback_config(self) -> None:
         """Test auto_fallback configuration option."""
         try:
             from api.cli.config import load_config
@@ -48,7 +48,7 @@ class TestFallbackScenarios:
             pytest.skip(f"Config module not yet implemented: {e}")
 
     @pytest.mark.skip(reason="Requires server mode implementation")
-    def test_error_when_fallback_disabled(self):
+    def test_error_when_fallback_disabled(self) -> None:
         """Test that error is raised when fallback is disabled and server unavailable."""
         # This would test error handling when:
         # - use_server = True

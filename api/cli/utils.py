@@ -358,7 +358,7 @@ def select_multiple_from_list(
             sys.exit(1)
 
         if isinstance(result, tuple):
-            selected_indexes = result[1] or []
+            selected_indexes = list(result)
         elif isinstance(result, list):
             selected_indexes = result
         elif isinstance(result, int):

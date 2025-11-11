@@ -12,7 +12,7 @@ class TestServerMode:
     """Test server mode functionality."""
 
     @pytest.mark.skip(reason="Requires running server")
-    def test_server_health_check(self):
+    def test_server_health_check(self) -> None:
         """Test server health check endpoint.
 
         Requires server to be running on localhost:8001
@@ -25,7 +25,7 @@ class TestServerMode:
             pytest.skip("Server not running")
 
     @pytest.mark.skip(reason="Requires running server and API keys")
-    def test_wiki_generation_via_server(self):
+    def test_wiki_generation_via_server(self) -> None:
         """Test wiki generation via server endpoint.
 
         This test requires:
@@ -37,13 +37,12 @@ class TestServerMode:
         """
         # This would test actual wiki generation via server
 
-    def test_server_mode_config(self):
+    def test_server_mode_config(self) -> None:
         """Test server mode configuration."""
         from api.cli.config import load_config
 
         config = load_config()
         # Verify server mode config keys exist (if configured)
         # These may not be present in default config
-        server_keys = ["use_server", "server_url", "server_timeout", "auto_fallback"]
         # Just verify config is loadable, don't require specific keys
         assert isinstance(config, dict)

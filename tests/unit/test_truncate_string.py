@@ -7,8 +7,8 @@ Or use pytest: pytest tests/unit/test_truncate_string.py
 """
 
 import importlib.util
-import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 # Mock problematic imports before importing utils
@@ -18,12 +18,12 @@ sys.modules["adalflow.utils"] = MagicMock()
 sys.modules["click"] = MagicMock()
 
 # Add the parent directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+test_file_path = Path(__file__)
+project_root = test_file_path.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 # Import utils module directly without going through package __init__
-utils_path = os.path.join(
-    os.path.dirname(__file__), "..", "..", "api", "cli", "utils.py",
-)
+utils_path = project_root / "api" / "cli" / "utils.py"
 spec = importlib.util.spec_from_file_location("api.cli.utils", utils_path)
 utils_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(utils_module)
@@ -31,10 +31,10 @@ truncate_string = utils_module.truncate_string
 
 
 class TestTruncateString:
-    """Comprehensive tests for the truncate_string function"""
+    """Comprehensive tests for the truncate_string function."""
 
-    def test_normal_truncation(self):
-        """Test normal truncation behavior"""
+    def test_normal_truncation(self) -> None:
+        """Test normal truncation behavior."""
         # String longer than max_length
         result = truncate_string("hello world", max_length=5, suffix="...")
         assert result == "he..."
@@ -50,10 +50,8 @@ class TestTruncateString:
         assert result == "hi"
         assert len(result) == 2
 
-        print("✓ Normal truncation tests passed")
-
-    def test_max_length_zero(self):
-        """Test edge case: max_length = 0"""
+    def test_max_length_zero(self) -> None:
+        """Test edge case: max_length = 0."""
         result = truncate_string("hello world", max_length=0, suffix="...")
         assert result == ""
         assert len(result) == 0
@@ -62,10 +60,8 @@ class TestTruncateString:
         assert result == ""
         assert len(result) == 0
 
-        print("✓ max_length = 0 tests passed")
-
-    def test_max_length_negative(self):
-        """Test edge case: max_length < 0"""
+    def test_max_length_negative(self) -> None:
+        """Test edge case: max_length < 0."""
         result = truncate_string("hello world", max_length=-1, suffix="...")
         assert result == ""
         assert len(result) == 0
@@ -74,10 +70,8 @@ class TestTruncateString:
         assert result == ""
         assert len(result) == 0
 
-        print("✓ max_length < 0 tests passed")
-
-    def test_max_length_equals_suffix_length(self):
-        """Test edge case: max_length = len(suffix)"""
+    def test_max_length_equals_suffix_length(self) -> None:
+        """Test edge case: max_length = len(suffix)."""
         suffix = "..."
         result = truncate_string("hello world", max_length=len(suffix), suffix=suffix)
         # When max_length equals suffix length, return substring of original (not suffix)
@@ -92,10 +86,8 @@ class TestTruncateString:
         assert len(result) == 5
         assert len(result) <= len(suffix)
 
-        print("✓ max_length = len(suffix) tests passed")
-
-    def test_max_length_smaller_than_suffix_length(self):
-        """Test edge case: max_length < len(suffix)"""
+    def test_max_length_smaller_than_suffix_length(self) -> None:
+        """Test edge case: max_length < len(suffix)."""
         suffix = "..."
 
         # max_length = 1
@@ -122,10 +114,8 @@ class TestTruncateString:
         assert len(result) == 3
         assert len(result) <= 3
 
-        print("✓ max_length < len(suffix) tests passed")
-
-    def test_small_positive_max_length(self):
-        """Test small positive max_length values"""
+    def test_small_positive_max_length(self) -> None:
+        """Test small positive max_length values."""
         suffix = "..."
 
         # max_length = 1
@@ -153,10 +143,8 @@ class TestTruncateString:
         assert result == "hello"
         assert len(result) == 5
 
-        print("✓ Small positive max_length tests passed")
-
-    def test_empty_string(self):
-        """Test with empty input string"""
+    def test_empty_string(self) -> None:
+        """Test with empty input string."""
         result = truncate_string("", max_length=5, suffix="...")
         assert result == ""
         assert len(result) == 0
@@ -169,10 +157,8 @@ class TestTruncateString:
         assert result == ""
         assert len(result) == 0
 
-        print("✓ Empty string tests passed")
-
-    def test_custom_suffix(self):
-        """Test with custom suffix"""
+    def test_custom_suffix(self) -> None:
+        """Test with custom suffix."""
         # Custom suffix shorter than default
         result = truncate_string("hello world", max_length=5, suffix=".")
         assert result == "hell."
@@ -188,10 +174,8 @@ class TestTruncateString:
         assert result == "hello"
         assert len(result) == 5
 
-        print("✓ Custom suffix tests passed")
-
-    def test_never_exceeds_max_length(self):
-        """Test that result never exceeds max_length"""
+    def test_never_exceeds_max_length(self) -> None:
+        """Test that result never exceeds max_length."""
         suffix = "..."
         test_string = "a" * 100  # Long string
 
@@ -211,11 +195,9 @@ class TestTruncateString:
                     f"with suffix length {suffix_len}"
                 )
 
-        print("✓ Never exceeds max_length tests passed")
 
-
-def run_tests():
-    """Run all tests"""
+def run_tests() -> None:
+    """Run all tests."""
     test_instance = TestTruncateString()
 
     test_instance.test_normal_truncation()
@@ -227,8 +209,6 @@ def run_tests():
     test_instance.test_empty_string()
     test_instance.test_custom_suffix()
     test_instance.test_never_exceeds_max_length()
-
-    print("\n✅ All tests passed!")
 
 
 if __name__ == "__main__":

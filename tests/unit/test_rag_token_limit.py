@@ -14,7 +14,8 @@ sys.path.insert(0, str(project_root))
 import logging
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class TestRAGTokenLimit:
     """Test RAG token limit validation and truncation."""
 
-    def test_max_input_tokens_constant_exists(self):
+    def test_max_input_tokens_constant_exists(self) -> None:
         """Test that MAX_INPUT_TOKENS constant is defined."""
         # Read the file directly to avoid import issues
         rag_file = project_root / "api" / "services" / "rag.py"
@@ -40,7 +41,7 @@ class TestRAGTokenLimit:
 
         logger.info("✓ MAX_INPUT_TOKENS constant exists and is used")
 
-    def test_truncate_query_by_tokens_method_exists(self):
+    def test_truncate_query_by_tokens_method_exists(self) -> None:
         """Test that _truncate_query_by_tokens method exists in RAG class."""
         # Read the file directly to verify method exists
         rag_file = project_root / "api" / "services" / "rag.py"
@@ -52,7 +53,7 @@ class TestRAGTokenLimit:
 
         logger.info("✓ _truncate_query_by_tokens method exists")
 
-    def test_call_method_uses_token_validation(self):
+    def test_call_method_uses_token_validation(self) -> None:
         """Test that call method uses token limit validation."""
         # Read the file directly to verify call method uses token validation
         rag_file = project_root / "api" / "services" / "rag.py"
@@ -82,7 +83,7 @@ class TestRAGTokenLimit:
 
         logger.info("✓ call method uses token limit validation")
 
-    def test_count_tokens_imported(self):
+    def test_count_tokens_imported(self) -> None:
         """Test that count_tokens is imported from data_pipeline."""
         rag_file = project_root / "api" / "services" / "rag.py"
         content = rag_file.read_text()
@@ -100,7 +101,7 @@ class TestRAGTokenLimit:
 
         logger.info("✓ count_tokens is imported and used")
 
-    def test_truncation_logic_handles_edge_cases(self):
+    def test_truncation_logic_handles_edge_cases(self) -> None:
         """Test that truncation logic handles edge cases."""
         rag_file = project_root / "api" / "services" / "rag.py"
         content = rag_file.read_text()
@@ -127,7 +128,7 @@ class TestRAGTokenLimit:
         logger.info("✓ Truncation logic handles edge cases")
 
 
-def run_tests():
+def run_tests() -> bool:
     """Run all token limit tests."""
     logger.info("Running RAG token limit tests...")
 
@@ -142,20 +143,26 @@ def run_tests():
     passed = 0
     failed = 0
 
+    import traceback
+
     for method_name in test_methods:
         try:
-            logger.info(f"\n🧪 Running {method_name}...")
+            logger.info("\n🧪 Running %s...", method_name)
             getattr(test_instance, method_name)()
             passed += 1
-            logger.info(f"✅ {method_name} PASSED")
-        except Exception as e:
+            logger.info("✅ %s PASSED", method_name)
+        except (
+            AssertionError,
+            AttributeError,
+            ImportError,
+            ValueError,
+            TypeError,
+        ):
             failed += 1
-            logger.error(f"❌ {method_name} FAILED: {e}")
-            import traceback
-
+            logger.exception("❌ %s FAILED", method_name)
             traceback.print_exc()
 
-    logger.info(f"\n📊 Test Results: {passed} passed, {failed} failed")
+    logger.info("\n📊 Test Results: %s passed, %s failed", passed, failed)
     return failed == 0
 
 

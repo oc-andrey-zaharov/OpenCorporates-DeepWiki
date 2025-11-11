@@ -13,7 +13,7 @@ import pytest
 class TestStandaloneMode:
     """Test standalone mode functionality."""
 
-    def test_cli_imports(self):
+    def test_cli_imports(self) -> None:
         """Test that CLI can be imported without errors."""
         try:
             from api.cli.main import cli
@@ -22,7 +22,7 @@ class TestStandaloneMode:
         except ImportError as e:
             pytest.fail(f"Failed to import CLI: {e}")
 
-    def test_config_loading(self):
+    def test_config_loading(self) -> None:
         """Test that configuration can be loaded."""
         from api.cli.config import DEFAULT_CONFIG, load_config
 
@@ -32,7 +32,7 @@ class TestStandaloneMode:
         assert "default_provider" in config or "default_provider" in DEFAULT_CONFIG
 
     @pytest.mark.skip(reason="Requires API keys and network access")
-    def test_wiki_generation_standalone(self):
+    def test_wiki_generation_standalone(self) -> None:
         """Test wiki generation in standalone mode.
 
         This test requires:
@@ -45,17 +45,16 @@ class TestStandaloneMode:
         # This would test actual wiki generation
         # For now, it's a placeholder
 
-    def test_cache_path_resolution(self):
+    def test_cache_path_resolution(self) -> None:
         """Test cache path is correctly resolved."""
         from api.cli.utils import get_cache_path
 
         # Mock get_adalflow_default_root_path to return a temporary directory
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch(
-                "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir,
-            ):
-                cache_path = get_cache_path()
-                # Verify the path is constructed correctly
-                assert str(cache_path).endswith("wikicache")
-                # The parent directory should exist (the temp dir)
-                assert cache_path.parent.exists()
+        with tempfile.TemporaryDirectory() as tmpdir, patch(
+            "adalflow.utils.get_adalflow_default_root_path", return_value=tmpdir,
+        ):
+            cache_path = get_cache_path()
+            # Verify the path is constructed correctly
+            assert str(cache_path).endswith("wikicache")
+            # The parent directory should exist (the temp dir)
+            assert cache_path.parent.exists()

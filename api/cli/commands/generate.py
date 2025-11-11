@@ -284,7 +284,7 @@ def _display_change_summary(
     click.echo(f"  • {unchanged} files unchanged")
 
     if not affected_page_ids or not wiki_structure:
-        click.echo("Affected pages: none")
+        click.echo("Affected pages: none (you can still choose 'Update only affected pages' to pick pages manually)")
         return
 
     changed_set = set(summary.get("changed_files", []))
@@ -301,7 +301,7 @@ def _display_change_summary(
 
 def _prompt_generation_action(
     has_existing: bool,
-    affected_page_ids: list[str],
+    can_update_pages: bool,
 ) -> str:
     actions = []
     action_map = {}
@@ -310,7 +310,7 @@ def _prompt_generation_action(
         label = "Overwrite existing wiki (regenerate all pages)"
         actions.append(label)
         action_map[label] = "overwrite"
-        if affected_page_ids:
+        if can_update_pages:
             label = "Update only affected pages"
             actions.append(label)
             action_map[label] = "update"
@@ -804,6 +804,7 @@ def generate(force: bool):
 
         change_summary = None
         affected_pages: list[str] = []
+        update_candidate_page_ids: list[str] = []
         action = "overwrite"
 
         if existing_cache and selected_cache_entry:
@@ -819,6 +820,12 @@ def generate(force: bool):
                     else [],
                     existing_cache.wiki_structure,
                 )
+                if existing_cache and existing_cache.wiki_structure:
+                    update_candidate_page_ids = (
+                        affected_pages
+                        if affected_pages
+                        else [page.id for page in existing_cache.wiki_structure.pages]
+                    )
                 _display_change_summary(
                     repo_name,
                     selected_cache_entry,
@@ -826,7 +833,8 @@ def generate(force: bool):
                     existing_cache.wiki_structure,
                     affected_pages,
                 )
-                action = _prompt_generation_action(True, affected_pages)
+                can_update = bool(update_candidate_page_ids)
+                action = _prompt_generation_action(True, can_update)
                 if action == "cancel":
                     progress.close()
                     click.echo("Operation cancelled.")
@@ -838,19 +846,27 @@ def generate(force: bool):
         page_feedback: dict[str, str] = {}
 
         if action == "update":
-            if not (existing_cache and affected_pages):
+            if not (existing_cache and update_candidate_page_ids):
                 click.echo(
-                    "No affected pages detected; regenerating the entire wiki instead.",
+                    "No pages available to update; regenerating the entire wiki instead.",
                 )
                 action = "overwrite"
             else:
                 selected_page_ids = _prompt_pages_to_regenerate(
-                    existing_cache.wiki_structure, affected_pages,
+                    existing_cache.wiki_structure, update_candidate_page_ids,
                 )
                 if not selected_page_ids:
                     progress.close()
                     click.echo("No pages selected. Operation cancelled.")
                     return
+                click.echo("\nPages selected for regeneration:")
+                for pid in selected_page_ids:
+                    page = next(
+                        (p for p in existing_cache.wiki_structure.pages if p.id == pid),
+                        None,
+                    )
+                    title = page.title if page else pid
+                    click.echo(f"  • {title}")
                 page_feedback = _collect_page_feedback(
                     selected_page_ids, existing_cache.wiki_structure,
                 )
@@ -1012,6 +1028,12 @@ def generate(force: bool):
             ),
         )
         click.echo(f"Pages regenerated: {len(regenerated_ids)}")
+        if regenerated_ids:
+            page_lookup = {page.id: page for page in wiki_structure.pages}
+            click.echo("Regenerated pages:")
+            for pid in regenerated_ids:
+                title = page_lookup.get(pid).title if pid in page_lookup else pid
+                click.echo(f"  • {title}")
         if reused_count:
             click.echo(f"Pages reused: {reused_count}")
         click.echo(f"Cache file: {cache_file}")

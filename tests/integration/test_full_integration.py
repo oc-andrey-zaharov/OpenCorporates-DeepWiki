@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Full integration test for Google AI embeddings."""
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -10,70 +9,54 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-def test_config_loading():
+def test_config_loading() -> bool | None:
     """Test that configurations load properly."""
-    print("🔧 Testing configuration loading...")
-
     try:
         from api.config import CLIENT_CLASSES, configs
 
         # Check if Google embedder config exists
         if "embedder_google" in configs:
-            print("✅ embedder_google configuration found")
-            google_config = configs["embedder_google"]
-            print(f"📋 Google config: {json.dumps(google_config, indent=2, default=str)}")
+            configs["embedder_google"]
         else:
-            print("❌ embedder_google configuration not found")
             return False
 
         # Check if GoogleEmbedderClient is in CLIENT_CLASSES
         if "GoogleEmbedderClient" in CLIENT_CLASSES:
-            print("✅ GoogleEmbedderClient found in CLIENT_CLASSES")
+            pass
         else:
-            print("❌ GoogleEmbedderClient not found in CLIENT_CLASSES")
             return False
 
         return True
 
-    except Exception as e:
-        print(f"❌ Error loading configuration: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
         return False
 
-def test_embedder_selection():
+def test_embedder_selection() -> bool | None:
     """Test embedder selection mechanism."""
-    print("\n🔧 Testing embedder selection...")
-
     try:
         from api.config import get_embedder_type, is_google_embedder
         from api.tools.embedder import get_embedder
 
         # Test default embedder type
-        current_type = get_embedder_type()
-        print(f"📋 Current embedder type: {current_type}")
+        get_embedder_type()
 
         # Test is_google_embedder function
-        is_google = is_google_embedder()
-        print(f"📋 Is Google embedder: {is_google}")
+        is_google_embedder()
 
         # Test get_embedder with google type
-        print("🧪 Testing get_embedder with embedder_type='google'...")
-        embedder = get_embedder(embedder_type="google")
-        print(f"✅ Google embedder created: {type(embedder)}")
+        get_embedder(embedder_type="google")
 
         return True
 
-    except Exception as e:
-        print(f"❌ Error testing embedder selection: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
         return False
 
-def test_google_embedder_with_env():
+def test_google_embedder_with_env() -> bool | None:
     """Test Google embedder with environment variable."""
-    print("\n🔧 Testing with DEEPWIKI_EMBEDDER_TYPE=google...")
-
     # Set environment variable
     original_value = os.environ.get("DEEPWIKI_EMBEDDER_TYPE")
     os.environ["DEEPWIKI_EMBEDDER_TYPE"] = "google"
@@ -85,24 +68,19 @@ def test_google_embedder_with_env():
         import api.config
         importlib.reload(api.config)
 
-        from api.config import EMBEDDER_TYPE, get_embedder_config, get_embedder_type
+        from api.config import get_embedder_config
         from api.tools.embedder import get_embedder
 
-        print(f"📋 EMBEDDER_TYPE: {EMBEDDER_TYPE}")
-        print(f"📋 get_embedder_type(): {get_embedder_type()}")
 
         # Test getting embedder config
-        config = get_embedder_config()
-        print(f"📋 Current embedder config client: {config.get('client_class', 'Unknown')}")
+        get_embedder_config()
 
         # Test creating embedder
-        embedder = get_embedder()
-        print(f"✅ Embedder created with google env var: {type(embedder)}")
+        get_embedder()
 
         return True
 
-    except Exception as e:
-        print(f"❌ Error testing with environment variable: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
         return False
@@ -114,11 +92,8 @@ def test_google_embedder_with_env():
         elif "DEEPWIKI_EMBEDDER_TYPE" in os.environ:
             del os.environ["DEEPWIKI_EMBEDDER_TYPE"]
 
-def main():
+def main() -> bool:
     """Run all integration tests."""
-    print("🚀 Starting Google AI Embeddings Integration Tests")
-    print("=" * 60)
-
     tests = [
         test_config_loading,
         test_embedder_selection,
@@ -132,20 +107,13 @@ def main():
         try:
             if test():
                 passed += 1
-                print("✅ PASSED")
             else:
-                print("❌ FAILED")
-        except Exception as e:
-            print(f"❌ FAILED with exception: {e}")
-        print("-" * 40)
+                pass
+        except Exception:
+            pass
 
-    print(f"\n📊 Test Results: {passed}/{total} tests passed")
 
-    if passed == total:
-        print("🎉 All integration tests passed!")
-        return True
-    print("💥 Some tests failed!")
-    return False
+    return passed == total
 
 if __name__ == "__main__":
     success = main()

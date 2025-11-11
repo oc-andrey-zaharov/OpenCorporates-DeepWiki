@@ -5,7 +5,7 @@ Helpers for reusing RAG state across multiple wiki generation steps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Generator, List, Optional
+from typing import Dict, Generator, List, Optional
 
 from api.core.chat import generate_chat_completion_core
 from api.services.rag import RAG

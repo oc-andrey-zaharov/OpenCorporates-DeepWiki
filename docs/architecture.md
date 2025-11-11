@@ -9,8 +9,8 @@ This document gives a quick overview of the technologies in use and how the main
 | CLI | Python Click | Command-line interface for wiki generation |
 | Backend | FastAPI (Python 3.11+) | Optional REST API server for shared resources |
 | Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `api/rag.py` |
-| AI Providers | Google Gemini, OpenAI, OpenRouter, Azure OpenAI, Ollama | Configurable via `api/config` and environment variables |
-| Persistence | Local cache (filesystem) | Stores generated wiki artifacts for reuse |
+| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama | Configurable via `api/config` and environment variables |
+| Persistence | Local cache (filesystem) | Stores generated wiki artifacts and repo snapshots for reuse/versioning |
 | Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
 | Tooling | Poetry for backend, Docker & Makefile | Simplifies local development and deployment |
 
@@ -52,7 +52,14 @@ sequenceDiagram
   L-->>C: Wiki structure
   C->>L: Generate page content (streaming)
   L-->>C: Page content chunks
-  C->>C: Cache wiki artifacts
+  C->>C: Compare repo snapshot & cache summary
+  alt Cache exists
+    C->>C: Detect changed files & affected pages
+    C->>L: Regenerate only selected pages
+  else No cache
+    C->>L: Generate every page
+  end
+  C->>C: Cache wiki artifacts + snapshot
   C-->>U: Wiki generation complete
 ```
 
@@ -88,11 +95,18 @@ deepwiki config set server_url http://localhost:8001
 
 The CLI provides commands for wiki generation and management:
 
-- `generate` - Generate wiki for a repository
+- `generate` - Generate wiki for a repository (with change detection, partial regeneration, and cache versioning)
 - `export` - Export cached wiki to markdown/JSON
 - `delete` - Delete cached wiki
 - `list` - List all cached wikis
 - `config` - Manage configuration
+
+Key behaviors:
+
+- **Repository snapshotting**: `generate` captures file metadata (path, size, hash, mtime) from GitHub trees or local checkout. Snapshots are stored alongside wiki payloads.
+- **Change detection**: On subsequent runs the CLI diff snapshot A vs B to categorize changed/new/deleted files and compute the set of pages whose `filePaths` intersect with the diff.
+- **Interactive regeneration**: Users can overwrite everything, update only affected pages (multi-select with optional per-page feedback), or fork a new cache version.
+- **Version-aware management**: `list`, `export`, and `delete` commands operate on distinct cache versions, preserving historical snapshots for audits or comparisons.
 
 ### Core Logic (`api/core/`)
 
@@ -119,7 +133,6 @@ Support for multiple AI providers:
 - `openai_client.py` - OpenAI API client
 - `bedrock_client.py` - AWS Bedrock client
 - `openrouter_client.py` - OpenRouter client
-- `azureai_client.py` - Azure OpenAI client
 - `google_embedder_client.py` - Google embedding client
 - `dashscope_client.py` - Alibaba Cloud DashScope client
 
@@ -132,6 +145,7 @@ Optional HTTP API server providing:
 - Shared cache management
 - GitHub/local repository structure fetching
 - Export utilities (Markdown/JSON)
+- Version-aware cache retrieval and deletion compatible with the CLI
 
 #### WebSocket Server (`api/websocket_wiki.py`)
 
@@ -144,12 +158,14 @@ Optional WebSocket server for:
 ## Data Flow
 
 1. **Repository Fetching**: CLI or server fetches repository content from Git provider
-2. **Embedding Generation**: Code files are processed and embedded using configured embedder
-3. **Vector Store**: Embeddings stored in FAISS for fast similarity search
-4. **Wiki Structure Generation**: LLM generates wiki structure based on repository analysis
-5. **Page Content Generation**: LLM generates individual page content with streaming
-6. **Caching**: Generated wiki artifacts cached locally for reuse
-7. **Export**: Cached wikis can be exported to markdown or JSON
+2. **Snapshot Capture**: File metadata snapshot persists alongside the cache for future diffs
+3. **Embedding Generation**: Code files are processed and embedded using configured embedder
+4. **Vector Store**: Embeddings stored in FAISS for fast similarity search
+5. **Wiki Structure Generation**: LLM generates wiki structure based on repository analysis
+6. **Page Content Generation**: LLM generates individual page content with streaming
+7. **Change Detection Loop**: Subsequent runs diff snapshots, select impacted pages, and optionally solicit user feedback before regenerating
+8. **Caching**: Generated wiki artifacts plus the new snapshot are cached locally for reuse/versioning
+9. **Export**: Cached wikis can be exported to markdown or JSON
 
 ## Configuration
 

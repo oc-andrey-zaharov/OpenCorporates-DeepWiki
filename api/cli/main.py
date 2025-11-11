@@ -126,7 +126,7 @@ def main():
     except Exception as e:
         # Handle unexpected errors
         click.echo(f"Unexpected error: {e}", err=True)
-        if logger.isEnabledFor(logging.DEBUG):
+        if logger.isEnabledFor(logging.INFO):
             import traceback
 
             traceback.print_exc()

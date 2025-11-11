@@ -38,6 +38,7 @@ def get_github_repo_structure_standalone(
             - file_tree: String representation of file tree
             - readme: README.md content
             - default_branch: Default branch name
+            - tree_files: Raw Git tree entries for blobs
 
     Raises:
         Exception: If repository structure cannot be fetched
@@ -121,9 +122,18 @@ def get_github_repo_structure_standalone(
         raise Exception(error_msg)
 
     # Convert tree data to a string representation
-    file_tree_data = "\n".join(
-        item["path"] for item in tree_data["tree"] if item.get("type") == "blob"
-    )
+    blob_entries = [item for item in tree_data["tree"] if item.get("type") == "blob"]
+    file_tree_data = "\n".join(item["path"] for item in blob_entries)
+    tree_files = [
+        {
+            "path": item.get("path"),
+            "sha": item.get("sha"),
+            "size": item.get("size"),
+            "type": item.get("type"),
+            "mode": item.get("mode"),
+        }
+        for item in blob_entries
+    ]
 
     # Try to fetch README.md content
     readme_content = ""
@@ -147,4 +157,5 @@ def get_github_repo_structure_standalone(
         "file_tree": file_tree_data,
         "readme": readme_content,
         "default_branch": default_branch,
+        "tree_files": tree_files,
     }

@@ -1,0 +1,91 @@
+Starting CodeRabbit review in plain text mode...
+
+Connecting to review service
+Setting up
+Analyzing
+Reviewing
+
+
+============================================================================
+File: api/services/wiki_context.py
+Line: 8
+Type: potential_issue
+
+Comment:
+Add missing Dict import.
+
+Line 68 uses Dict[str, str] as a type annotation, but Dict is not imported from the typing module.
+
+
+
+Apply this diff to fix the missing import:
+
+-from typing import Generator, List, Optional
++from typing import Dict, Generator, List, Optional
+
+Prompt for AI Agent:
+In api/services/wiki_context.py around line 8, the typing import line is missing Dict; add Dict to the typing imports (e.g., from typing import Generator, List, Optional, Dict) so that the annotation Dict[str, str] used on line 68 is defined and type checks correctly.
+
+
+
+============================================================================
+File: api/cli/commands/config_cmd.py
+Line: 75
+Type: potential_issue
+
+Comment:
+Critical: complete_config_keys is not defined or imported.
+
+The decorator references complete_config_keys but this function is not imported or defined anywhere in the file. This will cause a NameError when the module is loaded.
+
+
+
+Apply this diff to import the function (adjust the import path as needed):
+
+ import click
+ import json
+-from api.cli.config import load_config, set_config_value, CONFIG_FILE
++from api.cli.config import load_config, set_config_value, CONFIG_FILE, complete_config_keys
+ from api.utils.mode import (
+     is_server_mode,
+     get_server_url,
+
+
+Alternatively, if complete_config_keys doesn't exist yet, you'll need to implement it in the api.cli.config module or remove the shell_complete parameter.
+
+Prompt for AI Agent:
+In api/cli/commands/config_cmd.py around line 75, the decorator references complete_config_keys which is not defined or imported; fix by importing the symbol (for example add an import from api.cli.config: complete_config_keys) or, if that helper doesn't exist, implement complete_config_keys in api/cli/config.py (returning the appropriate completion list) and then import it here, or remove the shell_complete parameter from the click.argument call if completion is not required.
+
+
+
+============================================================================
+File: api/cli/main.py
+Line: 129 to 132
+Type: potential_issue
+
+Comment:
+DEBUG logging check will never trigger; traceback won't print as intended.
+
+The CLI only sets logging to INFO (verbose mode) or WARNING (default mode) at lines 52-56. The logger.isEnabledFor(logging.DEBUG) check will always return False, so tracebacks for unexpected errors will never be displayed.
+
+
+
+If you want tracebacks in verbose mode, check INFO level instead:
+
+-if logger.isEnabledFor(logging.DEBUG):
++if logger.isEnabledFor(logging.INFO):
+     import traceback
+     traceback.print_exc()
+
+
+Or add a --debug flag to enable DEBUG level logging:
+
+@click.option("--debug", is_flag=True, help="Enable debug mode with tracebacks")
+def cli(ctx, verbose, debug):
+    log_level = logging.DEBUG if debug else (logging.INFO if verbose else logging.WARNING)
+    # ... rest of setup
+
+Prompt for AI Agent:
+In api/cli/main.py around lines 129 to 132, the check logger.isEnabledFor(logging.DEBUG) will never be true because the CLI only configures INFO or WARNING levels; update the logic so tracebacks are printed when the user requests verbose output or debug mode: either change the check to logger.isEnabledFor(logging.INFO) so verbose mode prints tracebacks, or add a --debug flag to the CLI that sets logging.DEBUG and use that flag to control whether traceback.print_exc() is called; ensure the CLI logging setup uses the new debug flag (or the existing verbose flag) to set the effective log level accordingly and remove the unreachable DEBUG-only check.
+
+

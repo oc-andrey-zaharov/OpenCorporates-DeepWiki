@@ -21,7 +21,6 @@ from api.services.data_pipeline import count_tokens, get_file_content
 from api.clients.openai_client import OpenAIClient
 from api.clients.openrouter_client import OpenRouterClient
 from api.clients.bedrock_client import BedrockClient
-from api.clients.azureai_client import AzureAIClient
 from api.services.rag import RAG
 from api.prompts import SIMPLE_CHAT_SYSTEM_PROMPT
 
@@ -130,7 +129,7 @@ def generate_chat_completion_core(
     Args:
         repo_url: Repository URL
         messages: List of message dicts with 'role' and 'content' keys
-        provider: Model provider (google, openai, openrouter, ollama, bedrock, azure)
+        provider: Model provider (google, openai, openrouter, ollama, bedrock)
         model: Model name
         repo_type: Repository type (default: "github")
         token: Optional access token for private repositories
@@ -488,36 +487,6 @@ def generate_chat_completion_core(
                 except Exception as e_bedrock:
                     logger.error(f"Error with AWS Bedrock API: {str(e_bedrock)}")
                     yield f"\nError with AWS Bedrock API: {str(e_bedrock)}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
-            elif provider == "azure":
-                try:
-                    logger.info(f"Using Azure AI with model: {model}")
-                    model_client = AzureAIClient()
-                    model_kwargs = {
-                        "model": model,
-                        "stream": True,
-                        "temperature": model_config["temperature"],
-                        "top_p": model_config["top_p"],
-                    }
-                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
-                        input=prompt,
-                        model_kwargs=model_kwargs,
-                        model_type=ModelType.LLM,
-                    )
-                    logger.info("Making Azure AI API call")
-                    response = await model_client.acall(
-                        api_kwargs=api_kwargs, model_type=ModelType.LLM
-                    )
-                    async for chunk in response:
-                        choices = getattr(chunk, "choices", [])
-                        if len(choices) > 0:
-                            delta = getattr(choices[0], "delta", None)
-                            if delta is not None:
-                                text = getattr(delta, "content", None)
-                                if text is not None:
-                                    yield text
-                except Exception as e_azure:
-                    logger.error(f"Error with Azure AI API: {str(e_azure)}")
-                    yield f"\nError with Azure AI API: {str(e_azure)}\n\nPlease check that you have set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_VERSION environment variables with valid values."
             else:
                 # Google Generative AI
                 model_client = genai.GenerativeModel(

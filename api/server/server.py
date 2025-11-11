@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -17,6 +18,7 @@ from api.models import (
     WikiExportRequest,
 )
 from api.utils.export import generate_markdown_export, generate_json_export
+from api.utils.wiki_cache import get_cache_filename, parse_cache_filename
 from api.core.github import get_github_repo_structure_standalone
 
 # Configure logging
@@ -286,17 +288,34 @@ WIKI_CACHE_DIR = os.path.join(get_adalflow_default_root_path(), "wikicache")
 os.makedirs(WIKI_CACHE_DIR, exist_ok=True)
 
 
-def get_wiki_cache_path(owner: str, repo: str, repo_type: str, language: str) -> str:
+def get_wiki_cache_path(
+    owner: str,
+    repo: str,
+    repo_type: str,
+    language: str,
+    version: int = 1,
+) -> str:
     """Generates the file path for a given wiki cache."""
-    filename = f"deepwiki_cache_{repo_type}_{owner}_{repo}_{language}.json"
+
+    filename = get_cache_filename(
+        repo_type=repo_type,
+        owner=owner,
+        repo_name=repo,
+        language=language,
+        version=version,
+    )
     return os.path.join(WIKI_CACHE_DIR, filename)
 
 
 async def read_wiki_cache(
-    owner: str, repo: str, repo_type: str, language: str
+    owner: str,
+    repo: str,
+    repo_type: str,
+    language: str,
+    version: int = 1,
 ) -> Optional[WikiCacheData]:
     """Reads wiki cache data from the file system."""
-    cache_path = get_wiki_cache_path(owner, repo, repo_type, language)
+    cache_path = get_wiki_cache_path(owner, repo, repo_type, language, version)
     if os.path.exists(cache_path):
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
@@ -310,8 +329,13 @@ async def read_wiki_cache(
 
 async def save_wiki_cache(data: WikiCacheRequest) -> bool:
     """Saves wiki cache data to the file system."""
+    version = data.version or 1
     cache_path = get_wiki_cache_path(
-        data.repo.owner, data.repo.repo, data.repo.type, data.language
+        data.repo.owner,
+        data.repo.repo,
+        data.repo.type,
+        data.language,
+        version=version,
     )
     logger.info(f"Attempting to save wiki cache. Path: {cache_path}")
     try:
@@ -321,6 +345,10 @@ async def save_wiki_cache(data: WikiCacheRequest) -> bool:
             repo=data.repo,
             provider=data.provider,
             model=data.model,
+            version=version,
+            created_at=data.created_at,
+            updated_at=data.updated_at,
+            repo_snapshot=data.repo_snapshot,
         )
         # Log size of data to be cached for debugging (avoid logging full content if large)
         try:
@@ -357,6 +385,9 @@ async def get_cached_wiki(
     repo: str = Query(..., description="Repository name"),
     repo_type: str = Query(..., description="Repository type (e.g., github)"),
     language: str = Query(..., description="Language of the wiki content"),
+    version: Optional[int] = Query(
+        None, description="Optional cache version (defaults to latest)"
+    ),
 ):
     """
     Retrieves cached wiki data (structure and generated pages) for a repository.
@@ -365,7 +396,10 @@ async def get_cached_wiki(
     language = "en"
 
     logger.info(f"Attempting to retrieve wiki cache for {owner}/{repo} ({repo_type})")
-    cached_data = await read_wiki_cache(owner, repo, repo_type, language)
+    cache_version = version or 1
+    cached_data = await read_wiki_cache(
+        owner, repo, repo_type, language, version=cache_version
+    )
     if cached_data:
         return cached_data
     else:
@@ -399,6 +433,9 @@ async def delete_wiki_cache(
     repo: str = Query(..., description="Repository name"),
     repo_type: str = Query(..., description="Repository type (e.g., github)"),
     language: str = Query(..., description="Language of the wiki content"),
+    version: Optional[int] = Query(
+        None, description="Optional cache version (defaults to 1)"
+    ),
 ):
     """
     Deletes a specific wiki cache from the file system.
@@ -407,7 +444,9 @@ async def delete_wiki_cache(
     language = "en"
 
     logger.info(f"Attempting to delete wiki cache for {owner}/{repo} ({repo_type})")
-    cache_path = get_wiki_cache_path(owner, repo, repo_type, language)
+    cache_path = get_wiki_cache_path(
+        owner, repo, repo_type, language, version=version or 1
+    )
 
     if os.path.exists(cache_path):
         try:
@@ -467,7 +506,7 @@ async def root():
 async def get_processed_projects():
     """
     Lists all processed projects found in the wiki cache directory.
-    Projects are identified by files named like: deepwiki_cache_{repo_type}_{owner}_{repo}_{language}.json
+    Projects are identified by files named like: deepwiki_cache_{repo_type}_{owner}_{repo}_{language}[_vN].json
     """
     project_entries: List[ProcessedProjectEntry] = []
     # WIKI_CACHE_DIR is already defined globally in the file
@@ -485,47 +524,36 @@ async def get_processed_projects():
         )  # Use asyncio.to_thread for os.listdir
 
         for filename in filenames:
-            if filename.startswith("deepwiki_cache_") and filename.endswith(".json"):
-                file_path = os.path.join(WIKI_CACHE_DIR, filename)
-                try:
-                    stats = await asyncio.to_thread(
-                        os.stat, file_path
-                    )  # Use asyncio.to_thread for os.stat
-                    parts = (
-                        filename.replace("deepwiki_cache_", "")
-                        .replace(".json", "")
-                        .split("_")
-                    )
+            if not filename.startswith("deepwiki_cache_") or not filename.endswith(
+                ".json"
+            ):
+                continue
 
-                    # Expecting repo_type_owner_repo_language
-                    # Example: deepwiki_cache_github_AsyncFuncAI_deepwiki-open_en.json
-                    # parts = [github, AsyncFuncAI, deepwiki-open, en]
-                    if len(parts) >= 4:
-                        repo_type = parts[0]
-                        owner = parts[1]
-                        language = parts[-1]  # language is the last part
-                        repo = "_".join(parts[2:-1])  # repo can contain underscores
+            file_path = os.path.join(WIKI_CACHE_DIR, filename)
+            meta = parse_cache_filename(Path(file_path))
+            if not meta:
+                logger.warning(
+                    f"Could not parse project details from filename: {filename}"
+                )
+                continue
 
-                        project_entries.append(
-                            ProcessedProjectEntry(
-                                id=filename,
-                                owner=owner,
-                                repo=repo,
-                                name=f"{owner}/{repo}",
-                                repo_type=repo_type,
-                                submittedAt=int(
-                                    stats.st_mtime * 1000
-                                ),  # Convert to milliseconds
-                                language=language,
-                            )
-                        )
-                    else:
-                        logger.warning(
-                            f"Could not parse project details from filename: {filename}"
-                        )
-                except Exception as e:
-                    logger.error(f"Error processing file {file_path}: {e}")
-                    continue  # Skip this file on error
+            try:
+                stats = await asyncio.to_thread(os.stat, file_path)
+            except Exception as exc:
+                logger.error(f"Error processing file {file_path}: {exc}")
+                continue
+
+            project_entries.append(
+                ProcessedProjectEntry(
+                    id=filename,
+                    owner=meta["owner"],
+                    repo=meta["repo"],
+                    name=f"{meta['owner']}/{meta['repo']}",
+                    repo_type=meta["repo_type"],
+                    submittedAt=int(stats.st_mtime * 1000),
+                    language=meta["language"],
+                )
+            )
 
         # Sort by most recent first
         project_entries.sort(key=lambda p: p.submittedAt, reverse=True)

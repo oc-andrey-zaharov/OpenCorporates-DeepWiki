@@ -118,7 +118,6 @@ The frontend uses Next.js API routes that proxy to Python backend:
      - `api/openai_client.py`
      - `api/bedrock_client.py`
      - `api/openrouter_client.py`
-     - `api/azureai_client.py`
      - `api/google_embedder_client.py`
    - **Action Required**: None - these remain as core dependencies
 
@@ -869,7 +868,7 @@ The migration will be considered successful when:
 - ✅ Auto-fallback works when server unavailable
 - ✅ All existing CLI commands work (generate, export, delete, list, config)
 - ✅ Wiki generation produces same quality output as before
-- ✅ All model providers work (OpenAI, Google, Bedrock, OpenRouter, Azure, Ollama)
+- ✅ All model providers work (OpenAI, Google, Bedrock, OpenRouter, Ollama)
 - ✅ All repository types work (GitHub public/private, local)
 
 ### Technical Requirements

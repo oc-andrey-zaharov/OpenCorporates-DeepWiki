@@ -7,6 +7,7 @@ import json
 import click
 from datetime import datetime
 from api.cli.utils import get_cache_path, select_from_list, select_wiki_from_list
+from api.utils.wiki_cache import parse_cache_filename
 from api.models import WikiPage
 from api.utils.export import generate_markdown_export, generate_json_export
 
@@ -42,25 +43,26 @@ def export(format: str, output: str):
     wikis = []
     for i, cache_file in enumerate(cache_files, 1):
         try:
-            filename = cache_file.stem
-            parts = filename.replace("deepwiki_cache_", "").split("_")
+            meta = parse_cache_filename(cache_file)
+            if not meta:
+                continue
 
-            if len(parts) >= 4:
-                repo_type = parts[0]
-                owner = parts[1]
-                language = parts[-1]
-                repo = "_".join(parts[2:-1])
-                name = f"{owner}/{repo}" if owner else repo
+            owner = meta["owner"]
+            repo = meta["repo"]
+            name = f"{owner}/{repo}" if owner else repo
+            display_name = f"{name} (v{meta['version']})"
 
-                wikis.append(
-                    {
-                        "index": i,
-                        "name": name,
-                        "repo_type": repo_type,
-                        "language": language,
-                        "path": cache_file,
-                    }
-                )
+            wikis.append(
+                {
+                    "index": i,
+                    "name": name,
+                    "display_name": display_name,
+                    "repo_type": meta["repo_type"],
+                    "language": meta["language"],
+                    "version": meta["version"],
+                    "path": cache_file,
+                }
+            )
         except Exception:
             continue
 
@@ -135,6 +137,8 @@ def export(format: str, output: str):
     if not output:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         repo_name = selected_wiki["name"].replace("/", "_")
+        if selected_wiki.get("version", 1) > 1:
+            repo_name = f"{repo_name}_v{selected_wiki['version']}"
         extension = "md" if format == "markdown" else "json"
         output = f"{repo_name}_wiki_{timestamp}.{extension}"
 

@@ -400,6 +400,50 @@ class TestSelectFromList:
 
 
 @pytest.mark.unit
+class TestSelectMultipleFromList:
+    """Tests for select_multiple_from_list function"""
+
+    def test_select_multiple_from_list_empty_choices(self):
+        with pytest.raises(ValueError, match="No choices provided"):
+            utils.select_multiple_from_list("Select", [])
+
+    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("click.prompt")
+    @patch("click.echo")
+    def test_select_multiple_from_list_fallback_all(
+        self, mock_echo, mock_prompt
+    ):
+        mock_prompt.return_value = ""
+        result = utils.select_multiple_from_list(
+            "Select", ["option1", "option2"]
+        )
+        assert result == ["option1", "option2"]
+
+    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("click.prompt")
+    @patch("click.echo")
+    def test_select_multiple_from_list_fallback_specific(
+        self, mock_echo, mock_prompt
+    ):
+        mock_prompt.side_effect = ["1,2"]
+        result = utils.select_multiple_from_list(
+            "Select", ["option1", "option2", "option3"]
+        )
+        assert result == ["option1", "option2"]
+
+    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("api.cli.utils.TerminalMenu")
+    def test_select_multiple_from_list_terminal_menu(self, mock_terminal_menu):
+        mock_menu_instance = MagicMock()
+        mock_menu_instance.show.return_value = [0, 2]
+        mock_terminal_menu.return_value = mock_menu_instance
+
+        result = utils.select_multiple_from_list(
+            "Select", ["option1", "option2", "option3"]
+        )
+        assert result == ["option1", "option3"]
+
+@pytest.mark.unit
 class TestConfirmAction:
     """Tests for confirm_action function"""
 

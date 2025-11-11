@@ -5,6 +5,7 @@ Configuration management commands.
 import click
 import json
 from api.cli.config import load_config, set_config_value, CONFIG_FILE
+from api.cli.completion import complete_config_keys
 from api.utils.mode import (
     is_server_mode,
     get_server_url,

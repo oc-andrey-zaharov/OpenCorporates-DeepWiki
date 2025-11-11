@@ -21,7 +21,7 @@ OpenCorporates DeepWiki is a Python application that:
   - RAG pipeline (`api/services/rag.py`) - retrieves code context and generates responses
   - Chat completion (`api/core/chat.py`) - handles streaming LLM responses
   - Wiki generation - creates structured documentation from repository code
-- **Supports multiple providers**: Google Gemini, OpenAI, OpenRouter, Azure OpenAI, Ollama
+- **Supports multiple providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama
 - **Has existing test infrastructure**: pytest-based unit and integration tests
 
 **Key Testing Requirements:**

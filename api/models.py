@@ -9,6 +9,24 @@ from typing import List, Optional, Dict, Literal
 from pydantic import BaseModel, Field
 
 
+class RepoSnapshotFile(BaseModel):
+    """Metadata about a single file referenced by a wiki cache snapshot."""
+
+    path: str
+    hash: Optional[str] = None
+    size: Optional[int] = None
+    modified_at: Optional[float] = None
+
+
+class RepoSnapshot(BaseModel):
+    """Lightweight snapshot of repository files for change detection."""
+
+    captured_at: float
+    files: Dict[str, RepoSnapshotFile]
+    source: Optional[str] = None
+    reference: Optional[str] = None
+
+
 class WikiPage(BaseModel):
     """
     Model for a wiki page.
@@ -84,6 +102,10 @@ class WikiCacheData(BaseModel):
     repo: Optional[RepoInfo] = None
     provider: Optional[str] = None
     model: Optional[str] = None
+    version: Optional[int] = 1
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    repo_snapshot: Optional[RepoSnapshot] = None
 
 
 class WikiCacheRequest(BaseModel):
@@ -97,6 +119,10 @@ class WikiCacheRequest(BaseModel):
     generated_pages: Dict[str, WikiPage]
     provider: str
     model: str
+    version: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    repo_snapshot: Optional[RepoSnapshot] = None
 
 
 class WikiExportRequest(BaseModel):
@@ -120,4 +146,6 @@ __all__ = [
     "WikiCacheData",
     "WikiCacheRequest",
     "WikiExportRequest",
+    "RepoSnapshot",
+    "RepoSnapshotFile",
 ]

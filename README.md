@@ -9,7 +9,9 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 - **Smart Analysis**: AI-powered code understanding
 - **Beautiful Diagrams**: Automatic Mermaid diagrams for architecture and data flow
 - **DeepResearch**: Multi-turn research process for complex topics
-- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, Azure OpenAI, and local Ollama
+- **Incremental Regeneration**: Detects repo changes, updates only affected pages, and preserves untouched content
+- **Versioned Cache Management**: Maintain multiple wiki snapshots per repo with clear version numbering and summaries
+- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, and local Ollama
 - **Standalone CLI**: Works out of the box without any server required
 - **Optional Server Mode**: Connect to FastAPI server for shared resources and caching
 
@@ -102,10 +104,10 @@ poetry install
 
 The DeepWiki CLI provides several commands:
 
-- `deepwiki wiki generate` - Generate a wiki for a repository
-- `deepwiki wiki export` - Export a cached wiki to markdown or JSON
-- `deepwiki wiki delete` - Delete a cached wiki
-- `deepwiki wiki list` - List all cached wikis
+- `deepwiki wiki generate` - Generate or refresh a wiki for a repository
+- `deepwiki wiki export` - Export a cached wiki to markdown or JSON (version aware)
+- `deepwiki wiki delete` - Delete a specific cached wiki version
+- `deepwiki wiki list` - List all cached wikis with version, size, and metadata
 - `deepwiki config` - Manage configuration settings
 
 #### Generate Wiki
@@ -123,6 +125,15 @@ You'll be prompted for:
 - Wiki type (comprehensive or concise)
 - Optional file filters
 
+When a cache already exists, the CLI now performs change detection against the last snapshot and shows a concise summary (changed/new/deleted counts plus affected pages). You can then choose to:
+
+1. **Overwrite existing wiki** – regenerate everything (default for `--force`)
+2. **Update only affected pages** – multi-select individual pages (space to toggle) and optionally provide per-page feedback before regeneration
+3. **Create new version** – keep the existing cache intact and write a new `_vN` snapshot
+4. **Cancel** – exit without changes
+
+Use `--force` to skip all prompts and overwrite the latest version in CI or scripted workflows.
+
 #### List Cached Wikis
 
 Display all cached wikis:
@@ -131,7 +142,7 @@ Display all cached wikis:
 deepwiki wiki list
 ```
 
-Shows repository name, type, language, wiki type, number of pages, file size, last modified date, and cache file path.
+Shows repository name, type, language, wiki type, number of pages, cache version, file size, last modified date, and cache file path.
 
 #### Export Wiki
 
@@ -141,7 +152,7 @@ Export a cached wiki to Markdown or JSON:
 deepwiki wiki export
 ```
 
-You'll be prompted to select a wiki from the list, choose format (markdown or json), and specify output path (optional).
+You'll be prompted to select a wiki/version combo from the list, choose format (markdown or json), and specify output path (optional). The generated filename automatically includes the version suffix (e.g., `_v3`).
 
 #### Delete Wiki
 
@@ -151,7 +162,15 @@ Delete a cached wiki from the cache:
 deepwiki wiki delete
 ```
 
-You'll be prompted to select a wiki and confirm deletion (use `--yes` flag to skip confirmation).
+You'll be prompted to select a wiki/version and confirm deletion (use `--yes` flag to skip confirmation). Server mode requests include the version so you can prune specific snapshots without touching others.
+
+### Cache Versions & Change Detection
+
+- Cache files follow the pattern `deepwiki_cache_{type}_{owner}_{repo}_{language}_vN.json`. Version `v1` is implicit (no suffix), while higher versions append `_vN`.
+- Each cache stores a light-weight repository snapshot (paths, sizes, hashes, mtimes). When you re-run `generate`, the CLI compares the new snapshot against the stored one to avoid unnecessary work.
+- Change summaries include counts for changed/new/deleted files plus a list of wiki pages impacted by those files. Only the selected pages are regenerated; the rest of the cache is reused byte-for-byte.
+- Multi-select prompts leverage `simple-term-menu` when available. Use the arrow keys + space to toggle multiple entries; press enter to accept the selection. In fallback mode, enter comma-separated numbers.
+- Optional per-page feedback is injected directly into the LLM prompt so you can nudge wording or highlight new requirements before regeneration.
 
 #### Configuration Management
 
@@ -272,9 +291,6 @@ To use server mode for shared resources and caching:
 | `GOOGLE_API_KEY` | Google Gemini API key | For Google models |
 | `OPENAI_API_KEY` | OpenAI API key | For OpenAI models |
 | `OPENROUTER_API_KEY` | OpenRouter API key | For OpenRouter models |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | For Azure models |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint | For Azure models |
-| `AZURE_OPENAI_VERSION` | Azure OpenAI version | For Azure models |
 | `GITHUB_TOKEN` | GitHub Personal Access Token for private repositories | For private repos |
 | `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, or `ollama` | No (default: `openai`) |
 | `OLLAMA_HOST` | Ollama host URL | No (default: `http://localhost:11434`) |
@@ -379,7 +395,6 @@ See [docs/diagram-validation.md](docs/diagram-validation.md) for details on how 
 - **Google AI**: [Google AI Studio](https://makersuite.google.com/app/apikey)
 - **OpenAI**: [OpenAI Platform](https://platform.openai.com/api-keys)
 - **OpenRouter**: [OpenRouter](https://openrouter.ai/)
-- **Azure OpenAI**: [Azure Portal](https://portal.azure.com/)
 
 ## Troubleshooting
 

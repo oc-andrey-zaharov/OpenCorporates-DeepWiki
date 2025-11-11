@@ -6,10 +6,12 @@ import os
 import sys
 import json
 import time
+from datetime import datetime
 import click
 import logging
 import subprocess
 import fnmatch
+from dataclasses import dataclass
 from typing import Dict, Optional, List
 
 from api.cli.config import load_config, get_provider_models
@@ -18,15 +20,43 @@ from api.cli.utils import (
     get_cache_path,
     ensure_cache_dir,
     select_from_list,
+    select_multiple_from_list,
     confirm_action,
     prompt_text_input,
 )
 from api.cli.progress import ProgressManager
 from api.services.wiki_context import WikiGenerationContext
-from api.models import WikiStructureModel, WikiPage, WikiCacheData
+from api.models import (
+    RepoInfo,
+    RepoSnapshot,
+    WikiStructureModel,
+    WikiPage,
+    WikiCacheData,
+)
 from api.config import GITHUB_TOKEN
+from api.utils.change_detection import (
+    build_snapshot_from_local,
+    build_snapshot_from_tree,
+    detect_repo_changes,
+    find_affected_pages,
+    load_existing_cache,
+)
+from api.utils.wiki_cache import (
+    CacheFileInfo,
+    DEFAULT_LANGUAGE,
+    get_cache_filename,
+    list_existing_wikis,
+)
+from api.utils.github import get_github_repo_structure
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RepositoryState:
+    file_tree: str
+    readme: str
+    snapshot: RepoSnapshot
 
 
 def prompt_repository() -> tuple:
@@ -213,11 +243,159 @@ def prompt_file_filters() -> tuple:
     return excluded_dirs, excluded_files, included_dirs, included_files
 
 
+def _format_cache_choice(entry: CacheFileInfo) -> str:
+    timestamp = entry.modified.strftime("%Y-%m-%d %H:%M:%S")
+    return f"v{entry.version} • {timestamp} • {entry.path.name}"
+
+
+def _select_cache_entry(entries: List[CacheFileInfo]) -> CacheFileInfo:
+    if len(entries) == 1:
+        return entries[0]
+
+    options = [_format_cache_choice(entry) for entry in entries]
+    selection = select_from_list(
+        "Select existing wiki version",
+        options,
+        default=options[0],
+    )
+    selected_index = options.index(selection)
+    return entries[selected_index]
+
+
+def _display_change_summary(
+    repo_name: str,
+    cache_entry: CacheFileInfo,
+    summary: Optional[Dict[str, List[str]]],
+    wiki_structure: Optional[WikiStructureModel],
+    affected_page_ids: List[str],
+):
+    click.echo(
+        f"\n⚠️  Wiki already exists for {repo_name} (v{cache_entry.version})"
+    )
+
+    if not summary:
+        click.echo("No change information available. Proceed with caution.")
+        return
+
+    changed = len(summary.get("changed_files", []))
+    new_files = len(summary.get("new_files", []))
+    deleted_files = len(summary.get("deleted_files", []))
+    unchanged = summary.get("unchanged_count", 0)
+
+    click.echo("Repository changes detected:")
+    click.echo(f"  • {changed} files changed")
+    click.echo(f"  • {new_files} new files")
+    click.echo(f"  • {deleted_files} files deleted")
+    click.echo(f"  • {unchanged} files unchanged")
+
+    if not affected_page_ids or not wiki_structure:
+        click.echo("Affected pages: none")
+        return
+
+    changed_set = set(summary.get("changed_files", []))
+    page_lookup = {page.id: page for page in wiki_structure.pages}
+
+    click.echo("Affected pages:")
+    for page_id in affected_page_ids:
+        page = page_lookup.get(page_id)
+        if not page:
+            continue
+        page_changes = len({fp for fp in page.filePaths} & changed_set)
+        click.echo(f"  • {page.title} ({page_changes} files changed)")
+
+
+def _prompt_generation_action(
+    has_existing: bool,
+    affected_page_ids: List[str],
+) -> str:
+    actions = []
+    action_map = {}
+
+    if has_existing:
+        label = "Overwrite existing wiki (regenerate all pages)"
+        actions.append(label)
+        action_map[label] = "overwrite"
+        if affected_page_ids:
+            label = "Update only affected pages"
+            actions.append(label)
+            action_map[label] = "update"
+        label = "Create new version"
+        actions.append(label)
+        action_map[label] = "new_version"
+        label = "Cancel"
+        actions.append(label)
+        action_map[label] = "cancel"
+    else:
+        return "overwrite"
+
+    choice = select_from_list("What would you like to do?", actions)
+    return action_map[choice]
+
+
+def _prompt_pages_to_regenerate(
+    wiki_structure: WikiStructureModel,
+    affected_page_ids: List[str],
+) -> List[str]:
+    page_lookup = {page.id: page for page in wiki_structure.pages}
+
+    options = []
+    mapping = {}
+    for page_id in affected_page_ids:
+        page = page_lookup.get(page_id)
+        if not page:
+            continue
+        label = f"{page.title} [{page.id}]"
+        options.append(label)
+        mapping[label] = page_id
+
+    if not options:
+        return []
+
+    selected_labels = select_multiple_from_list(
+        "Select pages to regenerate (space to toggle)", options
+    )
+
+    if not selected_labels:
+        return affected_page_ids
+
+    return [mapping[label] for label in selected_labels if label in mapping]
+
+
+def _collect_page_feedback(
+    page_ids: List[str],
+    wiki_structure: WikiStructureModel,
+) -> Dict[str, str]:
+    if not page_ids:
+        return {}
+
+    if not confirm_action(
+        "Would you like to provide feedback for any selected pages?", default=False
+    ):
+        return {}
+
+    feedback: Dict[str, str] = {}
+    page_lookup = {page.id: page for page in wiki_structure.pages}
+    for page_id in page_ids:
+        page = page_lookup.get(page_id)
+        if not page:
+            continue
+        note = prompt_text_input(
+            f"Feedback for '{page.title}' (leave blank to skip)",
+            default="",
+            show_default=False,
+        )
+        if note and note.strip():
+            feedback[page_id] = note.strip()
+
+    return feedback
+
+
 def generate_page_content_sync(
     page: WikiPage,
     generation_context: WikiGenerationContext,
     repo_url: str,
     progress_manager: ProgressManager,
+    extra_feedback: Optional[str] = None,
 ) -> Optional[WikiPage]:
     """
     Generate content for a single page (synchronous wrapper).
@@ -531,6 +709,14 @@ erDiagram
 7.  **Consistency:** Maintain consistent formatting, terminology, and style throughout the page.
 
 Generate the content in English. Do NOT wrap your response in markdown code fences. Do NOT provide any acknowledgements, disclaimers, apologies, or any other preface. JUST START with the `<details>` block as the very first line of your response."""
+
+        if extra_feedback:
+            prompt += (
+                "\nUser feedback and guidance:\n"
+                + extra_feedback.strip()
+                + "\n"
+            )
+
 
         page_bar.update(30)  # Prompt ready
 
@@ -1044,44 +1230,179 @@ def collect_repository_files(repo_path: str) -> List[str]:
     return files
 
 
+def _read_local_readme(repo_path: str) -> str:
+    for readme_name in ["README.md", "readme.md", "README.txt"]:
+        readme_path = os.path.join(repo_path, readme_name)
+        if os.path.exists(readme_path):
+            try:
+                with open(readme_path, "r", encoding="utf-8", errors="ignore") as handle:
+                    return handle.read()
+            except Exception as exc:
+                logger.debug(f"Failed to read {readme_path}: {exc}")
+    return ""
+
+
+def prepare_repository_state(
+    repo_type: str,
+    repo_url_or_path: str,
+    owner: Optional[str],
+    repo_name: str,
+) -> RepositoryState:
+    if repo_type == "github":
+        data = get_github_repo_structure(
+            owner=owner or "",
+            repo=repo_name,
+            repo_url=repo_url_or_path,
+        )
+        file_tree = data.get("file_tree", "")
+        readme = data.get("readme", "")
+        snapshot = build_snapshot_from_tree(
+            data.get("tree_files"), reference=f"{owner}/{repo_name}"
+        )
+        return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
+
+    files = collect_repository_files(repo_url_or_path)
+    relative_files = [os.path.relpath(f, repo_url_or_path) for f in files]
+    file_tree = "\n".join(relative_files)
+    readme = _read_local_readme(repo_url_or_path)
+    snapshot = build_snapshot_from_local(repo_url_or_path, files)
+    return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
+
+
+
+
 @click.command(name="generate")
-def generate():
-    """Generate a new wiki interactively."""
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Skip prompts when regenerating and overwrite the latest cache automatically.",
+)
+def generate(force: bool):
+    """Generate a new wiki or refresh an existing cache."""
 
     click.echo("\n" + "=" * 60)
     click.echo("DeepWiki Generator")
     click.echo("=" * 60)
 
-    # Load configuration
     config = load_config()
+    progress: Optional[ProgressManager] = None
 
     try:
-        # Step 1: Repository selection
         repo_type, repo_url_or_path, owner, repo_name = prompt_repository()
-
-        # Step 2: Model configuration
         provider, model = prompt_model_config(config)
-
-        # Step 3: Wiki type
         is_comprehensive = prompt_wiki_type(config)
-
-        # Step 4: File filters (optional)
         excluded_dirs, excluded_files, included_dirs, included_files = (
             prompt_file_filters()
         )
 
-        # Initialize progress
+        ensure_cache_dir()
+        cache_path = get_cache_path()
+        owner_key = owner or "local"
+        existing_entries = list_existing_wikis(
+            cache_path, repo_type, owner_key, repo_name
+        )
+
+        selected_cache_entry: Optional[CacheFileInfo] = None
+        existing_cache: Optional[WikiCacheData] = None
+        if existing_entries:
+            selected_cache_entry = (
+                existing_entries[0] if force else _select_cache_entry(existing_entries)
+            )
+            existing_cache = load_existing_cache(selected_cache_entry.path)
+            if existing_cache is None:
+                click.echo(
+                    f"⚠️  Existing cache '{selected_cache_entry.path.name}' is unreadable and will be ignored.",
+                    err=True,
+                )
+                selected_cache_entry = None
+                existing_entries = []
+
         progress = ProgressManager()
-        progress.set_status("Initializing")
+        progress.set_status("Inspecting repository")
+        click.echo("\nInspecting repository state...")
 
-        click.echo("\n" + "=" * 60)
-        click.echo("Generating Wiki")
-        click.echo("=" * 60 + "\n")
+        try:
+            repo_state = prepare_repository_state(
+                repo_type, repo_url_or_path, owner, repo_name
+            )
+            click.echo("✓ Repository inspected")
+        except Exception as e:
+            click.echo(f"✗ Error inspecting repository: {e}", err=True)
+            progress.close()
+            raise click.Abort()
 
-        # Step 5: Prepare RAG
-        progress.set_status("Preparing repository")
+        if not repo_state.file_tree.strip():
+            click.echo("✗ No files found in repository", err=True)
+            progress.close()
+            raise click.Abort()
+
+        change_summary = None
+        affected_pages: List[str] = []
+        action = "overwrite"
+
+        if existing_cache and selected_cache_entry:
+            if force:
+                action = "overwrite"
+            else:
+                change_summary = detect_repo_changes(
+                    repo_url_or_path, existing_cache, repo_state.snapshot
+                )
+                affected_pages = find_affected_pages(
+                    change_summary.get("changed_files", [])
+                    if change_summary
+                    else [],
+                    existing_cache.wiki_structure,
+                )
+                _display_change_summary(
+                    repo_name,
+                    selected_cache_entry,
+                    change_summary,
+                    existing_cache.wiki_structure,
+                    affected_pages,
+                )
+                action = _prompt_generation_action(True, affected_pages)
+                if action == "cancel":
+                    progress.close()
+                    click.echo("Operation cancelled.")
+                    return
+        else:
+            action = "overwrite"
+
+        selected_page_ids: List[str] = []
+        page_feedback: Dict[str, str] = {}
+
+        if action == "update":
+            if not (existing_cache and affected_pages):
+                click.echo(
+                    "No affected pages detected; regenerating the entire wiki instead."
+                )
+                action = "overwrite"
+            else:
+                selected_page_ids = _prompt_pages_to_regenerate(
+                    existing_cache.wiki_structure, affected_pages
+                )
+                if not selected_page_ids:
+                    progress.close()
+                    click.echo("No pages selected. Operation cancelled.")
+                    return
+                page_feedback = _collect_page_feedback(
+                    selected_page_ids, existing_cache.wiki_structure
+                )
+
+        target_version = 1
+        if action == "new_version":
+            highest = max((entry.version for entry in existing_entries), default=0)
+            base_version = (
+                selected_cache_entry.version if selected_cache_entry else 1
+            )
+            target_version = max(highest, base_version) + 1
+        elif selected_cache_entry:
+            target_version = selected_cache_entry.version
+
+        language = DEFAULT_LANGUAGE
+
+        progress.set_status("Preparing repository context")
         click.echo("Preparing repository analysis...")
-
         try:
             generation_context = WikiGenerationContext.prepare(
                 repo_url=repo_url_or_path,
@@ -1100,103 +1421,71 @@ def generate():
             progress.close()
             raise click.Abort()
 
-        # Step 6: Get repository structure
-        progress.set_status("Fetching repository structure")
-        click.echo("Fetching repository structure...")
+        wiki_structure: Optional[WikiStructureModel] = None
+        generated_pages: Dict[str, WikiPage] = {}
+        regenerated_ids: List[str] = []
+        reused_count = 0
 
-        try:
-            if repo_type == "github":
-                from api.utils.github import get_github_repo_structure
+        if action == "update" and existing_cache:
+            wiki_structure = existing_cache.wiki_structure
+            generated_pages = dict(existing_cache.generated_pages)
+            pages_to_generate = [
+                page for page in wiki_structure.pages if page.id in selected_page_ids
+            ]
+            progress.set_status("Regenerating selected pages")
+            progress.init_overall_progress(len(pages_to_generate), "Updating Pages")
 
-                data = get_github_repo_structure(
-                    owner=owner,
-                    repo=repo_name,
-                    repo_url=repo_url_or_path,
+            for page in pages_to_generate:
+                updated_page = generate_page_content_sync(
+                    page,
+                    generation_context,
+                    repo_url_or_path,
+                    progress,
+                    extra_feedback=page_feedback.get(page.id),
                 )
-                file_tree = data.get("file_tree", "")
-                readme = data.get("readme", "")
-            else:
-                # Local repository - use repository-aware file collection
-                files = collect_repository_files(repo_url_or_path)
-                file_tree = "\n".join(
-                    [os.path.relpath(f, repo_url_or_path) for f in files]
-                )
+                if updated_page:
+                    generated_pages[page.id] = updated_page
+                    regenerated_ids.append(page.id)
 
-                # Try to read README
-                readme = ""
-                for readme_name in ["README.md", "readme.md", "README.txt"]:
-                    readme_path = os.path.join(repo_url_or_path, readme_name)
-                    if os.path.exists(readme_path):
-                        with open(readme_path, "r") as f:
-                            readme = f.read()
-                        break
+            reused_count = len(wiki_structure.pages) - len(regenerated_ids)
+        else:
+            progress.set_status("Determining wiki structure")
+            click.echo("Determining wiki structure...")
 
-            click.echo("✓ Structure fetched")
-        except Exception as e:
-            click.echo(f"✗ Error fetching structure: {e}", err=True)
-            progress.close()
-            raise click.Abort()
-
-        # Validate file_tree is not empty
-        if not file_tree or (isinstance(file_tree, str) and not file_tree.strip()):
-            click.echo("✗ No files found in repository", err=True)
-            progress.close()
-            raise click.Abort()
-
-        # Step 7: Generate wiki structure
-        progress.set_status("Determining wiki structure")
-        click.echo("Determining wiki structure...")
-
-        wiki_structure = generate_wiki_structure(
-            repo_url_or_path,
-            repo_type,
-            file_tree,
-            readme,
-            provider,
-            model,
-            is_comprehensive,
-            generation_context,
-        )
-
-        if not wiki_structure:
-            click.echo("✗ Failed to generate wiki structure", err=True)
-            progress.close()
-            raise click.Abort()
-
-        click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
-
-        # Step 8: Generate page content
-        progress.set_status("Generating pages")
-        progress.init_overall_progress(len(wiki_structure.pages), "Generating Pages")
-
-        click.echo(f"\nGenerating {len(wiki_structure.pages)} pages...\n")
-
-        generated_pages = {}
-
-        # Generate pages sequentially for simplicity
-        # (Could be parallelized but that complicates progress display)
-        for page in wiki_structure.pages:
-            updated_page = generate_page_content_sync(
-                page, generation_context, repo_url_or_path, progress
+            wiki_structure = generate_wiki_structure(
+                repo_url_or_path,
+                repo_type,
+                repo_state.file_tree,
+                repo_state.readme,
+                provider,
+                model,
+                is_comprehensive,
+                generation_context,
             )
-            if updated_page:
-                generated_pages[page.id] = updated_page
+
+            if not wiki_structure:
+                click.echo("✗ Failed to generate wiki structure", err=True)
+                progress.close()
+                raise click.Abort()
+
+            click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
+
+            progress.set_status("Generating pages")
+            progress.init_overall_progress(len(wiki_structure.pages), "Generating Pages")
+            click.echo(f"\nGenerating {len(wiki_structure.pages)} pages...\n")
+
+            for page in wiki_structure.pages:
+                updated_page = generate_page_content_sync(
+                    page, generation_context, repo_url_or_path, progress
+                )
+                if updated_page:
+                    generated_pages[page.id] = updated_page
+                    regenerated_ids.append(page.id)
+
+            reused_count = len(wiki_structure.pages) - len(regenerated_ids)
 
         progress.set_status("Saving cache")
         click.echo("\n\nSaving to cache...")
-
-        # Step 9: Save to cache
-        ensure_cache_dir()
-        cache_path = get_cache_path()
-
-        # Create cache filename (keeping language suffix for backward compatibility)
-        cache_filename = (
-            f"deepwiki_cache_{repo_type}_{owner or 'local'}_{repo_name}_en.json"
-        )
-        cache_file = cache_path / cache_filename
-
-        # Prepare cache data
-        from api.models import RepoInfo
 
         repo_info = RepoInfo(
             owner=owner or "",
@@ -1206,41 +1495,81 @@ def generate():
             localPath=repo_url_or_path if repo_type == "local" else None,
         )
 
-        cache_data = WikiCacheData(
+        cache_filename = get_cache_filename(
+            repo_type=repo_type,
+            owner=owner_key,
+            repo_name=repo_name,
+            language=language,
+            version=target_version,
+        )
+        cache_file = cache_path / cache_filename
+
+        now_iso = datetime.utcnow().isoformat()
+        created_at = (
+            now_iso
+            if action == "new_version" or not existing_cache
+            else existing_cache.created_at or now_iso
+        )
+
+        cache_payload = WikiCacheData(
             wiki_structure=wiki_structure,
-            generated_pages={pid: p.model_dump() for pid, p in generated_pages.items()},
+            generated_pages={
+                pid: page.model_dump() if isinstance(page, WikiPage) else page
+                for pid, page in generated_pages.items()
+            },
             repo=repo_info,
             provider=provider,
             model=model,
+            version=target_version,
+            created_at=created_at,
+            updated_at=now_iso,
+            repo_snapshot=repo_state.snapshot,
         )
 
-        # Save to file
         with open(cache_file, "w") as f:
-            json.dump(cache_data.model_dump(), f, indent=2)
+            json.dump(cache_payload.model_dump(), f, indent=2)
 
         progress.close()
 
         click.echo(f"✓ Cache saved to: {cache_file}")
 
-        # Summary
         click.echo("\n" + "=" * 60)
         click.echo("Generation Complete!")
         click.echo("=" * 60)
         click.echo(f"\nRepository: {repo_name}")
+        click.echo(f"Version: v{target_version}")
         click.echo(
-            f"Pages generated: {len(generated_pages)}/{len(wiki_structure.pages)}"
+            "Action: "
+            + (
+                "Update affected pages" if action == "update" else "Full regeneration"
+            )
         )
+        click.echo(f"Pages regenerated: {len(regenerated_ids)}")
+        if reused_count:
+            click.echo(f"Pages reused: {reused_count}")
         click.echo(f"Cache file: {cache_file}")
+        if change_summary:
+            click.echo(
+                f"Files processed: {len(change_summary.get('changed_files', []))} changed, "
+                f"{len(change_summary.get('new_files', []))} new, "
+                f"{len(change_summary.get('deleted_files', []))} deleted"
+            )
         click.echo("\nUse 'deepwiki export' to export the wiki to Markdown or JSON.")
         click.echo("=" * 60 + "\n")
 
     except click.Abort:
+        if progress:
+            progress.close()
         click.echo("\nOperation cancelled.")
         sys.exit(1)
     except KeyboardInterrupt:
+        if progress:
+            progress.close()
         click.echo("\n\nOperation interrupted.")
         sys.exit(1)
     except Exception as e:
+        if progress:
+            progress.close()
         logger.error(f"Unexpected error: {e}", exc_info=True)
         click.echo(f"\n✗ Unexpected error: {e}", err=True)
         sys.exit(1)

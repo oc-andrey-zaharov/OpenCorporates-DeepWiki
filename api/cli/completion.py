@@ -8,6 +8,7 @@ from click.shell_completion import CompletionItem
 
 from api.cli.config import get_provider_models
 from api.cli.utils import get_cache_path
+from api.utils.wiki_cache import parse_cache_filename
 
 
 def complete_providers(ctx, param, incomplete: str) -> List[CompletionItem]:
@@ -63,14 +64,13 @@ def complete_wiki_names(ctx, param, incomplete: str) -> List[CompletionItem]:
 
         for cache_file in cache_files:
             try:
-                filename = cache_file.stem
-                parts = filename.replace("deepwiki_cache_", "").split("_")
-
-                if len(parts) >= 4:
-                    owner = parts[1]
-                    repo = "_".join(parts[2:-1])
-                    name = f"{owner}/{repo}" if owner and owner != "local" else repo
-                    wiki_names.append(name)
+                meta = parse_cache_filename(cache_file)
+                if not meta:
+                    continue
+                owner = meta["owner"]
+                repo = meta["repo"]
+                name = f"{owner}/{repo}" if owner and owner != "local" else repo
+                wiki_names.append(name)
             except Exception:
                 continue
 

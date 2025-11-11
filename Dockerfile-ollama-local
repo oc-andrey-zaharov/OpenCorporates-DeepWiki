@@ -30,7 +30,7 @@ RUN OLLAMA_ARCH="" && \
 
 RUN ollama serve > /dev/null 2>&1 & \
     sleep 20 && \
-    ollama pull nomic-embed-text && \
+    ollama pull embeddinggemma && \
     ollama pull qwen3:1.7b
 
 FROM python:3.11-slim

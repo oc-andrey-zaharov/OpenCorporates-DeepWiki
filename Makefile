@@ -1,4 +1,4 @@
-.PHONY: help install install/backend dev dev/backend stop clean cli test test/unit test/integration
+.PHONY: help install install/backend dev dev/backend stop clean cli test test/unit test/integration lint format build deploy
 
 # Default target
 help:
@@ -16,6 +16,14 @@ help:
 	@echo "Maintenance:"
 	@echo "  make stop             - Stop backend server"
 	@echo "  make clean            - Clean build artifacts and caches"
+	@echo ""
+	@echo "Code Quality:"
+	@echo "  make lint             - Run ruff linter"
+	@echo "  make format           - Format code with ruff"
+	@echo ""
+	@echo "Build & Deploy:"
+	@echo "  make build            - Build package with poetry"
+	@echo "  make deploy           - Publish package to ocpyupload repository"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test             - Run all tests"
@@ -112,6 +120,30 @@ test/integration:
 # Run CLI tool
 cli:
 	@./deepwiki $(filter-out $@,$(MAKECMDGOALS))
+
+# Run ruff linter
+lint:
+	@echo "Running ruff linter..."
+	@poetry run ruff check .
+	@echo "✓ Linting complete"
+
+# Format code with ruff
+format:
+	@echo "Formatting code with ruff..."
+	@poetry run ruff format .
+	@echo "✓ Formatting complete"
+
+# Build package with poetry
+build:
+	@echo "Building package with poetry..."
+	@poetry build
+	@echo "✓ Build complete"
+
+# Deploy package to ocpyupload repository
+deploy:
+	@echo "Publishing package to ocpyupload repository..."
+	@poetry publish --repository ocpyupload
+	@echo "✓ Deployment complete"
 
 # Catch-all target to prevent Make from treating CLI arguments as targets
 %:

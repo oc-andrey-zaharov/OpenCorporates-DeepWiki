@@ -6,6 +6,7 @@ import click
 import requests
 from api.cli.config import load_config
 from api.cli.utils import get_cache_path, select_wiki_from_list, confirm_action
+from api.utils.wiki_cache import parse_cache_filename
 from api.utils.mode import (
     is_server_mode,
     get_server_url,
@@ -40,28 +41,28 @@ def delete(yes: bool):
     wikis = []
     for i, cache_file in enumerate(cache_files, 1):
         try:
-            filename = cache_file.stem
-            parts = filename.replace("deepwiki_cache_", "").split("_")
+            meta = parse_cache_filename(cache_file)
+            if not meta:
+                continue
 
-            if len(parts) >= 4:
-                repo_type = parts[0]
-                owner = parts[1]
-                language = parts[-1]
-                repo = "_".join(parts[2:-1])
-                # For local repos, owner is 'local', so show just the repo name
-                name = repo if owner == "local" else f"{owner}/{repo}"
+            owner = meta["owner"]
+            repo = meta["repo"]
+            name = repo if owner == "local" else f"{owner}/{repo}"
+            display_name = f"{name} (v{meta['version']})"
 
-                wikis.append(
-                    {
-                        "index": i,
-                        "name": name,
-                        "owner": owner,
-                        "repo": repo,
-                        "repo_type": repo_type,
-                        "language": language,
-                        "path": cache_file,
-                    }
-                )
+            wikis.append(
+                {
+                    "index": i,
+                    "name": name,
+                    "display_name": display_name,
+                    "owner": owner,
+                    "repo": repo,
+                    "repo_type": meta["repo_type"],
+                    "language": meta["language"],
+                    "version": meta["version"],
+                    "path": cache_file,
+                }
+            )
         except Exception:
             continue
 
@@ -74,8 +75,9 @@ def delete(yes: bool):
 
     # Confirm deletion
     if not yes:
+        display_label = selected_wiki.get("display_name") or selected_wiki["name"]
         if not confirm_action(
-            f"\nAre you sure you want to delete '{selected_wiki['name']}' "
+            f"\nAre you sure you want to delete '{display_label}' "
             f"({selected_wiki['repo_type']})?",
             default=False,
         ):
@@ -113,6 +115,7 @@ def delete(yes: bool):
                     "repo": selected_wiki["repo"],
                     "repo_type": selected_wiki["repo_type"],
                     "language": selected_wiki["language"],
+                    "version": selected_wiki.get("version", 1),
                 }
 
                 response = requests.delete(api_url, params=params, timeout=30)

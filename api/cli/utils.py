@@ -6,6 +6,7 @@ import os
 import re
 import logging
 import sys
+import inspect
 from pathlib import Path
 from typing import Optional, Tuple, List
 from urllib.parse import urlparse
@@ -301,6 +302,96 @@ def select_from_list(
         sys.exit(1)
 
 
+def select_multiple_from_list(
+    prompt_text: str,
+    choices: List[str],
+) -> List[str]:
+    """Interactive helper to pick multiple options."""
+
+    if not choices:
+        raise ValueError("No choices provided")
+
+    if not SIMPLE_TERM_MENU_AVAILABLE:
+        import click
+
+        click.echo(f"\n{prompt_text}")
+        for idx, choice in enumerate(choices, start=1):
+            click.echo(f"  {idx}. {choice}")
+
+        while True:
+            selection = click.prompt(
+                "Enter numbers (comma-separated) or press enter for all",
+                default="",
+                show_default=False,
+            )
+            if not selection.strip():
+                return choices
+
+            try:
+                indexes = {
+                    int(item.strip())
+                    for item in selection.split(",")
+                    if item.strip()
+                }
+            except ValueError:
+                click.echo("✗ Invalid input. Use comma-separated numbers like 1,3,4")
+                continue
+
+            if any(idx < 1 or idx > len(choices) for idx in indexes):
+                click.echo(f"✗ Please choose values between 1 and {len(choices)}")
+                continue
+
+            return [choices[idx - 1] for idx in sorted(indexes)]
+
+    try:
+        term_kwargs = {
+            "title": prompt_text,
+            "clear_screen": False,
+            "multi_select": True,
+            "show_multi_select_hint": True,
+            "multi_select_select_on_accept": True,
+        }
+
+        try:
+            sig = inspect.signature(TerminalMenu.__init__)
+            supported_kwargs = {
+                key: value
+                for key, value in term_kwargs.items()
+                if key in sig.parameters
+            }
+        except (ValueError, TypeError):
+            supported_kwargs = term_kwargs
+
+        terminal_menu = TerminalMenu(choices, **supported_kwargs)
+        result = terminal_menu.show()
+
+        if result is None:
+            import click
+
+            click.echo("\n✗ Selection cancelled.", err=True)
+            sys.exit(1)
+
+        if isinstance(result, tuple):
+            selected_indexes = result[1] or []
+        elif isinstance(result, list):
+            selected_indexes = result
+        elif isinstance(result, int):
+            selected_indexes = [result]
+        else:
+            selected_indexes = []
+
+        if not selected_indexes:
+            return choices
+
+        unique_sorted = sorted(set(idx for idx in selected_indexes if idx is not None))
+        return [choices[idx] for idx in unique_sorted if idx < len(choices)]
+
+    except KeyboardInterrupt:
+        import click
+
+        click.echo("\n✗ Selection cancelled.", err=True)
+        sys.exit(1)
+
 def confirm_action(
     prompt_text: str,
     default: bool = True,
@@ -435,7 +526,7 @@ def select_wiki_from_list(
     display_choices = []
     for wiki in wikis:
         index = wiki.get("index", wikis.index(wiki) + 1)
-        name = wiki.get("name", "Unknown")
+        name = wiki.get("display_name") or wiki.get("name", "Unknown")
         repo_type = wiki.get("repo_type", "")
         display_str = f"{index}. {name}"
         if repo_type:

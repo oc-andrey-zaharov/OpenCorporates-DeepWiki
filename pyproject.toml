@@ -1,9 +1,3 @@
-[project]
-name = "opencorporates-deepwiki-api"
-version = "0.0.1"
-description = "CLI tool and optional API server for OpenCorporates-DeepWiki, providing smart code analysis and AI-powered documentation generation."
-license = {text = "MIT License"}
-
 [tool.poetry]
 name = "opencorporates-deepwiki-api"
 version = "0.0.1"
@@ -11,36 +5,122 @@ description = "CLI tool and optional API server for OpenCorporates-DeepWiki, pro
 authors = ["OpenCorporates DeepWiki Team"]
 packages = [{include = "api"}]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-fastapi = ">=0.95.0"
-uvicorn = { extras = ["standard"], version = ">=0.21.1" }
-pydantic = ">=2.0.0"
-google-generativeai = ">=0.3.0"
-tiktoken = ">=0.5.0"
-adalflow = ">=0.1.0"
-faiss-cpu = ">=1.7.4"
-langid = ">=1.1.6"
-requests = ">=2.28.0"
-jinja2 = ">=3.1.2"
-python-dotenv = ">=1.0.0"
-openai = ">=1.76.2"
-ollama = ">=0.4.8"
-aiohttp = ">=3.8.4"
-boto3 = ">=1.34.0"
-websockets = ">=11.0.3"
-azure-identity = ">=1.12.0"
-azure-core = ">=1.24.0"
-click = "^8.3.0"
-enlighten = "^1.14.1"
-simple-term-menu = "^1.6.6"
-
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0", "poetry-dynamic-versioning>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
+bump = true
+pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
 
 [tool.poetry.scripts]
 deepwiki = "api.cli.main:main"
 
+[tool.poetry.dependencies]
+python = ">=3.13,<3.15"
+fastapi = ">=0.121.0"
+uvicorn = { extras = ["standard"], version = ">=0.38.0" }
+pydantic = ">=2.12.0"
+google-generativeai = ">=0.3.0"
+tiktoken = ">=0.12.0"
+adalflow = ">=1.1.0"
+faiss-cpu = ">=1.12.0"
+requests = ">=2.32.0"
+python-dotenv = ">=1.2.0"
+openai = ">=2.7.0"
+ollama = ">=0.6.0"
+aiohttp = ">=3.13.0"
+boto3 = ">=1.40.0"
+click = ">=8.0.0,<8.3.0"
+enlighten = ">=1.14.0"
+simple-term-menu = ">=1.6.0"
+
 [tool.poetry.group.dev.dependencies]
-pytest = ">=7.0.0"
+pytest = ">=8.0.0"
+deepeval = "^3.7.0"
+ruff = ">=0.14.0"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+exclude = [
+  ".git",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".pytest_cache",
+  "build",
+  "dist",
+  "tmp",
+  "docs",
+  "bin/smoke_test_loader.py",
+]
+
+[tool.ruff.lint]
+select = [
+  "A", # A: flake8-builtins
+  "ANN", # ANN: flake8-annotations
+  "ARG", # ARG: flake8-unusedargs
+  "B", # B: flake8-bugbear
+  "BLE", # BLE: flake8-blind-except
+  "C4", # C4:  flake8-comprehensions
+  "C90", # C90: McCabe Complexity
+  "COM", # COM: flake8-commas
+  "D", # D: pydocstyle
+  "DTZ", # DTZ: flake8-datetimez
+  "ERA", # ERA: eradicate
+  "F", # F: pyflakes
+  "FBT", # FBT: flake8-boolean-trap
+  "G", # G: flake8-logging-format
+  "I", # I: isort
+  "ICN", # ICN: flake8-import-conventions
+  "INP", # INP: flake8-no-pep420
+  "INT", # INT: flake8-gettext
+  "ISC", # ISC: flake8-implicit-str-concat
+  "N", # N: pep8-naming
+  "NPY", # NPY: NumPy-specific rules
+  "PD", # PD:: pandas-vet
+  "PGH", # PGH: pygrep-hooks
+  "PIE", # PIE: flake8-pie
+  "PL", # PLC: Pylint
+  "PT", # PT: flake8-pytest-style
+  "PTH", # PTH: flake8-use-pathlib
+  "PYI", # PYI: flake8-PYI
+  "Q", # Q: flake8-quotes
+  "RET", # RET: flake8-return
+  "RSE", # RSE: flake8-raise
+  "RUF", # RUF: Ruff-specific rules
+  "S", # S: flake8-bandit
+  "SIM", # SIM: flake8-simplify
+  "SLF", # SLF: flake8-self
+  "T20", # T20: flake8-print
+  "TCH", # TCH: flake8-type-checking
+  "TID", # TID: flake8-tidy-imports
+  "TRY", # TRY: tryceratops
+  "UP", # UP: PyUpgrade
+  "W", # W: pycodestyles Warnings
+]
+
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double" # Use double quotes for strings.
+indent-style = "space" # Indent with spaces, rather than tabs.
+skip-magic-trailing-comma = false # Respect magic trailing commas.
+line-ending = "auto" # Auto-detect the appropriate line ending.
+docstring-code-format = false # auto-format code examples in docstrings
+docstring-code-line-length = "dynamic" # use dynamic line length for code examples in docstrings.
+
+[[tool.poetry.source]]
+name = "ocpy"
+url = "https://open-corporates-089449186373.d.codeartifact.eu-west-2.amazonaws.com/pypi/dev/simple/"
+priority = "supplemental"
+
+[[tool.poetry.source]]
+name = "ocpyupload"
+url = "https://open-corporates-089449186373.d.codeartifact.eu-west-2.amazonaws.com/pypi/dev/"
+priority = "explicit"

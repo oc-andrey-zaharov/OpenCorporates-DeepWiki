@@ -18,8 +18,8 @@ OpenCorporates DeepWiki is a Python application that:
 - **Generates Wikipedia-style documentation** from code repositories
 - **Uses RAG (Retrieval-Augmented Generation)** to analyze code and generate wiki pages
 - **Has multiple LLM components**:
-  - RAG pipeline (`api/services/rag.py`) - retrieves code context and generates responses
-  - Chat completion (`api/core/chat.py`) - handles streaming LLM responses
+  - RAG pipeline (`src/deepwiki_cli/services/rag.py`) - retrieves code context and generates responses
+  - Chat completion (`src/deepwiki_cli/core/chat.py`) - handles streaming LLM responses
   - Wiki generation - creates structured documentation from repository code
 - **Supports multiple providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama
 - **Has existing test infrastructure**: pytest-based unit and integration tests
@@ -248,7 +248,7 @@ DeepEval supports iterative prompt refinement:
 
 ## Integration Points with DeepWiki
 
-### 1. RAG Pipeline (`api/services/rag.py`)
+### 1. RAG Pipeline (`src/deepwiki_cli/services/rag.py`)
 
 **Current Implementation:**
 
@@ -259,7 +259,7 @@ DeepEval supports iterative prompt refinement:
 **DeepEval Integration:**
 
 ```python
-# api/services/evaluation.py
+# src/deepwiki_cli/services/evaluation.py
 from deepeval.metrics import (
     FaithfulnessMetric,
     AnswerRelevancyMetric,
@@ -290,7 +290,7 @@ class WikiEvaluator:
         return evaluate([test_case], self.metrics)
 ```
 
-**Integration in `api/services/rag.py`:**
+**Integration in `src/deepwiki_cli/services/rag.py`:**
 
 ```python
 # After RAG generation
@@ -305,7 +305,7 @@ if config.get("evaluation.enabled", False):
     logger.info(f"Evaluation results: {results}")
 ```
 
-### 2. Chat Completion (`api/core/chat.py`)
+### 2. Chat Completion (`src/deepwiki_cli/core/chat.py`)
 
 **Current Implementation:**
 
@@ -428,7 +428,7 @@ Based on `docs/llm-evaluation-framework-recommendations.md`, DeepEval was ranked
    ```
 
 2. **Create Evaluation Service**
-   - Create `api/services/evaluation.py`
+   - Create `src/deepwiki_cli/services/evaluation.py`
    - Implement `WikiEvaluator` class with basic metrics
    - Add configuration for evaluation thresholds
 
@@ -475,7 +475,7 @@ Based on `docs/llm-evaluation-framework-recommendations.md`, DeepEval was ranked
 ### Example 1: Basic RAG Evaluation
 
 ```python
-# api/services/evaluation.py
+# src/deepwiki_cli/services/evaluation.py
 from deepeval import evaluate
 from deepeval.metrics import (
     FaithfulnessMetric,
@@ -675,7 +675,7 @@ def test_wiki_depth_metric(rag_instance, evaluator):
 **Next Steps**:
 
 1. Install DeepEval: `poetry add deepeval`
-2. Create `api/services/evaluation.py` with basic evaluator
+2. Create `src/deepwiki_cli/services/evaluation.py` with basic evaluator
 3. Add integration tests in `tests/integration/test_rag_evaluation.py`
 4. Integrate evaluation into wiki generation pipeline (optional, async)
 5. Add custom wiki-specific metrics

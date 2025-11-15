@@ -19,7 +19,7 @@ sys.modules["click"] = MagicMock()
 # Add the parent directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.cli import utils
+from deepwiki_cli.cli import utils
 
 
 @pytest.mark.unit
@@ -316,7 +316,7 @@ class TestGetCachePath:
 class TestEnsureCacheDir:
     """Tests for ensure_cache_dir function."""
 
-    @patch("api.cli.utils.get_cache_path")
+    @patch("deepwiki_cli.cli.utils.get_cache_path")
     def test_ensure_cache_dir_creates_directory(
         self,
         mock_get_path: MagicMock,
@@ -329,7 +329,7 @@ class TestEnsureCacheDir:
         assert cache_dir.exists()
         assert cache_dir.is_dir()
 
-    @patch("api.cli.utils.get_cache_path")
+    @patch("deepwiki_cli.cli.utils.get_cache_path")
     def test_ensure_cache_dir_existing_directory(
         self,
         mock_get_path: MagicMock,
@@ -353,7 +353,7 @@ class TestSelectFromList:
         with pytest.raises(ValueError, match="No choices provided"):
             utils.select_from_list("Select", [])
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_from_list_fallback_mode(
@@ -367,7 +367,7 @@ class TestSelectFromList:
         assert result == "option1"
         mock_prompt.assert_called_once()
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_from_list_fallback_with_custom(
@@ -384,8 +384,8 @@ class TestSelectFromList:
         )
         assert result == "custom_value"
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_select_from_list_with_menu(self, mock_terminal_menu: MagicMock) -> None:
         """Test select_from_list with terminal menu."""
         mock_menu_instance = MagicMock()
@@ -396,8 +396,8 @@ class TestSelectFromList:
         assert result == "option1"
         mock_terminal_menu.assert_called_once()
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_from_list_custom_option(
@@ -430,7 +430,7 @@ class TestSelectMultipleFromList:
         with pytest.raises(ValueError, match="No choices provided"):
             utils.select_multiple_from_list("Select", [])
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_multiple_from_list_fallback_all(
@@ -446,7 +446,7 @@ class TestSelectMultipleFromList:
         )
         assert result == ["option1", "option2"]
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_multiple_from_list_fallback_specific(
@@ -462,8 +462,8 @@ class TestSelectMultipleFromList:
         )
         assert result == ["option1", "option2"]
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_select_multiple_from_list_terminal_menu(
         self,
         mock_terminal_menu: MagicMock,
@@ -484,7 +484,7 @@ class TestSelectMultipleFromList:
 class TestConfirmAction:
     """Tests for confirm_action function."""
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.confirm")
     def test_confirm_action_fallback_yes(self, mock_confirm: MagicMock) -> None:
         """Test confirm_action in fallback mode with yes."""
@@ -493,7 +493,7 @@ class TestConfirmAction:
         assert result is True
         mock_confirm.assert_called_once_with("Confirm?", default=True)
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.confirm")
     def test_confirm_action_fallback_no(self, mock_confirm: MagicMock) -> None:
         """Test confirm_action in fallback mode with no."""
@@ -501,8 +501,8 @@ class TestConfirmAction:
         result = utils.confirm_action("Confirm?", default=False)
         assert result is False
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_confirm_action_with_menu_yes(self, mock_terminal_menu: MagicMock) -> None:
         """Test confirm_action with menu selecting yes."""
         mock_menu_instance = MagicMock()
@@ -512,8 +512,8 @@ class TestConfirmAction:
         result = utils.confirm_action("Confirm?", default=True)
         assert result is True
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_confirm_action_with_menu_no(self, mock_terminal_menu: MagicMock) -> None:
         """Test confirm_action with menu selecting no."""
         mock_menu_instance = MagicMock()
@@ -533,7 +533,7 @@ class TestSelectWikiFromList:
         with pytest.raises(ValueError, match="No wikis provided"):
             utils.select_wiki_from_list([])
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", False)
     @patch("click.prompt")
     @patch("click.echo")
     def test_select_wiki_from_list_fallback(
@@ -547,8 +547,8 @@ class TestSelectWikiFromList:
         result = utils.select_wiki_from_list(wikis)
         assert result == wikis[0]
 
-    @patch("api.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
-    @patch("api.cli.utils.TerminalMenu")
+    @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
+    @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_select_wiki_from_list_with_menu(
         self, mock_terminal_menu: MagicMock,
     ) -> None:

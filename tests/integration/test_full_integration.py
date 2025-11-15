@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 def test_config_loading() -> bool | None:
     """Test that configurations load properly."""
     try:
-        from api.config import CLIENT_CLASSES, configs
+        from deepwiki_cli.config import CLIENT_CLASSES, configs
 
         # Check if Google embedder config exists
         if "embedder_google" in configs:
@@ -36,8 +36,8 @@ def test_config_loading() -> bool | None:
 def test_embedder_selection() -> bool | None:
     """Test embedder selection mechanism."""
     try:
-        from api.config import get_embedder_type, is_google_embedder
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.config import get_embedder_type, is_google_embedder
+        from deepwiki_cli.tools.embedder import get_embedder
 
         # Test default embedder type
         get_embedder_type()
@@ -65,11 +65,11 @@ def test_google_embedder_with_env() -> bool | None:
         # Reload config module to pick up new env var
         import importlib
 
-        import api.config
-        importlib.reload(api.config)
+        import deepwiki_cli.config
+        importlib.reload(deepwiki_cli.config)
 
-        from api.config import get_embedder_config
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.config import get_embedder_config
+        from deepwiki_cli.tools.embedder import get_embedder
 
 
         # Test getting embedder config

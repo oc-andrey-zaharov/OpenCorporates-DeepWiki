@@ -26,7 +26,7 @@ class TestRAGTokenLimit:
     def test_max_input_tokens_constant_exists(self) -> None:
         """Test that MAX_INPUT_TOKENS constant is defined."""
         # Read the file directly to avoid import issues
-        rag_file = project_root / "api" / "services" / "rag.py"
+        rag_file = project_root / "src" / "deepwiki_cli" / "services" / "rag.py"
         content = rag_file.read_text()
 
         # Verify constant is defined
@@ -44,7 +44,7 @@ class TestRAGTokenLimit:
     def test_truncate_query_by_tokens_method_exists(self) -> None:
         """Test that _truncate_query_by_tokens method exists in RAG class."""
         # Read the file directly to verify method exists
-        rag_file = project_root / "api" / "services" / "rag.py"
+        rag_file = project_root / "src" / "deepwiki_cli" / "services" / "rag.py"
         content = rag_file.read_text()
 
         assert "def _truncate_query_by_tokens" in content, "Method should be defined"
@@ -56,7 +56,7 @@ class TestRAGTokenLimit:
     def test_call_method_uses_token_validation(self) -> None:
         """Test that call method uses token limit validation."""
         # Read the file directly to verify call method uses token validation
-        rag_file = project_root / "api" / "services" / "rag.py"
+        rag_file = project_root / "src" / "deepwiki_cli" / "services" / "rag.py"
         content = rag_file.read_text()
 
         # Find the call method
@@ -85,11 +85,11 @@ class TestRAGTokenLimit:
 
     def test_count_tokens_imported(self) -> None:
         """Test that count_tokens is imported from data_pipeline."""
-        rag_file = project_root / "api" / "services" / "rag.py"
+        rag_file = project_root / "src" / "deepwiki_cli" / "services" / "rag.py"
         content = rag_file.read_text()
 
         # Check for import statement
-        assert "from api.services.data_pipeline import" in content, (
+        assert "from deepwiki_cli.services.data_pipeline import" in content, (
             "Should import from data_pipeline"
         )
         assert "count_tokens" in content, "Should import count_tokens"
@@ -103,7 +103,7 @@ class TestRAGTokenLimit:
 
     def test_truncation_logic_handles_edge_cases(self) -> None:
         """Test that truncation logic handles edge cases."""
-        rag_file = project_root / "api" / "services" / "rag.py"
+        rag_file = project_root / "src" / "deepwiki_cli" / "services" / "rag.py"
         content = rag_file.read_text()
 
         # Find the truncation method

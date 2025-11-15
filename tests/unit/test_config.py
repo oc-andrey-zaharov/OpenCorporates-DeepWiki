@@ -16,7 +16,7 @@ import pytest
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from api.cli import config
+from deepwiki_cli.cli import config
 
 
 @pytest.mark.unit
@@ -89,7 +89,7 @@ class TestLoadConfig:
         # Should return default config when file doesn't exist
         assert isinstance(result, dict)
         assert "default_provider" in result
-        assert "use_server" in result
+        assert "wiki_workspace" in result
         # Verify exists() was called
         mock_config_file.exists.assert_called_once()
 
@@ -97,7 +97,7 @@ class TestLoadConfig:
     @patch(
         "builtins.open",
         new_callable=mock_open,
-        read_data='{"use_server": true, "server_url": "http://custom:8000"}',
+        read_data='{"wiki_workspace": "custom/wiki"}',
     )
     def test_load_config_file_exists(
         self,
@@ -109,8 +109,7 @@ class TestLoadConfig:
 
         result = config.load_config()
 
-        assert result["use_server"] is True
-        assert result["server_url"] == "http://custom:8000"
+        assert result["wiki_workspace"] == "custom/wiki"
         # Should merge with defaults
         assert "default_provider" in result
 
@@ -162,7 +161,7 @@ class TestSaveConfig:
         mock_ensure_dir: MagicMock,
     ) -> None:
         """Test successful config save."""
-        config_data = {"use_server": True}
+        config_data = {"wiki_workspace": "docs/wiki"}
         config.save_config(config_data)
 
         # Verify ensure_config_dir was called
@@ -199,9 +198,9 @@ class TestGetConfigValue:
     @patch.object(config, "load_config")
     def test_get_config_value_simple_key(self, mock_load_config: MagicMock) -> None:
         """Test getting simple config value."""
-        mock_load_config.return_value = {"use_server": True}
-        result = config.get_config_value("use_server")
-        assert result is True
+        mock_load_config.return_value = {"wiki_workspace": "docs/wiki"}
+        result = config.get_config_value("wiki_workspace")
+        assert result == "docs/wiki"
         mock_load_config.assert_called_once()
 
     @patch.object(config, "load_config")
@@ -263,16 +262,16 @@ class TestSetConfigValue:
         mock_save_config: MagicMock,
     ) -> None:
         """Test setting simple config value."""
-        initial_config = {"use_server": False}
+        initial_config = {"wiki_workspace": "docs/wiki"}
         mock_load_config.return_value = initial_config.copy()
-        config.set_config_value("use_server", True)
+        config.set_config_value("wiki_workspace", "docs/custom-wiki")
 
         # Verify load_config was called
         mock_load_config.assert_called_once()
         # Verify save_config was called with updated config
         mock_save_config.assert_called_once()
         saved_config = mock_save_config.call_args[0][0]
-        assert saved_config["use_server"] is True
+        assert saved_config["wiki_workspace"] == "docs/custom-wiki"
 
     @patch.object(config, "save_config")
     @patch.object(config, "load_config")
@@ -326,7 +325,7 @@ class TestGetProviderModels:
     """Tests for get_provider_models function."""
 
     @patch(
-        "api.config.configs",
+        "deepwiki_cli.config.configs",
         {
             "providers": {
                 "google": {"models": {"model1": {}, "model2": {}}},
@@ -342,13 +341,13 @@ class TestGetProviderModels:
         assert result["google"] == ["model1", "model2"]
         assert result["openai"] == ["model3"]
 
-    @patch("api.config.configs", {})
+    @patch("deepwiki_cli.config.configs", {})
     def test_get_provider_models_no_providers(self) -> None:
         """Test getting provider models when no providers exist."""
         result = config.get_provider_models()
         assert result == {}
 
-    @patch("api.config.configs", {"providers": {"google": {}}})
+    @patch("deepwiki_cli.config.configs", {"providers": {"google": {}}})
     def test_get_provider_models_no_models_key(self) -> None:
         """Test getting provider models when models key is missing."""
         result = config.get_provider_models()

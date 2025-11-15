@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import api.config
+import deepwiki_cli.config
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent
@@ -103,7 +103,7 @@ class TestEmbedderConfiguration:
 
     def test_config_loading(self) -> None:
         """Test that all embedder configurations load properly."""
-        from api.config import CLIENT_CLASSES, configs
+        from deepwiki_cli.config import CLIENT_CLASSES, configs
 
         # Check all embedder configurations exist
         assert "embedder" in configs, "OpenAI embedder config missing"
@@ -123,7 +123,7 @@ class TestEmbedderConfiguration:
 
     def test_embedder_type_detection(self) -> None:
         """Test embedder type detection functions."""
-        from api.config import get_embedder_type, is_google_embedder, is_ollama_embedder
+        from deepwiki_cli.config import get_embedder_type, is_google_embedder, is_ollama_embedder
 
         # Default type should be detected
         current_type = get_embedder_type()
@@ -150,11 +150,11 @@ class TestEmbedderConfiguration:
 
     def test_get_embedder_config(self, embedder_type=None) -> None:
         """Test getting embedder config for each type."""
-        from api.config import get_embedder_config
+        from deepwiki_cli.config import get_embedder_config
 
         if embedder_type:
             # Mock the EMBEDDER_TYPE for testing
-            with patch("api.config.EMBEDDER_TYPE", embedder_type):
+            with patch("deepwiki_cli.config.EMBEDDER_TYPE", embedder_type):
                 config = get_embedder_config()
                 assert isinstance(config, dict), (
                     f"Config for {embedder_type} should be dict"
@@ -176,7 +176,7 @@ class TestEmbedderFactory:
 
     def test_get_embedder_with_explicit_type(self) -> None:
         """Test get_embedder with explicit embedder_type parameter."""
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.tools.embedder import get_embedder
 
         # Test Google embedder
         google_embedder = get_embedder(embedder_type="google")
@@ -198,7 +198,7 @@ class TestEmbedderFactory:
 
     def test_get_embedder_with_legacy_params(self) -> None:
         """Test get_embedder with legacy boolean parameters."""
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.tools.embedder import get_embedder
 
         # Test with use_google_embedder=True
         google_embedder = get_embedder(use_google_embedder=True)
@@ -220,7 +220,7 @@ class TestEmbedderFactory:
 
     def test_get_embedder_auto_detection(self) -> None:
         """Test get_embedder with automatic type detection."""
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.tools.embedder import get_embedder
 
         # Test auto-detection (should use current configuration)
         embedder = get_embedder()
@@ -240,7 +240,7 @@ class TestEmbedderClients:
 
         from adalflow.core.types import ModelType
 
-        from api.clients.google_embedder_client import GoogleEmbedderClient
+        from deepwiki_cli.clients.google_embedder_client import GoogleEmbedderClient
 
         client = GoogleEmbedderClient()
 
@@ -269,7 +269,7 @@ class TestDataPipelineFunctions:
 
     def test_count_tokens(self, embedder_type=None) -> None:
         """Test token counting with different embedder types."""
-        from api.services.data_pipeline import count_tokens
+        from deepwiki_cli.services.data_pipeline import count_tokens
 
         test_text = "This is a test string for token counting."
 
@@ -287,7 +287,7 @@ class TestDataPipelineFunctions:
 
     def test_prepare_data_pipeline(self, is_ollama=None) -> None:
         """Test data pipeline preparation with different embedder types."""
-        from api.services.data_pipeline import prepare_data_pipeline
+        from deepwiki_cli.services.data_pipeline import prepare_data_pipeline
 
         if is_ollama is not None:
             try:
@@ -317,7 +317,7 @@ class TestRAGIntegration:
 
     def test_rag_initialization(self) -> None:
         """Test RAG initialization with different embedder configurations."""
-        from api.services.rag import RAG
+        from deepwiki_cli.services.rag import RAG
 
         # Test with default configuration
         try:
@@ -335,7 +335,7 @@ class TestRAGIntegration:
 
     def test_rag_embedder_type_detection(self) -> None:
         """Test that RAG correctly detects embedder type."""
-        from api.services.rag import RAG
+        from deepwiki_cli.services.rag import RAG
 
         try:
             rag = RAG()
@@ -371,9 +371,9 @@ class TestEnvironmentVariableHandling:
             os.environ["DEEPWIKI_EMBEDDER_TYPE"] = embedder_type
 
             # Reload config to pick up new env var
-            importlib.reload(api.config)
+            importlib.reload(deepwiki_cli.config)
 
-            from api.config import EMBEDDER_TYPE, get_embedder_type
+            from deepwiki_cli.config import EMBEDDER_TYPE, get_embedder_type
 
             assert embedder_type == EMBEDDER_TYPE, (
                 f"EMBEDDER_TYPE should be {embedder_type}"
@@ -390,7 +390,7 @@ class TestEnvironmentVariableHandling:
                 del os.environ["DEEPWIKI_EMBEDDER_TYPE"]
 
             # Reload config to restore original state
-            importlib.reload(api.config)
+            importlib.reload(deepwiki_cli.config)
 
 
 class TestIssuesIdentified:
@@ -398,7 +398,7 @@ class TestIssuesIdentified:
 
     def test_binary_assumptions_in_rag(self) -> None:
         """Test that RAG doesn't make binary assumptions about embedders."""
-        from api.services.rag import RAG
+        from deepwiki_cli.services.rag import RAG
 
         # The current implementation only considers is_ollama_embedder
         # This test documents the current behavior and will help verify fixes
@@ -418,7 +418,7 @@ class TestIssuesIdentified:
 
     def test_binary_assumptions_in_data_pipeline(self) -> None:
         """Test binary assumptions in data pipeline functions."""
-        from api.services.data_pipeline import count_tokens, prepare_data_pipeline
+        from deepwiki_cli.services.data_pipeline import count_tokens, prepare_data_pipeline
 
         # These functions currently only consider is_ollama_embedder parameter
         # This test documents the issue and will verify fixes

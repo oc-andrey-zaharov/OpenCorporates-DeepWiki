@@ -11,7 +11,8 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-api/logs/
+src/deepwiki_cli/logs/
+src/deepwiki_cli/.venv/
 .eggs/
 lib/
 lib64/
@@ -27,6 +28,8 @@ wheels/
 /coverage
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.deepeval/
 
 # misc
 .DS_Store

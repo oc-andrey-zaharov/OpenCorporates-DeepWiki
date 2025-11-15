@@ -12,8 +12,8 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 - **Incremental Regeneration**: Detects repo changes, updates only affected pages, and preserves untouched content
 - **Versioned Cache Management**: Maintain multiple wiki snapshots per repo with clear version numbering and summaries
 - **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, and local Ollama
-- **Standalone CLI**: Works out of the box without any server required
-- **Optional Server Mode**: Connect to FastAPI server for shared resources and caching
+- **Standalone CLI**: Works completely offline with a clean Python/Poetry toolchain
+- **Editable Workspaces**: Export markdown wikis into `docs/wiki`, edit locally, and sync back to the cache
 
 ## Quick Start
 
@@ -23,11 +23,8 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 # Install dependencies
 make install
 
-# Start backend server (optional, for server mode)
-make dev
-
-# Or use CLI directly (standalone mode - default)
-make cli -- wiki generate
+# Use the CLI directly
+make cli ARGS="wiki generate"
 ```
 
 ### Manual Installation
@@ -110,6 +107,7 @@ The DeepWiki CLI provides several commands:
 - `deepwiki wiki delete` - Delete a specific cached wiki version
 - `deepwiki wiki list` - List all cached wikis with version, size, and metadata
 - `deepwiki config` - Manage configuration settings
+- `deepwiki sync` - Apply edits from `docs/wiki` workspaces back to the cache (optionally watch)
 
 #### Generate Wiki
 
@@ -155,6 +153,21 @@ deepwiki wiki export
 ```
 
 You'll be prompted to select a wiki/version combo from the list, choose format (markdown or json), and specify output path (optional). The generated filename automatically includes the version suffix (e.g., `_v3`).
+
+### Editable Wiki Workspaces
+
+Running `deepwiki wiki export` in **markdown** mode now creates an editable workspace under `docs/wiki/<owner-repo>_vN`. Two layouts are available:
+
+- `--layout single` – a single Markdown file that contains markers for each page.
+- `--layout multi` – one Markdown file per page, grouped into nested folders that mirror the wiki structure with automatic page linking.
+
+Each export drops a `.deepwiki-manifest.json` file alongside the Markdown. You can:
+
+1. Enable `--watch` (or accept the interactive prompt) to monitor files for changes; edits are synced back to the cache immediately.
+2. Use any editor (Cursor, VS Code, etc.) to update the Markdown inside `docs/wiki`.
+3. Run `deepwiki sync` later if you exported without watching or want to apply changes in batch.
+
+The `deepwiki sync` command accepts `--workspace /path/to/docs/wiki/<workspace>` and also supports `--watch` to keep syncing after the first run.
 
 #### Delete Wiki
 
@@ -263,38 +276,9 @@ This will show you the completion script. The variable name format may vary slig
 
 After setup, restart your shell or reload your configuration file. Then try typing `deepwiki` and press Tab to see completion in action!
 
-### Standalone Mode (Default)
+### Standalone Mode
 
-The CLI works in standalone mode by default - no server required:
-
-```bash
-deepwiki wiki generate
-```
-
-### Server Mode (Optional)
-
-To use server mode for shared resources and caching:
-
-1. Start the FastAPI server:
-
-   ```bash
-   make dev
-   # or
-   poetry run python -m api.server.main
-   ```
-
-2. Configure CLI to use server:
-
-   ```bash
-   deepwiki config set use_server true
-   deepwiki config set server_url http://localhost:8001
-   ```
-
-3. Now CLI will use server endpoints:
-
-   ```bash
-   deepwiki wiki generate
-   ```
+DeepWiki now runs exclusively as a CLI tool. All caching, wiki generation, and editing flows happen locally—no FastAPI layer required.
 
 ## Configuration
 
@@ -311,7 +295,7 @@ To use server mode for shared resources and caching:
 
 ### Configuration Files
 
-Located in `api/config/`:
+Located in `src/deepwiki_cli/config/`:
 
 - `generator.json` - Text generation model settings
 - `embedder.json` - Embedding model and RAG settings
@@ -326,77 +310,42 @@ deepwiki config show          # Show current configuration
 deepwiki config set key value  # Set a configuration value
 ```
 
-Server mode settings:
+Editable workspace settings:
 
-- `use_server` - Enable server mode (default: `false`)
-- `server_url` - Server URL (default: `http://localhost:8001`)
-- `server_timeout` - Request timeout in seconds (default: `300`)
-- `auto_fallback` - Fallback to standalone if server unavailable (default: `true`)
+- `wiki_workspace` - Base directory for markdown exports (default: `docs/wiki`)
+- `export.layout` - Default markdown layout (`single` or `multi`)
+- `export.watch` - Whether to auto-watch exports for edits (default: `false`)
 
 ## Makefile Commands
 
 ```bash
 make help              # Show all commands
-make install           # Install backend dependencies
-make install/backend   # Install backend only
-make dev               # Start backend server (optional)
-make dev/backend       # Start backend server only
-make stop              # Stop backend server
-make clean             # Clean build artifacts
-make cli               # Run CLI (pass arguments after '--')
+make install           # Install dependencies
+make format            # Format code
+make lint              # Run lint checks
+make test              # Run full test suite
+make cli ARGS="..."    # Run CLI with arguments
+make clean             # Clean caches/artifacts
 ```
-
-## Optional Services
-
-### FastAPI Server
-
-The FastAPI server provides HTTP API access and shared caching. It's optional - the CLI works standalone by default.
-
-**Start the server:**
-
-```bash
-make dev
-# or
-poetry run python -m api.server.main
-```
-
-**Use cases:**
-
-- Teams sharing embedding cache
-- Centralized wiki generation service
-- Multiple users accessing same repositories
-- Faster subsequent runs (cached embeddings)
-
-### WebSocket Server
-
-The WebSocket server (`api/websocket_wiki.py`) provides real-time wiki generation updates. It's an optional service for advanced use cases.
-
-**Use cases:**
-
-- Real-time progress updates for team dashboards
-- WebSocket-based wiki generation monitoring
-- Integration with external monitoring systems
-
-See `api/server/websocket_wiki.py` for implementation details.
 
 ## Project Structure
 
 ```
 opencorporates-deepwiki/
-├── api/                  # Backend and CLI
-│   ├── clients/         # Model client implementations (OpenAI, Bedrock, etc.)
+├── src/deepwiki_cli/    # Pure Python CLI package
 │   ├── cli/             # CLI commands and entry point
-│   ├── core/            # Core business logic (chat, github)
-│   ├── server/          # Server-related code (FastAPI, WebSocket)
-│   ├── services/        # High-level services (RAG, data pipeline)
-│   ├── utils/           # Utility functions
-│   ├── tools/           # Tools (embedder)
-│   ├── config/          # Configuration files (JSON)
+│   ├── clients/         # Model client implementations (OpenAI, Bedrock, etc.)
+│   ├── core/            # Core completion helpers
+│   ├── services/        # RAG + data pipeline logic
+│   ├── utils/           # Shared utilities
+│   ├── templates/       # Prompt templates
+│   ├── config/          # JSON configuration (models, embedders)
 │   ├── config.py        # Configuration management
 │   ├── models.py        # Pydantic models
-│   ├── prompts.py       # Prompt templates
-│   └── logging_config.py # Logging setup
+│   ├── prompts.py       # Prompt builders
+│   └── logging_config.py # Logging + structlog setup
 ├── docs/                # Documentation
+│   └── wiki/            # Editable wiki exports
 ├── tests/               # Test suite
 ├── pyproject.toml      # Poetry project configuration
 ├── Makefile            # Build and run commands
@@ -418,18 +367,16 @@ See [docs/diagram-validation.md](docs/diagram-validation.md) for details on how 
 
 **API Key Issues**: Check your `.env` file has valid keys without extra spaces
 
-**Connection Problems**: Ensure server is running if using server mode (port 8001)
-
 **Generation Issues**: Try a smaller repository first, ensure tokens have correct permissions
 
-**Server Unavailable**: If server mode is enabled but server is down, CLI will automatically fallback to standalone mode (if `auto_fallback` is `true`)
+**Workspace Sync Issues**: Ensure you're editing files inside `docs/wiki/...` and that `.deepwiki-manifest.json` exists. Re-run `deepwiki export` if the workspace was deleted.
 
 ## Logging
 
-Logs are written to `api/logs/application.log` by default. You can configure logging via environment variables:
+Logs are written to `src/deepwiki_cli/logs/application.log` by default (JSON via structlog). You can configure logging via environment variables:
 
 - `LOG_LEVEL` - Log level (default: `INFO`)
-- `LOG_FILE_PATH` - Path to log file (default: `api/logs/application.log`)
+- `LOG_FILE_PATH` - Path to log file (default: `src/deepwiki_cli/logs/application.log`)
 
 ## Testing
 

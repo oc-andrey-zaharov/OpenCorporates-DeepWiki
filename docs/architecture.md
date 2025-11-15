@@ -7,12 +7,11 @@ This document gives a quick overview of the technologies in use and how the main
 | Layer | Technology | Notes |
 | ----- | ---------- | ----- |
 | CLI | Python Click | Command-line interface for wiki generation |
-| Backend | FastAPI (Python 3.11+) | Optional REST API server for shared resources |
-| Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `api/rag.py` |
-| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama | Configurable via `api/config` and environment variables |
+| Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `src/deepwiki_cli/services/rag.py` |
+| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama | Configurable via `src/deepwiki_cli/config` and environment variables |
 | Persistence | Local cache (filesystem) | Stores generated wiki artifacts and repo snapshots for reuse/versioning |
 | Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
-| Tooling | Poetry for backend, Docker & Makefile | Simplifies local development and deployment |
+| Tooling | Poetry + Makefile | Simplifies local development and testing |
 
 ## High-Level Component View
 
@@ -20,7 +19,6 @@ This document gives a quick overview of the technologies in use and how the main
 graph TD;
   User[(User)];
   CLI[DeepWiki CLI<br/>Standalone Mode];
-  Server[FastAPI Server<br/>Optional];
   GitProviders[(Git Providers<br/>GitHub)];
   LLMs[(LLM Providers<br/>Gemini / OpenAI / etc.)];
   Cache[(Local Cache<br/>Artifacts & Metadata)];
@@ -29,10 +27,6 @@ graph TD;
   CLI -->|Direct Access| GitProviders;
   CLI -->|Prompts and embeddings| LLMs;
   CLI -->|Read and Write| Cache;
-  CLI -.->|Optional| Server;
-  Server -->|Repo content| GitProviders;
-  Server -->|Prompts and embeddings| LLMs;
-  Server -->|Read and Write| Cache;
 ```
 
 ## Wiki Generation Flow
@@ -63,35 +57,18 @@ sequenceDiagram
   C-->>U: Wiki generation complete
 ```
 
-## Architecture Modes
+## Architecture Mode
 
-### Standalone Mode (Default)
+DeepWiki now operates solely as a CLI-first application. All repository scanning, wiki generation, caching, and editable workspace features run locally. The only outbound calls are to:
 
-The CLI runs in standalone mode by default - no server required:
+- Git hosting providers (GitHub REST API)
+- LLM providers (Google, OpenAI, OpenRouter, Bedrock, or local Ollama)
 
-- Direct access to Git providers
-- Direct access to LLM providers
-- Local cache management
-- No network dependencies (except Git and LLM APIs)
-
-### Server Mode (Optional)
-
-When configured, the CLI can connect to a FastAPI server:
-
-- Shared embedding cache
-- Centralized wiki generation service
-- Multiple users accessing same repositories
-- Faster subsequent runs (cached embeddings)
-
-To enable server mode:
-```bash
-deepwiki config set use_server true
-deepwiki config set server_url http://localhost:8001
-```
+There is no FastAPI or WebSocket server to deploy or configure.
 
 ## Component Details
 
-### CLI (`api/cli/`)
+### CLI (`src/deepwiki_cli/cli/`)
 
 The CLI provides commands for wiki generation and management:
 
@@ -108,15 +85,14 @@ Key behaviors:
 - **Interactive regeneration**: Users can overwrite everything, update only affected pages (multi-select with optional per-page feedback), or fork a new cache version.
 - **Version-aware management**: `list`, `export`, and `delete` commands operate on distinct cache versions, preserving historical snapshots for audits or comparisons.
 
-### Core Logic (`api/core/`)
+### Core Logic (`src/deepwiki_cli/core/`)
 
-Core business logic shared between CLI and server:
+Core business logic shared across commands:
 
-- `chat.py` - Chat completion logic with streaming
+- `completion.py` - Chat completion logic with streaming
 - `github.py` - GitHub API integration
-- `wiki_generator.py` - Wiki generation orchestration (if exists)
 
-### RAG Pipeline (`api/rag.py`)
+### RAG Pipeline (`src/deepwiki_cli/services/rag.py`)
 
 The RAG (Retrieval-Augmented Generation) pipeline:
 
@@ -136,25 +112,6 @@ Support for multiple AI providers:
 - `google_embedder_client.py` - Google embedding client
 - `dashscope_client.py` - Alibaba Cloud DashScope client
 
-### Optional Services
-
-#### FastAPI Server (`api/server.py`)
-
-Optional HTTP API server providing:
-
-- Shared cache management
-- GitHub/local repository structure fetching
-- Export utilities (Markdown/JSON)
-- Version-aware cache retrieval and deletion compatible with the CLI
-
-#### WebSocket Server (`api/websocket_wiki.py`)
-
-Optional WebSocket server for:
-
-- Real-time wiki generation updates
-- Progress monitoring
-- Team dashboard integration
-
 ## Data Flow
 
 1. **Repository Fetching**: CLI or server fetches repository content from Git provider
@@ -173,6 +130,6 @@ Configuration is managed through:
 
 - Environment variables (`.env` file)
 - CLI configuration (`~/.deepwiki/config.json`)
-- JSON config files (`api/config/`)
+- JSON config files (`src/deepwiki_cli/config/`)
 
 See README.md for detailed configuration options.

@@ -12,11 +12,11 @@ Currently, GitHub authentication is handled via:
 
 ### Backend Changes
 1. Add AWS Secrets Manager client library to `pyproject.toml`
-2. Create new module `api/secrets_manager.py` with functions to:
+2. Create new module `src/deepwiki_cli/secrets_manager.py` with functions to:
    - Retrieve GitHub token from AWS Secrets Manager
    - Fallback to `GITHUB_TOKEN` env var if AWS Secrets Manager is not configured
-3. Update `api/config.py` to use Secrets Manager when available
-4. Update `api/rag.py` to use Secrets Manager token retrieval
+3. Update `src/deepwiki_cli/config.py` to use Secrets Manager when available
+4. Update `src/deepwiki_cli/rag.py` to use Secrets Manager token retrieval
 
 ### Environment Variables
 - `AWS_SECRETS_MANAGER_SECRET_NAME` - Name of the secret in AWS Secrets Manager

@@ -23,8 +23,8 @@ project_root = test_file_path.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import utils module directly without going through package __init__
-utils_path = project_root / "api" / "cli" / "utils.py"
-spec = importlib.util.spec_from_file_location("api.cli.utils", utils_path)
+utils_path = project_root / "src" / "deepwiki_cli" / "cli" / "utils.py"
+spec = importlib.util.spec_from_file_location("deepwiki_cli.cli.utils", utils_path)
 utils_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(utils_module)
 truncate_string = utils_module.truncate_string

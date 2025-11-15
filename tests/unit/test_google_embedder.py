@@ -28,7 +28,7 @@ def test_google_embedder_client() -> bool | None:
     try:
         from adalflow.core.types import ModelType
 
-        from api.clients.google_embedder_client import GoogleEmbedderClient
+        from deepwiki_cli.clients.google_embedder_client import GoogleEmbedderClient
 
         # Initialize the client
         client = GoogleEmbedderClient()
@@ -98,7 +98,7 @@ def test_adalflow_embedder() -> bool | None:
     try:
         import adalflow as adal
 
-        from api.clients.google_embedder_client import GoogleEmbedderClient
+        from deepwiki_cli.clients.google_embedder_client import GoogleEmbedderClient
 
         # Create embedder
         client = GoogleEmbedderClient()
@@ -137,7 +137,7 @@ def test_document_processing():
         from adalflow.components.data_process import ToEmbeddings
         from adalflow.core.types import Document
 
-        from api.tools.embedder import get_embedder
+        from deepwiki_cli.tools.embedder import get_embedder
 
         # Create some test documents
         docs = [

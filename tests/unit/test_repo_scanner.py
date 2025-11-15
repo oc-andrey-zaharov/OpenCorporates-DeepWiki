@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from api.utils.repo_scanner import collect_repository_files
+from deepwiki_cli.utils.repo_scanner import collect_repository_files
 
 if TYPE_CHECKING:
     from pathlib import Path

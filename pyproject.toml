@@ -1,9 +1,10 @@
 [tool.poetry]
-name = "opencorporates-deepwiki-api"
+name = "opencorporates-deepwiki-cli"
 version = "0.0.1.dev221+e5bf2ee"
-description = "CLI tool and optional API server for OpenCorporates-DeepWiki, providing smart code analysis and AI-powered documentation generation."
+description = "Pure CLI for OpenCorporates DeepWiki with interactive and parameterized modes."
 authors = ["OpenCorporates DeepWiki Team"]
-packages = [{include = "api"}]
+readme = "README.md"
+packages = [{ include = "deepwiki_cli", from = "src" }]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0", "poetry-dynamic-versioning>=1.9.0"]
@@ -18,12 +19,10 @@ pattern = "^(?P<base>\\d+\\.\\d+\\.\\d+)$"
 
 
 [tool.poetry.scripts]
-deepwiki = "api.cli.main:main"
+deepwiki = "deepwiki_cli.cli.main:main"
 
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
-fastapi = ">=0.121.0"
-uvicorn = { extras = ["standard"], version = ">=0.38.0" }
 pydantic = ">=2.12.0"
 google-generativeai = ">=0.3.0"
 tiktoken = ">=0.12.0"
@@ -38,6 +37,8 @@ boto3 = ">=1.40.0"
 click = ">=8.0.0,<8.3.0"
 enlighten = ">=1.14.0"
 simple-term-menu = ">=1.6.0"
+structlog = ">=24.1"
+watchfiles = ">=0.21.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"

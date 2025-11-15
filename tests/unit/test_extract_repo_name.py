@@ -14,7 +14,7 @@ import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Import the modules under test
-from api.services.data_pipeline import DatabaseManager
+from deepwiki_cli.services.data_pipeline import DatabaseManager
 
 
 class TestExtractRepoNameFromUrl:

@@ -15,8 +15,11 @@ import pytest
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from deepwiki_cli.models import WikiPage
-from deepwiki_cli.utils import export
+from deepwiki_cli.application.export.export import (
+    generate_json_export,
+    generate_markdown_export,
+)
+from deepwiki_cli.domain.models import WikiPage
 
 
 @pytest.mark.unit
@@ -37,7 +40,7 @@ class TestGenerateMarkdownExport:
             ),
         ]
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         assert "# Wiki Documentation for" in result
         assert repo_url in result
@@ -67,7 +70,7 @@ class TestGenerateMarkdownExport:
             ),
         ]
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         assert "## Page 1" in result
         assert "## Page 2" in result
@@ -106,7 +109,7 @@ class TestGenerateMarkdownExport:
             ),
         ]
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         # Check that related pages are linked
         assert "[Page 2](#page2)" in result
@@ -118,7 +121,7 @@ class TestGenerateMarkdownExport:
         repo_url = "https://github.com/owner/repo"
         pages = []
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         assert "# Wiki Documentation for" in result
         assert repo_url in result
@@ -139,7 +142,7 @@ class TestGenerateMarkdownExport:
             ),
         ]
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         assert "Generated on:" in result
         # Check for date format YYYY-MM-DD
@@ -159,7 +162,7 @@ class TestGenerateMarkdownExport:
             ),
         ]
 
-        result = export.generate_markdown_export(repo_url, pages)
+        result = generate_markdown_export(repo_url, pages)
 
         assert "<a id='page1'></a>" in result
         assert "[Page 1](#page1)" in result  # TOC link
@@ -183,7 +186,7 @@ class TestGenerateJsonExport:
             ),
         ]
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
         data = json.loads(result)
 
         assert "metadata" in data
@@ -216,7 +219,7 @@ class TestGenerateJsonExport:
             ),
         ]
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
         data = json.loads(result)
 
         expected_page_count = 2
@@ -230,7 +233,7 @@ class TestGenerateJsonExport:
         repo_url = "https://github.com/owner/repo"
         pages = []
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
         data = json.loads(result)
 
         assert data["metadata"]["repository"] == repo_url
@@ -251,7 +254,7 @@ class TestGenerateJsonExport:
             ),
         ]
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
         data = json.loads(result)
 
         assert "generated_at" in data["metadata"]
@@ -272,7 +275,7 @@ class TestGenerateJsonExport:
             ),
         ]
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
 
         # Pretty JSON should have newlines
         assert "\n" in result
@@ -294,7 +297,7 @@ class TestGenerateJsonExport:
             ),
         ]
 
-        result = export.generate_json_export(repo_url, pages)
+        result = generate_json_export(repo_url, pages)
         data = json.loads(result)
 
         page_data = data["pages"][0]

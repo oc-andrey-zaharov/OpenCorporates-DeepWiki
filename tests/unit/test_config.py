@@ -325,7 +325,7 @@ class TestGetProviderModels:
     """Tests for get_provider_models function."""
 
     @patch(
-        "deepwiki_cli.config.configs",
+        "deepwiki_cli.infrastructure.config.configs",
         {
             "providers": {
                 "google": {"models": {"model1": {}, "model2": {}}},
@@ -341,13 +341,13 @@ class TestGetProviderModels:
         assert result["google"] == ["model1", "model2"]
         assert result["openai"] == ["model3"]
 
-    @patch("deepwiki_cli.config.configs", {})
+    @patch("deepwiki_cli.infrastructure.config.configs", {})
     def test_get_provider_models_no_providers(self) -> None:
         """Test getting provider models when no providers exist."""
         result = config.get_provider_models()
         assert result == {}
 
-    @patch("deepwiki_cli.config.configs", {"providers": {"google": {}}})
+    @patch("deepwiki_cli.infrastructure.config.configs", {"providers": {"google": {}}})
     def test_get_provider_models_no_models_key(self) -> None:
         """Test getting provider models when models key is missing."""
         result = config.get_provider_models()

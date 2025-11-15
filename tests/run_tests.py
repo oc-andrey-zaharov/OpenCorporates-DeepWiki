@@ -15,11 +15,17 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+
 def run_test_file(test_file) -> bool | None:
     """Run a single test file and return success status."""
     try:
-        result = subprocess.run([sys.executable, str(test_file)],
-                              check=False, capture_output=True, text=True, cwd=project_root)
+        result = subprocess.run(
+            [sys.executable, str(test_file)],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+        )
 
         if result.returncode == 0:
             if result.stdout:
@@ -32,6 +38,7 @@ def run_test_file(test_file) -> bool | None:
         return False
     except Exception:
         return False
+
 
 def run_tests(test_dirs) -> bool:
     """Run all tests in the specified directories."""
@@ -63,12 +70,14 @@ def run_tests(test_dirs) -> bool:
         return False
     return True
 
+
 def check_environment() -> None:
     """Check if required environment variables and dependencies are available."""
     # Check for .env file
     env_file = project_root / ".env"
     if env_file.exists():
         from dotenv import load_dotenv
+
         load_dotenv(env_file)
     else:
         pass
@@ -95,12 +104,17 @@ def check_environment() -> None:
     with contextlib.suppress(ImportError):
         pass
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run DeepWiki tests")
     parser.add_argument("--unit", action="store_true", help="Run only unit tests")
-    parser.add_argument("--integration", action="store_true", help="Run only integration tests")
+    parser.add_argument(
+        "--integration", action="store_true", help="Run only integration tests"
+    )
     parser.add_argument("--api", action="store_true", help="Run only API tests")
-    parser.add_argument("--check-env", action="store_true", help="Only check environment setup")
+    parser.add_argument(
+        "--check-env", action="store_true", help="Only check environment setup"
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
     args = parser.parse_args()
@@ -124,9 +138,9 @@ def main() -> None:
     if not test_dirs:
         test_dirs = ["unit", "integration", "api"]
 
-
     success = run_tests(test_dirs)
     sys.exit(0 if success else 1)
+
 
 if __name__ == "__main__":
     main()

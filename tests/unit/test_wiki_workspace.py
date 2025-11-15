@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from deepwiki_cli.models import WikiPage, WikiSection, WikiStructureModel
-from deepwiki_cli.utils.wiki_workspace import (
+from deepwiki_cli.domain.models import WikiPage, WikiSection, WikiStructureModel
+from deepwiki_cli.infrastructure.storage.workspace import (
     ExportManifest,
     export_markdown_workspace,
     slugify,
@@ -35,7 +35,11 @@ def _build_pages() -> list[WikiPage]:
 
 
 def _build_structure(pages: list[WikiPage]) -> WikiStructureModel:
-    section = WikiSection(id="intro", title="Introduction", pages=[page.id for page in pages])
+    section = WikiSection(
+        id="intro",
+        title="Introduction",
+        pages=[page.id for page in pages],
+    )
     return WikiStructureModel(
         id="root",
         title="Demo",
@@ -51,9 +55,15 @@ def test_export_and_sync_multi_layout(tmp_path):
     pages = _build_pages()
     structure = _build_structure(pages)
     cache_payload = {
-        "repo": {"owner": "acme", "repo": "demo", "repoUrl": "https://github.com/acme/demo"},
+        "repo": {
+            "owner": "acme",
+            "repo": "demo",
+            "repoUrl": "https://github.com/acme/demo",
+        },
         "wiki_structure": json.loads(structure.model_dump_json()),
-        "generated_pages": {page.id: json.loads(page.model_dump_json()) for page in pages},
+        "generated_pages": {
+            page.id: json.loads(page.model_dump_json()) for page in pages
+        },
     }
     cache_file.write_text(json.dumps(cache_payload), encoding="utf-8")
 
@@ -70,7 +80,11 @@ def test_export_and_sync_multi_layout(tmp_path):
         repo_url="https://github.com/acme/demo",
     )
 
-    manifest = export_markdown_workspace(pages=pages, structure=structure, manifest=manifest)
+    manifest = export_markdown_workspace(
+        pages=pages,
+        structure=structure,
+        manifest=manifest,
+    )
     first_page = manifest.pages[0]
     exported_file = Path(manifest.root_dir) / first_page.relative_path
 
@@ -88,8 +102,13 @@ def test_export_and_sync_multi_layout(tmp_path):
     assert summary["updated"] == 1
 
     updated_cache = json.loads(cache_file.read_text(encoding="utf-8"))
-    assert updated_cache["generated_pages"]["overview"]["content"] == "Updated overview content with more detail."
-    assert updated_cache["generated_pages"]["overview"]["title"] == "Project Overview v2"
+    assert (
+        updated_cache["generated_pages"]["overview"]["content"]
+        == "Updated overview content with more detail."
+    )
+    assert (
+        updated_cache["generated_pages"]["overview"]["title"] == "Project Overview v2"
+    )
 
 
 def test_slugify_outputs_safe_names():

@@ -43,12 +43,14 @@ class TestExtractRepoNameFromUrl:
     def test_extract_repo_name_local_paths(self) -> None:
         """Test repository name extraction from local paths."""
         result = self.db_manager._extract_repo_name_from_url(
-            "/home/user/projects/my-repo", "local",
+            "/home/user/projects/my-repo",
+            "local",
         )
         assert result == "my-repo"
 
         result = self.db_manager._extract_repo_name_from_url(
-            "/var/repos/project.git", "local",
+            "/var/repos/project.git",
+            "local",
         )
         assert result == "project"
 

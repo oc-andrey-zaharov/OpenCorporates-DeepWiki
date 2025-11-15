@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import click
 
 from deepwiki_cli.cli.utils import format_file_size, get_cache_path
-from deepwiki_cli.utils.wiki_cache import parse_cache_filename
+from deepwiki_cli.infrastructure.storage.cache import parse_cache_filename
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +87,8 @@ def list_wikis() -> None:
         except Exception as e:
             click.echo(f"Warning: Could not parse {cache_file.name}: {e}", err=True)
 
-    # Sort by modification time (most recent first)
-    wikis.sort(key=lambda x: x["modified"], reverse=True)
+    # Sort by name (repo), then by version (descending)
+    wikis.sort(key=lambda x: (x["name"], -x["version"]))
 
     # Display wikis
     for i, wiki in enumerate(wikis, 1):

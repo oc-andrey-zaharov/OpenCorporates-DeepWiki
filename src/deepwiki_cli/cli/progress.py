@@ -117,7 +117,10 @@ class SimpleProgressBar:
     def __init__(self, total: int, desc: str = "Progress") -> None:
         self.manager = enlighten.get_manager()
         self.bar = self.manager.counter(
-            total=total, desc=desc, unit="items", color="green",
+            total=total,
+            desc=desc,
+            unit="items",
+            color="green",
         )
 
     def update(self, count: int = 1) -> None:

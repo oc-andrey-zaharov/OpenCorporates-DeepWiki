@@ -1,28 +1,39 @@
 """Main CLI entry point for DeepWiki."""
 
 import logging
-import os
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from dotenv import load_dotenv
 
 from deepwiki_cli import __version__
 
+if TYPE_CHECKING:
+    from click import Context
+else:
+    from typing import Any
+
+    Context = Any  # type: ignore[assignment,misc]
+
 # Add the project root to the path
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+root_dir_str = str(ROOT_DIR)
+if root_dir_str not in sys.path:
+    sys.path.insert(0, root_dir_str)
 
 # Load environment variables from .env file in project root
-env_path = os.path.join(ROOT_DIR, ".env")
-if os.path.exists(env_path):
-    load_dotenv(env_path, override=True)
+env_path = ROOT_DIR / ".env"
+if env_path.exists():
+    load_dotenv(str(env_path), override=True)
 
 # Setup logging with default WARNING level (will be adjusted based on verbose flag)
-from deepwiki_cli.logging_config import setup_logging
-
 # Set default log level to WARNING for CLI (less verbose)
+import os
+
+from deepwiki_cli.infrastructure.logging.setup import setup_logging
+
 os.environ["LOG_LEVEL"] = os.environ.get("LOG_LEVEL", "WARNING")
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -37,7 +48,7 @@ logger = logging.getLogger(__name__)
     help="Enable verbose output (INFO level logging)",
 )
 @click.pass_context
-def cli(ctx, verbose) -> None:
+def cli(ctx: "Context", verbose: bool) -> None:
     """DeepWiki CLI - Generate comprehensive wikis from code repositories.
 
     Interactive tool for creating, managing, and exporting documentation
@@ -48,12 +59,7 @@ def cli(ctx, verbose) -> None:
     ctx.obj["verbose"] = verbose
 
     # Adjust logging level based on verbose flag
-    if verbose:
-        # Set to INFO level for verbose mode
-        log_level = logging.INFO
-    else:
-        # Keep at WARNING level for normal mode (less verbose)
-        log_level = logging.WARNING
+    log_level = logging.INFO if verbose else logging.WARNING
 
     # Update root logger and all handlers
     logging.root.setLevel(log_level)
@@ -73,7 +79,14 @@ def cli(ctx, verbose) -> None:
 
 
 # Import commands after the CLI group is defined
-from deepwiki_cli.cli.commands import config_cmd, delete, export, generate, list_wikis, sync
+from deepwiki_cli.cli.commands import (
+    config_cmd,
+    delete,
+    export,
+    generate,
+    list_wikis,
+    sync,
+)
 
 cli.add_command(generate.generate)
 cli.add_command(list_wikis.list_wikis)

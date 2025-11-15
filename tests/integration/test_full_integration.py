@@ -9,10 +9,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+
 def test_config_loading() -> bool | None:
     """Test that configurations load properly."""
     try:
-        from deepwiki_cli.config import CLIENT_CLASSES, configs
+        from deepwiki_cli.infrastructure.config import CLIENT_CLASSES, configs
 
         # Check if Google embedder config exists
         if "embedder_google" in configs:
@@ -30,14 +31,19 @@ def test_config_loading() -> bool | None:
 
     except Exception:
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_embedder_selection() -> bool | None:
     """Test embedder selection mechanism."""
     try:
-        from deepwiki_cli.config import get_embedder_type, is_google_embedder
-        from deepwiki_cli.tools.embedder import get_embedder
+        from deepwiki_cli.infrastructure.config import (
+            get_embedder_type,
+            is_google_embedder,
+        )
+        from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
 
         # Test default embedder type
         get_embedder_type()
@@ -52,8 +58,10 @@ def test_embedder_selection() -> bool | None:
 
     except Exception:
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_google_embedder_with_env() -> bool | None:
     """Test Google embedder with environment variable."""
@@ -65,12 +73,12 @@ def test_google_embedder_with_env() -> bool | None:
         # Reload config module to pick up new env var
         import importlib
 
-        import deepwiki_cli.config
-        importlib.reload(deepwiki_cli.config)
+        import deepwiki_cli.infrastructure.config
 
-        from deepwiki_cli.config import get_embedder_config
-        from deepwiki_cli.tools.embedder import get_embedder
+        importlib.reload(deepwiki_cli.infrastructure.config)
 
+        from deepwiki_cli.infrastructure.config import get_embedder_config
+        from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
 
         # Test getting embedder config
         get_embedder_config()
@@ -82,6 +90,7 @@ def test_google_embedder_with_env() -> bool | None:
 
     except Exception:
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -91,6 +100,7 @@ def test_google_embedder_with_env() -> bool | None:
             os.environ["DEEPWIKI_EMBEDDER_TYPE"] = original_value
         elif "DEEPWIKI_EMBEDDER_TYPE" in os.environ:
             del os.environ["DEEPWIKI_EMBEDDER_TYPE"]
+
 
 def main() -> bool:
     """Run all integration tests."""
@@ -112,8 +122,8 @@ def main() -> bool:
         except Exception:
             pass
 
-
     return passed == total
+
 
 if __name__ == "__main__":
     success = main()

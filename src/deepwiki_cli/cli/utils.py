@@ -18,7 +18,7 @@ except ImportError:
     SIMPLE_TERM_MENU_AVAILABLE = False
 
 if TYPE_CHECKING:
-    from deepwiki_cli.utils.wiki_workspace import ExportManifest
+    from deepwiki_cli.infrastructure.storage.workspace import ExportManifest
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def parse_repository_input(
 
     # Only check local path if URL/shorthand patterns don't match
     if validate_local_path(repo_input):
-        repo_name = os.path.basename(os.path.abspath(repo_input))
+        repo_name = Path(repo_input).resolve().name
         return "local", repo_input, None, repo_name
 
     # Invalid input
@@ -319,9 +319,7 @@ def select_multiple_from_list(
 
             try:
                 indexes = {
-                    int(item.strip())
-                    for item in selection.split(",")
-                    if item.strip()
+                    int(item.strip()) for item in selection.split(",") if item.strip()
                 }
             except ValueError:
                 click.echo("✗ Invalid input. Use comma-separated numbers like 1,3,4")
@@ -381,6 +379,7 @@ def select_multiple_from_list(
 
         click.echo("\n✗ Selection cancelled.", err=True)
         sys.exit(1)
+
 
 def confirm_action(
     prompt_text: str,
@@ -450,9 +449,9 @@ def prompt_text_input(
     # For repository input, show input type menu first
     if "repository" in prompt_text.lower() or "repo" in prompt_text.lower():
         input_types = [
+            "Local directory path",
             "GitHub URL (https://github.com/owner/repo)",
             "GitHub shorthand (owner/repo)",
-            "Local directory path",
         ]
 
         if not SIMPLE_TERM_MENU_AVAILABLE:
@@ -463,6 +462,7 @@ def prompt_text_input(
             terminal_menu = TerminalMenu(
                 input_types,
                 title="Select repository input type",
+                cursor_index=0,  # Default to local directory path
                 clear_screen=False,
             )
 
@@ -474,9 +474,9 @@ def prompt_text_input(
 
             # Show appropriate hint based on selection
             hints = {
-                0: "Enter GitHub URL (e.g., https://github.com/owner/repo)",
-                1: "Enter GitHub shorthand (e.g., owner/repo)",
-                2: "Enter local directory path (e.g., /path/to/repo)",
+                0: "Enter local directory path (e.g., /path/to/repo)",
+                1: "Enter GitHub URL (e.g., https://github.com/owner/repo)",
+                2: "Enter GitHub shorthand (e.g., owner/repo)",
             }
             click.echo(f"\n{hints[selected_index]}")
 
@@ -563,7 +563,7 @@ def watch_manifest_cli(manifest: "ExportManifest") -> None:
     """Watch an editable workspace for Markdown changes."""
     import click
 
-    from deepwiki_cli.utils.wiki_workspace import watch_workspace
+    from deepwiki_cli.infrastructure.storage.workspace import watch_workspace
 
     click.echo("\nWatching for edits (press Ctrl+C to stop)...\n")
     try:

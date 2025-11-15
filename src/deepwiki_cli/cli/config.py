@@ -155,12 +155,12 @@ def set_config_value(key: str, value: Any) -> None:
 
 
 def get_provider_models() -> dict[str, list]:
-    """Get available models for each provider from deepwiki_cli.config.
+    """Get available models for each provider from deepwiki_cli.infrastructure.config.
 
     Returns:
         Dictionary mapping provider names to lists of available models.
     """
-    from deepwiki_cli.config import configs
+    from deepwiki_cli.infrastructure.config import configs
 
     provider_models = {}
     if "providers" in configs:

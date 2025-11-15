@@ -550,7 +550,8 @@ class TestSelectWikiFromList:
     @patch("deepwiki_cli.cli.utils.SIMPLE_TERM_MENU_AVAILABLE", True)
     @patch("deepwiki_cli.cli.utils.TerminalMenu")
     def test_select_wiki_from_list_with_menu(
-        self, mock_terminal_menu: MagicMock,
+        self,
+        mock_terminal_menu: MagicMock,
     ) -> None:
         """Test select_wiki_from_list with terminal menu."""
         wikis = [

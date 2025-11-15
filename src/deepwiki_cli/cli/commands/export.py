@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 import click
 
+from deepwiki_cli.application.export.export import generate_json_export
 from deepwiki_cli.cli.completion import complete_wiki_names
 from deepwiki_cli.cli.config import load_config
 from deepwiki_cli.cli.utils import (
@@ -19,13 +19,11 @@ from deepwiki_cli.cli.utils import (
     select_wiki_from_list,
     watch_manifest_cli,
 )
-from deepwiki_cli.models import WikiPage, WikiStructureModel
-from deepwiki_cli.utils.export import generate_json_export
-from deepwiki_cli.utils.wiki_cache import parse_cache_filename
-from deepwiki_cli.utils.wiki_workspace import (
+from deepwiki_cli.domain.models import WikiPage, WikiStructureModel
+from deepwiki_cli.infrastructure.storage.cache import parse_cache_filename
+from deepwiki_cli.infrastructure.storage.workspace import (
     ExportManifest,
     export_markdown_workspace,
-    watch_workspace,
     workspace_name,
 )
 
@@ -123,7 +121,7 @@ def export(
 
     if not pages_to_export:
         click.echo("No matching pages to export.", err=True)
-        raise click.Abort()
+        raise click.Abort
 
     repo_url = _resolve_repo_url(cache_data)
     workspace_dir = workspace_base / workspace_name(
@@ -238,9 +236,7 @@ def _filter_pages(
     pages_arg: str | None,
 ) -> list[WikiPage]:
     if pages_arg:
-        tokens = {
-            token.strip() for token in pages_arg.split(",") if token.strip()
-        }
+        tokens = {token.strip() for token in pages_arg.split(",") if token.strip()}
         if not tokens or "all" in {token.lower() for token in tokens}:
             return available
 
@@ -266,7 +262,7 @@ def _filter_pages(
     if len(selection) == len(choices):
         return available
 
-    choice_map = {label: page for label, page in zip(choices, available)}
+    choice_map = dict(zip(choices, available, strict=False))
     return [choice_map[label] for label in selection]
 
 
@@ -308,4 +304,3 @@ def _export_json(cache_data: dict, wiki_meta: dict, output: str | None) -> None:
     click.echo(f"\n✓ Wiki exported successfully to: {output_path}")
     click.echo(f"  File size: {size_str}")
     click.echo(f"  Pages exported: {len(pages)}\n")
-

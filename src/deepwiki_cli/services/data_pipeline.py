@@ -1,14 +1,15 @@
 import base64
 import contextlib
 import json
-import logging
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 from urllib.parse import urlparse
 
 import adalflow as adal
 import requests
+import structlog
 import tiktoken
 from adalflow.components.data_process import TextSplitter, ToEmbeddings
 from adalflow.core.db import LocalDB
@@ -16,13 +17,16 @@ from adalflow.core.types import Document, List
 from adalflow.utils import get_adalflow_default_root_path
 from requests.exceptions import RequestException
 
-from deepwiki_cli.config import DEFAULT_EXCLUDED_DIRS, DEFAULT_EXCLUDED_FILES, configs
-from deepwiki_cli.ollama_patch import OllamaDocumentProcessor
-from deepwiki_cli.tools.embedder import get_embedder
-from deepwiki_cli.utils.repo_scanner import collect_repository_files
+from deepwiki_cli.application.repository.scan import collect_repository_files
+from deepwiki_cli.infrastructure.config import configs
+from deepwiki_cli.infrastructure.config.defaults import (
+    DEFAULT_EXCLUDED_DIRS,
+    DEFAULT_EXCLUDED_FILES,
+)
+from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
+from deepwiki_cli.infrastructure.embedding.ollama_patch import OllamaDocumentProcessor
 
-# Configure logging
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Maximum token limit for OpenAI embedding models
 MAX_EMBEDDING_TOKENS = 8192
@@ -36,7 +40,108 @@ CODE_FILE_TOKEN_MULTIPLIER = 2
 _encoding_cache = {}
 
 
-def _get_encoding(embedder_type: str):
+def _vector_has_values(vector: Any) -> bool:
+    """Determine whether an embedding vector contains at least one element.
+
+    Args:
+        vector: Potential embedding vector returned by the embedder.
+
+    Returns:
+        bool: True when the vector exists and is non-empty, False otherwise.
+    """
+    if vector is None:
+        return False
+
+    if hasattr(vector, "__len__"):
+        try:
+            return len(vector) > 0
+        except TypeError:
+            # Some vector types (e.g., numpy scalar) may not support len()
+            pass
+
+    shape = getattr(vector, "shape", None)
+    if shape is not None:
+        try:
+            first_dimension = shape[0]
+            return bool(first_dimension)
+        except (TypeError, IndexError):
+            return False
+
+    # Fallback: assume the vector has content if it exposes neither len nor shape
+    return True
+
+
+def _split_documents_by_embedding(
+    documents: List[Document],
+) -> tuple[List[Document], list[str]]:
+    """Split documents into two groups based on embedding availability.
+
+    Args:
+        documents: Documents emitted by the splitter/embedder pipeline.
+
+    Returns:
+        tuple: (valid_documents, missing_embedding_paths). The latter contains up to
+        all file paths whose documents are missing embeddings.
+    """
+    valid_documents: List[Document] = []
+    missing_paths: list[str] = []
+
+    for doc in documents or []:
+        if _vector_has_values(getattr(doc, "vector", None)):
+            valid_documents.append(doc)
+            continue
+
+        file_path = "unknown"
+        if getattr(doc, "meta_data", None):
+            file_path = doc.meta_data.get("file_path", "unknown")
+        missing_paths.append(file_path)
+
+    return valid_documents, missing_paths
+
+
+def _require_valid_embeddings(
+    documents: List[Document],
+    embedder_type: str | None,
+    context: str,
+) -> List[Document]:
+    """Ensure at least one document has embeddings and filter invalid entries.
+
+    Args:
+        documents: Documents to validate.
+        embedder_type: Name of the embedder for diagnostics.
+        context: Human-readable description of the current operation.
+
+    Returns:
+        List[Document]: Documents that contain embeddings.
+
+    Raises:
+        ValueError: If every document is missing embeddings.
+    """
+    valid_documents, missing_paths = _split_documents_by_embedding(documents)
+
+    if missing_paths:
+        logger.warning(
+            "Skipping documents without embeddings",
+            operation="validate_embeddings",
+            status="warning",
+            embedder_type=embedder_type,
+            context=context,
+            missing_count=len(missing_paths),
+            sample_paths=missing_paths[:5],
+        )
+
+    if not valid_documents:
+        embedder_label = embedder_type or "openai"
+        raise ValueError(
+            f"No embeddings were produced by the '{embedder_label}' embedder during {context}. "
+            "Ensure the API credentials are valid, networking is permitted, or "
+            "configure DEEPWIKI_EMBEDDER_TYPE to use a local embedder such as Ollama.",
+        )
+
+    return valid_documents
+
+
+def _get_encoding(embedder_type: str) -> Any:
     """Get or create cached encoding object."""
     if embedder_type not in _encoding_cache:
         if embedder_type in {"ollama", "google"}:
@@ -80,7 +185,13 @@ def count_tokens(
         return len(encoding.encode(text))
     except Exception as e:
         # Fallback to a simple approximation if tiktoken fails
-        logger.warning(f"Error counting tokens with tiktoken: {e}")
+        logger.warning(
+            "Error counting tokens with tiktoken, using approximation",
+            operation="count_tokens",
+            status="warning",
+            error=str(e),
+            embedder_type=embedder_type,
+        )
         # Rough approximation: 4 characters per token
         return len(text) // 4
 
@@ -126,7 +237,11 @@ def count_tokens_batch(
     except Exception as e:
         # Fallback to sequential processing if batch fails
         logger.warning(
-            f"Error in batch token counting: {e}, falling back to sequential",
+            "Error in batch token counting, falling back to sequential",
+            operation="count_tokens_batch",
+            status="warning",
+            error=str(e),
+            embedder_type=embedder_type,
         )
         return [count_tokens(text, embedder_type) for text in texts]
 
@@ -184,8 +299,12 @@ def _chunk_file_content(
         chunk_index += 1
 
     logger.info(
-        f"Chunked {relative_path} into {len(chunks)} chunks "
-        f"(max {max_chunk_tokens} tokens each)",
+        "File chunked successfully",
+        operation="chunk_file_content",
+        status="success",
+        file_path=relative_path,
+        chunk_count=len(chunks),
+        max_chunk_tokens=max_chunk_tokens,
     )
     return chunks
 
@@ -209,7 +328,13 @@ def download_repo(
     """
     try:
         # Check if Git is installed
-        logger.info(f"Preparing to clone repository to {local_path}")
+        logger.info(
+            "Preparing to clone repository",
+            operation="download_repo",
+            status="started",
+            repo_url=repo_url,
+            local_path=local_path,
+        )
         subprocess.run(
             ["git", "--version"],
             check=True,
@@ -220,7 +345,10 @@ def download_repo(
         if os.path.exists(local_path) and os.listdir(local_path):
             # Directory exists and is not empty
             logger.warning(
-                f"Repository already exists at {local_path}. Using existing repository.",
+                "Repository already exists, using existing",
+                operation="download_repo",
+                status="warning",
+                local_path=local_path,
             )
             return f"Using existing repository at {local_path}"
 
@@ -303,7 +431,13 @@ echo password=
                 env=env,
             )
 
-        logger.info("Repository cloned successfully")
+        logger.info(
+            "Repository cloned successfully",
+            operation="download_repo",
+            status="success",
+            repo_url=repo_url,
+            local_path=local_path,
+        )
         return result.stdout.decode("utf-8")
 
     except subprocess.CalledProcessError as e:
@@ -359,6 +493,11 @@ def read_all_documents(
     # Handle backward compatibility
     if embedder_type is None and is_ollama_embedder is not None:
         embedder_type = "ollama" if is_ollama_embedder else None
+
+    # Resolve embedder_type from config if still None
+    if embedder_type is None:
+        embedder_type = configs.get("embedder", {}).get("type", "openai")
+
     documents = []
     # File extensions to look for, prioritizing code files
     code_extensions = [
@@ -392,9 +531,13 @@ def read_all_documents(
         final_included_dirs = set(included_dirs) if included_dirs else set()
         final_included_files = set(included_files) if included_files else set()
 
-        logger.info("Using inclusion mode")
-        logger.info(f"Included directories: {list(final_included_dirs)}")
-        logger.info(f"Included files: {list(final_included_files)}")
+        logger.info(
+            "Using inclusion mode",
+            operation="read_all_documents",
+            status="info",
+            included_dirs=list(final_included_dirs),
+            included_files=list(final_included_files),
+        )
 
         # Convert to lists for processing
         included_dirs = list(final_included_dirs)
@@ -586,7 +729,13 @@ def read_all_documents(
                 )
                 return [doc]
         except Exception as e:
-            logger.exception(f"Error reading {file_path}: {e}")
+            logger.exception(
+                "Error reading file",
+                operation="read_single_file",
+                status="error",
+                file_path=file_path,
+                error=str(e),
+            )
             return None
 
     # Collect all files to process using shared repository scanner
@@ -611,12 +760,19 @@ def read_all_documents(
         ):
             all_files.append((file_path, ext, is_code))
 
-    logger.info(f"Found {len(all_files)} files to process, reading in parallel...")
+    logger.info(
+        "Found files to process",
+        operation="read_all_documents",
+        status="info",
+        file_count=len(all_files),
+        processing_mode="parallel",
+    )
 
     # Process files in parallel using ThreadPoolExecutor
     # Use a reasonable number of workers (I/O bound, so can use more than CPU count)
+    cpu_count = os.cpu_count()
     max_workers = min(
-        os.cpu_count() * 2 or 8,
+        (cpu_count * 2) if cpu_count is not None else 8,
         16,
     )  # Cap at 16 to avoid too many open files
 
@@ -629,7 +785,7 @@ def read_all_documents(
                 ext,
                 is_code,
                 path,
-                embedder_type,
+                embedder_type or "openai",  # Ensure non-None value
             ): (file_path, ext, is_code)
             for file_path, ext, is_code in all_files
         }
@@ -654,7 +810,8 @@ def read_all_documents(
 
 
 def prepare_data_pipeline(
-    embedder_type: str | None = None, is_ollama_embedder: bool | None = None,
+    embedder_type: str | None = None,
+    is_ollama_embedder: bool | None = None,
 ):
     """Creates and returns the data transformation pipeline.
 
@@ -729,6 +886,13 @@ def transform_documents_and_save_to_db(
     db.register_transformer(transformer=data_transformer, key="split_and_embed")
     db.load(documents)
     db.transform(key="split_and_embed")
+    transformed_docs = db.get_transformed_data(key="split_and_embed")
+    validated_docs = _require_valid_embeddings(
+        transformed_docs,
+        embedder_type,
+        context="database build",
+    )
+    db.transformed_items["split_and_embed"] = validated_docs
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     db.save_state(filepath=db_path)
     return db
@@ -841,9 +1005,9 @@ class DatabaseManager:
     """Manages the creation, loading, transformation, and persistence of LocalDB instances."""
 
     def __init__(self) -> None:
-        self.db = None
-        self.repo_url_or_path = None
-        self.repo_paths = None
+        self.db: LocalDB | None = None
+        self.repo_url_or_path: str | None = None
+        self.repo_paths: Dict[str, str] | None = None
 
     def prepare_database(
         self,
@@ -895,7 +1059,11 @@ class DatabaseManager:
         self.repo_url_or_path = None
         self.repo_paths = None
 
-    def _extract_repo_name_from_url(self, repo_url_or_path: str, repo_type: str) -> str:
+    def _extract_repo_name_from_url(
+        self,
+        repo_url_or_path: str,
+        repo_type: str | None,
+    ) -> str:
         # Extract owner and repo name to create unique identifier
         url_parts = repo_url_or_path.rstrip("/").split("/")
 
@@ -1003,168 +1171,198 @@ class DatabaseManager:
             embedder_type = "ollama" if is_ollama_embedder else None
 
         # Check the database
-        if self.repo_paths and os.path.exists(self.repo_paths["save_db_file"]):
+        if self.repo_paths is not None and os.path.exists(
+            self.repo_paths["save_db_file"],
+        ):
             logger.info("Loading existing database...")
             try:
                 self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
-                existing_documents = self.db.get_transformed_data(key="split_and_embed")
-                if existing_documents:
-                    logger.info(
-                        f"Loaded {len(existing_documents)} documents from existing database",
+                if self.db is not None:
+                    existing_documents = self.db.get_transformed_data(
+                        key="split_and_embed",
                     )
-
-                    # Try incremental update: check file modification times
-                    try:
-                        # Build a map of existing documents by file path
-                        existing_by_path = {}
-                        for doc in existing_documents:
-                            file_path = doc.meta_data.get("file_path")
-                            if file_path:
-                                existing_by_path[file_path] = doc
-
-                        # Read all current documents
-                        current_documents = read_all_documents(
-                            self.repo_paths["save_repo_dir"],
+                    missing_cached: list[str] = []
+                    if existing_documents:
+                        existing_documents, missing_cached = (
+                            _split_documents_by_embedding(
+                                existing_documents,
+                            )
+                        )
+                    if missing_cached:
+                        logger.warning(
+                            "Cached database contains documents without embeddings; they will be reprocessed",
+                            operation="prepare_db_index",
+                            status="warning",
                             embedder_type=embedder_type,
-                            excluded_dirs=excluded_dirs,
-                            excluded_files=excluded_files,
-                            included_dirs=included_dirs,
-                            included_files=included_files,
+                            missing_count=len(missing_cached),
+                            sample_paths=missing_cached[:5],
                         )
 
-                        # Check which files have changed
-                        changed_files = []
-                        new_files = []
-                        unchanged_files = []
-
-                        for doc in current_documents:
-                            file_path = doc.meta_data.get("file_path")
-                            if not file_path:
-                                new_files.append(doc)
-                                continue
-
-                            full_path = os.path.join(
-                                self.repo_paths["save_repo_dir"],
-                                file_path,
-                            )
-
-                            if file_path in existing_by_path:
-                                # Check if file has been modified
-                                existing_doc = existing_by_path[file_path]
-                                existing_mtime = existing_doc.meta_data.get(
-                                    "file_mtime",
-                                )
-
-                                try:
-                                    current_mtime = os.path.getmtime(full_path)
-                                    if (
-                                        existing_mtime is None
-                                        or abs(current_mtime - existing_mtime) > 1.0
-                                    ):
-                                        # File has changed (1 second tolerance for filesystem precision)
-                                        changed_files.append(doc)
-                                        doc.meta_data["file_mtime"] = current_mtime
-                                    else:
-                                        # File unchanged, reuse existing document
-                                        unchanged_files.append(existing_doc)
-                                        doc.meta_data["file_mtime"] = current_mtime
-                                except OSError:
-                                    # File might have been deleted or moved, treat as changed
-                                    changed_files.append(doc)
-                            else:
-                                # New file
-                                try:
-                                    full_path = os.path.join(
-                                        self.repo_paths["save_repo_dir"],
-                                        file_path,
-                                    )
-                                    doc.meta_data["file_mtime"] = os.path.getmtime(
-                                        full_path,
-                                    )
-                                except OSError:
-                                    pass
-                                new_files.append(doc)
-
-                        # If there are changes, do incremental update
-                        if changed_files or new_files:
-                            logger.info(
-                                f"Incremental update: {len(changed_files)} changed, "
-                                f"{len(new_files)} new, {len(unchanged_files)} unchanged files",
-                            )
-
-                            # Only process changed and new files
-                            files_to_process = changed_files + new_files
-
-                            if files_to_process:
-                                # Transform only changed/new documents
-                                data_transformer = prepare_data_pipeline(
-                                    embedder_type,
-                                    is_ollama_embedder,
-                                )
-                                temp_db = LocalDB()
-                                temp_db.register_transformer(
-                                    transformer=data_transformer,
-                                    key="split_and_embed",
-                                )
-                                temp_db.load(files_to_process)
-                                temp_db.transform(key="split_and_embed")
-
-                                # Get transformed documents
-                                transformed_new = temp_db.get_transformed_data(
-                                    key="split_and_embed",
-                                )
-
-                                # Combine unchanged and new/updated documents
-                                # Note: Both unchanged_files and transformed_new are already transformed,
-                                # so we should not call transform() again to avoid double-embedding
-                                all_documents = unchanged_files + transformed_new
-
-                                # Rebuild database with all documents
-                                # Since all documents are already transformed, we load them directly
-                                # without calling transform() again
-                                self.db = LocalDB()
-                                self.db.register_transformer(
-                                    transformer=data_transformer,
-                                    key="split_and_embed",
-                                )
-                                # Load already-transformed documents without re-transforming
-                                # We use load() to add them to the database, but skip transform()
-                                # since they're already transformed
-                                self.db.load(all_documents)
-                                # Skip transform() - documents are already transformed
-                                # This prevents double-embedding of unchanged_files
-                                self.db.save_state(
-                                    filepath=self.repo_paths["save_db_file"],
-                                )
-
-                                logger.info(
-                                    f"Incremental update complete: {len(all_documents)} total documents "
-                                    f"({len(unchanged_files)} reused, {len(transformed_new)} processed)",
-                                )
-
-                                return self.db.get_transformed_data(
-                                    key="split_and_embed",
-                                )
-                            # No changes, return existing documents
-                            return existing_documents
+                    if existing_documents:
                         logger.info(
-                            "No file changes detected, using cached database",
+                            f"Loaded {len(existing_documents)} documents from existing database",
                         )
+
+                        try:
+                            existing_by_path = {}
+                            for doc in existing_documents:
+                                file_path = doc.meta_data.get("file_path")
+                                if file_path:
+                                    existing_by_path[file_path] = doc
+
+                            current_documents = read_all_documents(
+                                self.repo_paths["save_repo_dir"],
+                                embedder_type=embedder_type,
+                                excluded_dirs=excluded_dirs,
+                                excluded_files=excluded_files,
+                                included_dirs=included_dirs,
+                                included_files=included_files,
+                            )
+
+                            changed_files = []
+                            new_files = []
+                            unchanged_files = []
+
+                            for doc in current_documents:
+                                file_path = doc.meta_data.get("file_path")
+                                if not file_path:
+                                    new_files.append(doc)
+                                    continue
+
+                                full_path = os.path.join(
+                                    self.repo_paths["save_repo_dir"],
+                                    file_path,
+                                )
+
+                                if file_path in existing_by_path:
+                                    existing_doc = existing_by_path[file_path]
+                                    existing_mtime = existing_doc.meta_data.get(
+                                        "file_mtime",
+                                    )
+
+                                    try:
+                                        current_mtime = os.path.getmtime(full_path)
+                                        if (
+                                            existing_mtime is None
+                                            or abs(current_mtime - existing_mtime) > 1.0
+                                        ):
+                                            changed_files.append(doc)
+                                            doc.meta_data["file_mtime"] = current_mtime
+                                        else:
+                                            unchanged_files.append(existing_doc)
+                                            doc.meta_data["file_mtime"] = current_mtime
+                                    except OSError:
+                                        changed_files.append(doc)
+                                else:
+                                    try:
+                                        full_path = os.path.join(
+                                            self.repo_paths["save_repo_dir"],
+                                            file_path,
+                                        )
+                                        doc.meta_data["file_mtime"] = os.path.getmtime(
+                                            full_path,
+                                        )
+                                    except OSError:
+                                        pass
+                                    new_files.append(doc)
+
+                            if changed_files or new_files:
+                                logger.info(
+                                    f"Incremental update: {len(changed_files)} changed, {len(new_files)} new, "
+                                    f"{len(unchanged_files)} unchanged files",
+                                )
+
+                                files_to_process = changed_files + new_files
+                                if files_to_process:
+                                    data_transformer = prepare_data_pipeline(
+                                        embedder_type=embedder_type,
+                                        is_ollama_embedder=is_ollama_embedder,
+                                    )
+                                    temp_db = LocalDB()
+                                    temp_db.register_transformer(
+                                        transformer=data_transformer,
+                                        key="split_and_embed",
+                                    )
+                                    temp_db.load(files_to_process)
+                                    temp_db.transform(key="split_and_embed")
+
+                                    transformed_new = temp_db.get_transformed_data(
+                                        key="split_and_embed",
+                                    )
+                                    transformed_new = _require_valid_embeddings(
+                                        transformed_new,
+                                        embedder_type,
+                                        context="incremental update",
+                                    )
+
+                                    all_documents = unchanged_files + transformed_new
+                                    all_documents = _require_valid_embeddings(
+                                        all_documents,
+                                        embedder_type,
+                                        context="incremental update",
+                                    )
+
+                                    self.db = LocalDB()
+                                    self.db.register_transformer(
+                                        transformer=data_transformer,
+                                        key="split_and_embed",
+                                    )
+                                    self.db.load(all_documents)
+                                    self.db.save_state(
+                                        filepath=self.repo_paths["save_db_file"],
+                                    )
+
+                                    logger.info(
+                                        f"Incremental update complete: {len(all_documents)} total documents "
+                                        f"({len(unchanged_files)} reused, {len(transformed_new)} processed)",
+                                    )
+
+                                    return self.db.get_transformed_data(
+                                        key="split_and_embed",
+                                    )
+
+                                return existing_documents
+
+                            logger.info(
+                                "No file changes detected, using cached database",
+                            )
+                            return existing_documents
+
+                        except Exception as e:
+                            logger.warning(
+                                f"Incremental update failed: {e}, falling back to full rebuild",
+                            )
+
                         return existing_documents
 
-                    except Exception as e:
-                        logger.warning(
-                            f"Incremental update failed: {e}, falling back to full rebuild",
-                        )
-                        # Fall through to full rebuild
-
-                    # If incremental update didn't work, return existing documents
-                    return existing_documents
+                    logger.warning(
+                        "Cached database has no valid embeddings, forcing full rebuild",
+                        operation="prepare_db_index",
+                        status="warning",
+                        embedder_type=embedder_type,
+                    )
+            except ModuleNotFoundError as exc:
+                db_path = self.repo_paths["save_db_file"]
+                logger.exception(
+                    "Cached database references missing module, forcing rebuild",
+                    operation="prepare_db_index",
+                    status="error",
+                    db_path=db_path,
+                    missing_module=exc.name,
+                )
+                backup_path = f"{db_path}.invalid"
+                with contextlib.suppress(OSError):
+                    if os.path.exists(backup_path):
+                        os.remove(backup_path)
+                    os.replace(db_path, backup_path)
             except Exception as e:
                 logger.exception(f"Error loading existing database: {e}")
                 # Continue to create a new database
 
         # prepare the database (full rebuild)
+        if self.repo_paths is None:
+            raise ValueError("repo_paths must be set before calling prepare_db_index")
+
         logger.info("Creating new database...")
         documents = read_all_documents(
             self.repo_paths["save_repo_dir"],
@@ -1194,6 +1392,8 @@ class DatabaseManager:
             embedder_type=embedder_type,
         )
         logger.info(f"Total documents: {len(documents)}")
+        if self.db is None:
+            raise ValueError("Database was not created successfully")
         transformed_docs = self.db.get_transformed_data(key="split_and_embed")
         logger.info(f"Total transformed documents: {len(transformed_docs)}")
         return transformed_docs

@@ -1,13 +1,16 @@
-import logging
 import weakref
 from dataclasses import dataclass
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import adalflow as adal
+import structlog
 
-from deepwiki_cli.prompts import RAG_SYSTEM_PROMPT as system_prompt
-from deepwiki_cli.prompts import RAG_TEMPLATE
-from deepwiki_cli.tools.embedder import get_embedder
+from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
+from deepwiki_cli.infrastructure.prompts.builders import (
+    RAG_SYSTEM_PROMPT,
+    RAG_TEMPLATE,
+)
 
 
 # Create our own implementation of the conversation classes
@@ -32,9 +35,9 @@ class CustomConversation:
     """Custom implementation of Conversation to fix the list assignment index out of range error."""
 
     def __init__(self) -> None:
-        self.dialog_turns = []
+        self.dialog_turns: list[Any] = []
 
-    def append_dialog_turn(self, dialog_turn) -> None:
+    def append_dialog_turn(self, dialog_turn: Any) -> None:
         """Safely append a dialog turn to the conversation."""
         if not hasattr(self, "dialog_turns"):
             self.dialog_turns = []
@@ -44,11 +47,10 @@ class CustomConversation:
 # Import other adalflow components
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 
-from deepwiki_cli.config import configs
+from deepwiki_cli.infrastructure.config import configs
 from deepwiki_cli.services.data_pipeline import DatabaseManager, count_tokens
 
-# Configure logging
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Maximum token limit for embedding models
 MAX_INPUT_TOKENS = 7500  # Safe threshold below 8192 token limit
@@ -164,7 +166,8 @@ from dataclasses import dataclass, field
 @dataclass
 class RAGAnswer(adal.DataClass):
     rationale: str = field(
-        default="", metadata={"desc": "Chain of thoughts for the answer."},
+        default="",
+        metadata={"desc": "Chain of thoughts for the answer."},
     )
     answer: str = field(
         default="",
@@ -173,7 +176,7 @@ class RAGAnswer(adal.DataClass):
         },
     )
 
-    __output_fields__ = ["rationale", "answer"]
+    __output_fields__: ClassVar[list[str]] = ["rationale", "answer"]
 
 
 class RAG(adal.Component):
@@ -181,7 +184,12 @@ class RAG(adal.Component):
     If you want to load a new repos, call prepare_retriever(repo_url_or_path) first.
     """
 
-    def __init__(self, provider="google", model=None, use_s3: bool = False) -> None:
+    def __init__(
+        self,
+        provider: str = "google",
+        model: str | None = None,
+        use_s3: bool = False,
+    ) -> None:
         """Initialize the RAG component.
 
         Args:
@@ -222,16 +230,17 @@ class RAG(adal.Component):
         self_weakref = weakref.ref(self)
 
         # Patch: ensure query embedding is always single string for Ollama
-        def single_string_embedder(query):
+        def single_string_embedder(query: str | list[str]) -> Any:
             # Accepts either a string or a list, always returns embedding for a single string
             if isinstance(query, list):
                 if len(query) != 1:
                     raise ValueError("Ollama embedder only supports a single string")
                 query = query[0]
             instance = self_weakref()
-            assert instance is not None, (
-                "RAG instance is no longer available, but the query embedder was called."
-            )
+            if instance is None:
+                raise RuntimeError(
+                    "RAG instance is no longer available, but the query embedder was called.",
+                )
             return instance.embedder(input=query)
 
         # Use single string embedder for Ollama, regular embedder for others
@@ -272,7 +281,7 @@ IMPORTANT FORMATTING RULES:
             prompt_kwargs={
                 "output_format_str": format_instructions,
                 "conversation_history": self.memory(),
-                "system_prompt": system_prompt,
+                "system_prompt": RAG_SYSTEM_PROMPT,
                 "contexts": None,
             },
             model_client=generator_config["model_client"](),
@@ -283,23 +292,34 @@ IMPORTANT FORMATTING RULES:
     def initialize_db_manager(self) -> None:
         """Initialize the database manager with local storage."""
         self.db_manager = DatabaseManager()
-        self.transformed_docs = []
+        self.transformed_docs: list[Any] = []
 
     def _validate_and_filter_embeddings(self, documents: list) -> list:
         """Validate embeddings and filter out documents with invalid or mismatched embedding sizes.
 
+        Ensures all embeddings have consistent dimensions by finding the most common
+        embedding size and filtering out documents with different sizes.
+
         Args:
-            documents: List of documents with embeddings
+            documents: List of documents with embeddings to validate.
 
         Returns:
-            List of documents with valid embeddings of consistent size
+            List of documents with valid embeddings of consistent size. Returns empty
+            list if no valid embeddings are found.
+
+        Example:
+            >>> rag = RAG()
+            >>> docs = [doc1, doc2, doc3]  # Documents with embeddings
+            >>> valid_docs = rag._validate_and_filter_embeddings(docs)
+            >>> len(valid_docs) <= len(docs)
+            True
         """
         if not documents:
             logger.warning("No documents provided for embedding validation")
             return []
 
-        valid_documents = []
-        embedding_sizes = {}
+        valid_documents: list[Any] = []
+        embedding_sizes: dict[int, int] = {}
 
         # First pass: collect all embedding sizes and count occurrences
         for i, doc in enumerate(documents):
@@ -390,7 +410,8 @@ IMPORTANT FORMATTING RULES:
                 else:
                     # Log which document is being filtered out
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", f"document_{i}",
+                        "file_path",
+                        f"document_{i}",
                     )
                     logger.warning(
                         f"Filtering out document '{file_path}' due to embedding size mismatch: {embedding_size} != {target_size}",
@@ -398,7 +419,8 @@ IMPORTANT FORMATTING RULES:
 
             except Exception as e:
                 file_path = getattr(doc, "meta_data", {}).get(
-                    "file_path", f"document_{i}",
+                    "file_path",
+                    f"document_{i}",
                 )
                 logger.warning(
                     f"Error validating embedding for document '{file_path}': {e!s}, skipping",
@@ -423,14 +445,22 @@ IMPORTANT FORMATTING RULES:
         """Truncate a query string to fit within the maximum token limit.
 
         Uses binary search to efficiently find the truncation point that results
-        in exactly max_tokens or fewer tokens.
+        in exactly max_tokens or fewer tokens. Logs a warning if truncation occurs.
 
         Args:
-            query: The query string to truncate
-            max_tokens: Maximum number of tokens allowed
+            query: The query string to truncate.
+            max_tokens: Maximum number of tokens allowed.
 
         Returns:
-            Truncated query string that fits within the token limit
+            Truncated query string that fits within the token limit. Returns original
+            query if it's already within the limit.
+
+        Example:
+            >>> rag = RAG()
+            >>> long_query = "a" * 10000
+            >>> truncated = rag._truncate_query_by_tokens(long_query, 100)
+            >>> len(truncated) <= len(long_query)
+            True
         """
         if not query:
             return query
@@ -551,7 +581,8 @@ IMPORTANT FORMATTING RULES:
             for doc in self.transformed_docs:
                 if not hasattr(doc, "vector") or doc.vector is None:
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", "unknown",
+                        "file_path",
+                        "unknown",
                     )
                     logger.warning(
                         f"Document '{file_path}' has no vector attribute, skipping",
@@ -570,7 +601,8 @@ IMPORTANT FORMATTING RULES:
                         vector_list = list(doc.vector)
                     else:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown",
+                            "file_path",
+                            "unknown",
                         )
                         logger.warning(
                             f"Document '{file_path}' has invalid vector type {type(doc.vector)}, skipping",
@@ -580,7 +612,8 @@ IMPORTANT FORMATTING RULES:
                     # Check for empty vectors
                     if len(vector_list) == 0:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown",
+                            "file_path",
+                            "unknown",
                         )
                         logger.warning(
                             f"Document '{file_path}' has empty vector, skipping",
@@ -594,7 +627,8 @@ IMPORTANT FORMATTING RULES:
                     # Verify dimension consistency
                     if len(vector_list) != embedding_dim:
                         file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path", "unknown",
+                            "file_path",
+                            "unknown",
                         )
                         logger.warning(
                             f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping",
@@ -607,7 +641,8 @@ IMPORTANT FORMATTING RULES:
 
                 except Exception as e:
                     file_path = getattr(doc, "meta_data", {}).get(
-                        "file_path", "unknown",
+                        "file_path",
+                        "unknown",
                     )
                     logger.warning(
                         f"Error processing vector for {file_path}: {e}, skipping document",
@@ -622,9 +657,13 @@ IMPORTANT FORMATTING RULES:
             self.transformed_docs = valid_docs
 
             if not self.transformed_docs:
-                raise ValueError(
-                    "No valid documents with vectors found. Cannot create retriever.",
-                )
+
+                def _raise_value_error() -> None:
+                    raise ValueError(
+                        "No valid documents with vectors found. Cannot create retriever.",
+                    )
+
+                _raise_value_error()
 
             logger.info(
                 f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})",
@@ -694,11 +733,24 @@ IMPORTANT FORMATTING RULES:
     def call(self, query: str) -> list:
         """Process a query using RAG.
 
+        Retrieves relevant documents and processes the query using the configured
+        generator model. Validates and truncates query if it exceeds token limits.
+
         Args:
-            query: The user's query
+            query: The user's query string.
 
         Returns:
-            Tuple of (RAGAnswer, retrieved_documents)
+            List containing retrieved documents. Returns empty list on error.
+
+        Raises:
+            No exceptions are raised; errors are logged and empty list is returned.
+
+        Example:
+            >>> rag = RAG(provider="google", model="gemini-pro")
+            >>> rag.prepare_retriever("https://github.com/user/repo")
+            >>> results = rag.call("What is the main purpose of this project?")
+            >>> len(results) >= 0
+            True
         """
         try:
             # Validate and truncate query if it exceeds token limit
@@ -707,7 +759,12 @@ IMPORTANT FORMATTING RULES:
 
             if query != original_query:
                 logger.info(
-                    f"Query was truncated due to token limit ({MAX_INPUT_TOKENS} tokens)",
+                    "Query truncated due to token limit",
+                    operation="rag_call",
+                    status="warning",
+                    max_tokens=MAX_INPUT_TOKENS,
+                    original_length=len(original_query),
+                    truncated_length=len(query),
                 )
 
             retrieved_documents = self.retriever(query)
@@ -721,11 +778,11 @@ IMPORTANT FORMATTING RULES:
             return retrieved_documents
 
         except Exception as e:
-            logger.exception(f"Error in RAG call: {e!s}")
-
-            # Create error response
-            # Preserve structured error logging while returning empty results for callers
-            logger.debug(
-                "Returning empty document list due to RAG error for query: %s", query,
+            logger.exception(
+                "Error in RAG call",
+                operation="rag_call",
+                status="error",
+                query=query,
+                error=str(e),
             )
             return []

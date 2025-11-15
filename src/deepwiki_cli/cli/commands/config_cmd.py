@@ -35,7 +35,9 @@ def show_config() -> None:
     click.echo(
         f"Exists: {'✓' if workspace.exists() else '✗ (will be created on export)'}",
     )
-    click.echo(f"Default layout: {config_data.get('export', {}).get('layout', 'single')}")
+    click.echo(
+        f"Default layout: {config_data.get('export', {}).get('layout', 'single')}"
+    )
     click.echo(
         "Auto-watch exports: "
         f"{'enabled' if config_data.get('export', {}).get('watch') else 'disabled'}",

@@ -16,7 +16,8 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,9 @@ def test_google_embedder_client() -> bool | None:
     try:
         from adalflow.core.types import ModelType
 
-        from deepwiki_cli.clients.google_embedder_client import GoogleEmbedderClient
+        from deepwiki_cli.infrastructure.clients.ai.google_embedder_client import (
+            GoogleEmbedderClient,
+        )
 
         # Initialize the client
         client = GoogleEmbedderClient()
@@ -98,7 +101,9 @@ def test_adalflow_embedder() -> bool | None:
     try:
         import adalflow as adal
 
-        from deepwiki_cli.clients.google_embedder_client import GoogleEmbedderClient
+        from deepwiki_cli.infrastructure.clients.ai.google_embedder_client import (
+            GoogleEmbedderClient,
+        )
 
         # Create embedder
         client = GoogleEmbedderClient()
@@ -137,15 +142,17 @@ def test_document_processing():
         from adalflow.components.data_process import ToEmbeddings
         from adalflow.core.types import Document
 
-        from deepwiki_cli.tools.embedder import get_embedder
+        from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
 
         # Create some test documents
         docs = [
             Document(
-                text="This is a test document.", meta_data={"file_path": "test1.txt"},
+                text="This is a test document.",
+                meta_data={"file_path": "test1.txt"},
             ),
             Document(
-                text="Another test document here.", meta_data={"file_path": "test2.txt"},
+                text="Another test document here.",
+                meta_data={"file_path": "test2.txt"},
             ),
         ]
 

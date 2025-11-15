@@ -1,18 +1,31 @@
 """Shell completion helpers for DeepWiki CLI."""
 
 import logging
-import os
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from click.shell_completion import CompletionItem
 
+if TYPE_CHECKING:
+    from click import Context, Parameter
+else:
+    from typing import Any
+
+    Context = Any  # type: ignore[assignment,misc]
+    Parameter = Any  # type: ignore[assignment,misc]
+
 from deepwiki_cli.cli.config import get_provider_models
 from deepwiki_cli.cli.utils import get_cache_path
-from deepwiki_cli.utils.wiki_cache import parse_cache_filename
+from deepwiki_cli.infrastructure.storage.cache import parse_cache_filename
 
 logger = logging.getLogger(__name__)
 
 
-def complete_providers(ctx, param, incomplete: str) -> list[CompletionItem]:
+def complete_providers(
+    ctx: "Context",
+    param: "Parameter",
+    incomplete: str,
+) -> list[CompletionItem]:
     """Complete provider names from configuration."""
     try:
         provider_models = get_provider_models()
@@ -26,7 +39,11 @@ def complete_providers(ctx, param, incomplete: str) -> list[CompletionItem]:
         return []
 
 
-def complete_models(ctx, param, incomplete: str) -> list[CompletionItem]:
+def complete_models(
+    ctx: "Context",
+    param: "Parameter",
+    incomplete: str,
+) -> list[CompletionItem]:
     """Complete model names, optionally filtered by provider."""
     try:
         provider_models = get_provider_models()
@@ -53,7 +70,11 @@ def complete_models(ctx, param, incomplete: str) -> list[CompletionItem]:
         return []
 
 
-def complete_wiki_names(ctx, param, incomplete: str) -> list[CompletionItem]:
+def complete_wiki_names(
+    ctx: "Context",
+    param: "Parameter",
+    incomplete: str,
+) -> list[CompletionItem]:
     """Complete wiki names from cache files."""
     try:
         cache_dir = get_cache_path()
@@ -83,7 +104,11 @@ def complete_wiki_names(ctx, param, incomplete: str) -> list[CompletionItem]:
         return []
 
 
-def complete_config_keys(ctx, param, incomplete: str) -> list[CompletionItem]:
+def complete_config_keys(
+    ctx: "Context",
+    param: "Parameter",
+    incomplete: str,
+) -> list[CompletionItem]:
     """Complete configuration keys."""
     common_keys = [
         "default_provider",
@@ -101,41 +126,43 @@ def complete_config_keys(ctx, param, incomplete: str) -> list[CompletionItem]:
     return [CompletionItem(key) for key in common_keys if key.startswith(incomplete)]
 
 
-def complete_file_paths(ctx, param, incomplete: str) -> list[CompletionItem]:
+def complete_file_paths(
+    ctx: "Context",
+    param: "Parameter",
+    incomplete: str,
+) -> list[CompletionItem]:
     """Complete file paths."""
     if not incomplete:
         incomplete = "."
 
     # Expand user home directory
-    incomplete = os.path.expanduser(incomplete)
+    incomplete_path = Path(incomplete).expanduser()
 
     # Get directory and filename parts
-    dir_path = os.path.dirname(incomplete) or "."
-    filename_part = os.path.basename(incomplete)
+    dir_path = (
+        incomplete_path.parent if incomplete_path.parent != Path() else Path.cwd()
+    )
+    filename_part = incomplete_path.name
 
     try:
-        if not os.path.isabs(dir_path):
+        if not dir_path.is_absolute():
             # Relative path - use current directory
-            dir_path = os.path.abspath(dir_path)
+            dir_path = dir_path.resolve()
 
-        if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+        if not dir_path.exists() or not dir_path.is_dir():
             return []
 
         completions = []
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-
+        for item in dir_path.iterdir():
             # Filter by incomplete filename
-            if not item.startswith(filename_part):
+            if not item.name.startswith(filename_part):
                 continue
 
             # Add trailing slash for directories
-            if os.path.isdir(item_path):
-                completion_value = (
-                    os.path.join(os.path.dirname(incomplete), item) + os.sep
-                )
+            if item.is_dir():
+                completion_value = str(incomplete_path.parent / item.name) + "/"
             else:
-                completion_value = os.path.join(os.path.dirname(incomplete), item)
+                completion_value = str(incomplete_path.parent / item.name)
 
             completions.append(CompletionItem(completion_value))
 

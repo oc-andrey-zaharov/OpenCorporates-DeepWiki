@@ -24,6 +24,7 @@ deepwiki = "deepwiki_cli.cli.main:main"
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
 pydantic = ">=2.12.0"
+pydantic-settings = ">=2.0.0"
 google-generativeai = ">=0.3.0"
 tiktoken = ">=0.12.0"
 adalflow = ">=1.1.0"
@@ -39,11 +40,17 @@ enlighten = ">=1.14.0"
 simple-term-menu = ">=1.6.0"
 structlog = ">=24.1"
 watchfiles = ">=0.21.0"
+returns = "^0.26.0"
+toolz = "^1.1.0"
+hypothesis = "^6.148.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"
+pytest-xdist = ">=3.0.0"
+pytest-cov = "^7.0.0"
 deepeval = "^3.7.0"
 ruff = ">=0.14.0"
+mypy = "^1.18.0"
 
 [tool.ruff]
 target-version = "py313"
@@ -152,6 +159,7 @@ ignore = [
   "N815",  # MixedCase variable in function scope (style preference)
   "N806",  # Variable in function should be lowercase (style preference)
   "A001",  # Variable is shadowing a Python builtin (sometimes necessary)
+  "COM812",  # Trailing comma missing (conflicts with formatter)
 ]
 
 
@@ -168,6 +176,25 @@ skip-magic-trailing-comma = false # Respect magic trailing commas.
 line-ending = "auto" # Auto-detect the appropriate line ending.
 docstring-code-format = false # auto-format code examples in docstrings
 docstring-code-line-length = "dynamic" # use dynamic line length for code examples in docstrings.
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+exclude = [
+    "(\\.git|build|dist|tmp|docs|bin/smoke_test_loader\\.py)",
+]
 
 [[tool.poetry.source]]
 name = "ocpy"

@@ -8,7 +8,7 @@ import click
 
 from deepwiki_cli.cli.config import load_config
 from deepwiki_cli.cli.utils import select_from_list, watch_manifest_cli
-from deepwiki_cli.utils.wiki_workspace import (
+from deepwiki_cli.infrastructure.storage.workspace import (
     ExportManifest,
     list_manifests,
     sync_manifest,

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from deepwiki_cli.prompts import build_wiki_page_prompt, build_wiki_structure_prompt
+from deepwiki_cli.infrastructure.prompts.builders import (
+    build_wiki_page_prompt,
+    build_wiki_structure_prompt,
+)
 
 
 def test_build_wiki_page_prompt_includes_page_title_and_files() -> None:

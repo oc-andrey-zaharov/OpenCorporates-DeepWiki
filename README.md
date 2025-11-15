@@ -428,7 +428,3 @@ The optional FastAPI server exposes light-weight utilities that complement the C
 - `DELETE /api/wiki_cache` — Remove a cache entry.
 - `GET /api/processed_projects` — List cached projects for dashboards.
 - `POST /export/wiki` — Convert cached pages to Markdown or JSON for download.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.

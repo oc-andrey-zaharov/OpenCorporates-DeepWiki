@@ -10,6 +10,15 @@ from datetime import UTC, datetime
 
 import click
 
+from deepwiki_cli.application.repository.change_detection import (
+    build_snapshot_from_local,
+    build_snapshot_from_tree,
+    detect_repo_changes,
+    find_affected_pages,
+    load_existing_cache,
+)
+from deepwiki_cli.application.repository.scan import collect_repository_files
+from deepwiki_cli.application.wiki.context import WikiGenerationContext
 from deepwiki_cli.cli.config import get_provider_models, load_config
 from deepwiki_cli.cli.progress import ProgressManager
 from deepwiki_cli.cli.utils import (
@@ -21,26 +30,22 @@ from deepwiki_cli.cli.utils import (
     select_from_list,
     select_multiple_from_list,
 )
-from deepwiki_cli.config import GITHUB_TOKEN
-from deepwiki_cli.models import (
+from deepwiki_cli.domain.models import (
     RepoInfo,
     RepoSnapshot,
     WikiCacheData,
     WikiPage,
     WikiStructureModel,
 )
-from deepwiki_cli.prompts import build_wiki_page_prompt, build_wiki_structure_prompt
-from deepwiki_cli.services.wiki_context import WikiGenerationContext
-from deepwiki_cli.utils.change_detection import (
-    build_snapshot_from_local,
-    build_snapshot_from_tree,
-    detect_repo_changes,
-    find_affected_pages,
-    load_existing_cache,
+from deepwiki_cli.infrastructure.clients.github.client import (
+    get_github_repo_structure_standalone as get_github_repo_structure,
 )
-from deepwiki_cli.utils.github import get_github_repo_structure
-from deepwiki_cli.utils.repo_scanner import collect_repository_files
-from deepwiki_cli.utils.wiki_cache import (
+from deepwiki_cli.infrastructure.config.settings import GITHUB_TOKEN
+from deepwiki_cli.infrastructure.prompts.builders import (
+    build_wiki_page_prompt,
+    build_wiki_structure_prompt,
+)
+from deepwiki_cli.infrastructure.storage.cache import (
     DEFAULT_LANGUAGE,
     CacheFileInfo,
     get_cache_filename,
@@ -66,10 +71,6 @@ def prompt_repository() -> tuple:
     click.echo("\n" + "=" * 60)
     click.echo("Repository Selection")
     click.echo("=" * 60)
-    click.echo("\nYou can provide:")
-    click.echo("  • GitHub URL: https://github.com/owner/repo")
-    click.echo("  • GitHub shorthand: owner/repo")
-    click.echo("  • Local directory path: /path/to/repo")
 
     while True:
         repo_input = prompt_text_input(
@@ -314,13 +315,13 @@ def _display_change_summary(
 
 
 def _prompt_generation_action(
-    has_existing: bool,
+    allow_new: bool,
     can_update_pages: bool,
 ) -> str:
     actions = []
     action_map = {}
 
-    if has_existing:
+    if allow_new:
         label = "Overwrite existing wiki (regenerate all pages)"
         actions.append(label)
         action_map[label] = "overwrite"
@@ -568,9 +569,11 @@ def generate_wiki_structure(
                 messages=[{"role": "user", "content": prompt}],
             )
         else:
-            from deepwiki_cli.utils.completion import generate_wiki_content_streaming
+            from deepwiki_cli.application.wiki.generate_content import (
+                generate_wiki_content,
+            )
 
-            stream = generate_wiki_content_streaming(
+            stream = generate_wiki_content(
                 repo_url=repo_url,
                 messages=[{"role": "user", "content": prompt}],
                 provider=provider,
@@ -668,7 +671,7 @@ def generate_wiki_structure(
                     f.write(xml_content)
                 logger.error(f"Full response saved to: {debug_file}")
             except Exception as e:
-                logger.error(f"Failed to save debug file: {e}")
+                logger.exception(f"Failed to save debug file: {e}")
 
             return None
 
@@ -803,8 +806,11 @@ def prepare_repository_state(
         )
         file_tree = data.get("file_tree", "")
         readme = data.get("readme", "")
+        tree_files = data.get("tree_files")
+        if tree_files is None:
+            tree_files = []
         snapshot = build_snapshot_from_tree(
-            data.get("tree_files"),
+            tree_files,
             reference=f"{owner}/{repo_name}",
         )
         return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
@@ -885,7 +891,11 @@ def generate(force: bool) -> None:
         if not repo_state.file_tree.strip():
             click.echo("✗ No files found in repository", err=True)
             progress.close()
-            raise click.Abort
+
+            def _abort() -> None:
+                raise click.Abort
+
+            _abort()
 
         change_summary = None
         affected_pages: list[str] = []
@@ -919,7 +929,10 @@ def generate(force: bool) -> None:
                     affected_pages,
                 )
                 can_update = bool(update_candidate_page_ids)
-                action = _prompt_generation_action(True, can_update)
+                action = _prompt_generation_action(
+                    allow_new=True,
+                    can_update=can_update,
+                )
                 if action == "cancel":
                     progress.close()
                     click.echo("Operation cancelled.")
@@ -995,6 +1008,8 @@ def generate(force: bool) -> None:
 
         if action == "update" and existing_cache:
             wiki_structure = existing_cache.wiki_structure
+            if wiki_structure is None:
+                raise ValueError("Existing cache has no wiki_structure")
             generated_pages = dict(existing_cache.generated_pages)
             pages_to_generate = [
                 page for page in wiki_structure.pages if page.id in selected_page_ids
@@ -1030,11 +1045,17 @@ def generate(force: bool) -> None:
                 generation_context,
             )
 
-            if not wiki_structure:
+            if wiki_structure is None:
                 click.echo("✗ Failed to generate wiki structure", err=True)
                 progress.close()
-                raise click.Abort
 
+                def _abort() -> None:
+                    raise click.Abort
+
+                _abort()
+
+            # At this point wiki_structure is guaranteed to be non-None
+            assert wiki_structure is not None
             click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
 
             progress.set_status("Generating pages")
@@ -1084,12 +1105,21 @@ def generate(force: bool) -> None:
             else existing_cache.created_at or now_iso
         )
 
+        if wiki_structure is None:
+            raise ValueError("wiki_structure must be set before creating cache")
+
+        # Convert pages to WikiPage objects if they're dicts (from cache)
+        pages_dict: dict[str, WikiPage] = {}
+        for pid, page in generated_pages.items():
+            if isinstance(page, WikiPage):
+                pages_dict[pid] = page
+            else:
+                # Reconstruct WikiPage from dict (e.g., from cache)
+                pages_dict[pid] = WikiPage(**page) if isinstance(page, dict) else page
+
         cache_payload = WikiCacheData(
             wiki_structure=wiki_structure,
-            generated_pages={
-                pid: page.model_dump() if isinstance(page, WikiPage) else page
-                for pid, page in generated_pages.items()
-            },
+            generated_pages=pages_dict,
             repo=repo_info,
             provider=provider,
             model=model,
@@ -1117,11 +1147,12 @@ def generate(force: bool) -> None:
             + ("Update affected pages" if action == "update" else "Full regeneration"),
         )
         click.echo(f"Pages regenerated: {len(regenerated_ids)}")
-        if regenerated_ids:
+        if regenerated_ids and wiki_structure is not None:
             page_lookup = {page.id: page for page in wiki_structure.pages}
             click.echo("Regenerated pages:")
             for pid in regenerated_ids:
-                title = page_lookup.get(pid).title if pid in page_lookup else pid
+                page = page_lookup.get(pid)
+                title = page.title if page is not None else pid
                 click.echo(f"  • {title}")
         if reused_count:
             click.echo(f"Pages reused: {reused_count}")

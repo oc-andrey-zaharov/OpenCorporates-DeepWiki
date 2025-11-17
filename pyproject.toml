@@ -37,7 +37,8 @@ aiohttp = ">=3.13.0"
 boto3 = ">=1.40.0"
 click = ">=8.0.0,<8.3.0"
 enlighten = ">=1.14.0"
-simple-term-menu = ">=1.6.0"
+ simple-term-menu = ">=1.6.0"
+defusedxml = ">=1.0.0"
 structlog = ">=24.1"
 watchfiles = ">=0.21.0"
 returns = "^0.26.0"
@@ -192,9 +193,23 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+ignore_missing_imports = false
 exclude = [
     "(\\.git|build|dist|tmp|docs|bin/smoke_test_loader\\.py)",
 ]
+
+# Ignore missing type stubs for external libraries without type annotations
+[[tool.mypy.overrides]]
+module = [
+    "adalflow.*",
+    "boto3.*",
+    "botocore.*",
+    "requests.*",
+    "tqdm.*",
+    "deepwiki_cli.config",
+    "deepwiki_cli.ollama_patch",
+]
+ignore_missing_imports = true
 
 [[tool.poetry.source]]
 name = "ocpy"

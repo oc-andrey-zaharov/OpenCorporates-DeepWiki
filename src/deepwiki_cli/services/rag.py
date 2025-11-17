@@ -203,7 +203,10 @@ class RAG(adal.Component):
         self.model = model
 
         # Import the helper functions
-        from deepwiki_cli.config import get_embedder_config, get_embedder_type
+        from deepwiki_cli.infrastructure.config import (
+            get_embedder_config,
+            get_embedder_type,
+        )
 
         # Determine embedder type based on current configuration
         self.embedder_type = get_embedder_type()
@@ -213,7 +216,9 @@ class RAG(adal.Component):
 
         # Check if Ollama model exists before proceeding
         if self.is_ollama_embedder:
-            from deepwiki_cli.ollama_patch import check_ollama_model_exists
+            from deepwiki_cli.infrastructure.embedding.ollama_patch import (
+                check_ollama_model_exists,
+            )
 
             embedder_config = get_embedder_config()
             if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
@@ -271,7 +276,7 @@ IMPORTANT FORMATTING RULES:
         )
 
         # Get model configuration based on provider and model
-        from deepwiki_cli.config import get_model_config
+        from deepwiki_cli.infrastructure.config import get_model_config
 
         generator_config = get_model_config(self.provider, self.model)
 
@@ -534,7 +539,7 @@ IMPORTANT FORMATTING RULES:
             included_dirs: Optional list of directories to include exclusively
             included_files: Optional list of file patterns to include exclusively
         """
-        from deepwiki_cli.config import GITHUB_TOKEN
+        from deepwiki_cli.infrastructure.config import GITHUB_TOKEN
 
         # Use provided token or fall back to GITHUB_TOKEN from env
         token_to_use = access_token or GITHUB_TOKEN

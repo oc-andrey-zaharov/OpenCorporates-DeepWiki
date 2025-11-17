@@ -38,7 +38,6 @@ boto3 = ">=1.40.0"
 click = ">=8.0.0,<8.3.0"
 enlighten = ">=1.14.0"
  simple-term-menu = ">=1.6.0"
-defusedxml = ">=1.0.0"
 structlog = ">=24.1"
 watchfiles = ">=0.21.0"
 returns = "^0.26.0"
@@ -206,8 +205,8 @@ module = [
     "botocore.*",
     "requests.*",
     "tqdm.*",
-    "deepwiki_cli.config",
-    "deepwiki_cli.ollama_patch",
+    "deepwiki_cli.infrastructure.embedding.ollama_patch",
+    "xml.minidom",
 ]
 ignore_missing_imports = true
 

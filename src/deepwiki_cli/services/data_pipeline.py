@@ -178,7 +178,7 @@ def count_tokens(
 
         # Determine embedder type if not specified
         if embedder_type is None:
-            from deepwiki_cli.config import get_embedder_type
+            from deepwiki_cli.infrastructure.config import get_embedder_type
 
             embedder_type = get_embedder_type()
 
@@ -220,7 +220,7 @@ def count_tokens_batch(
     try:
         # Determine embedder type if not specified
         if embedder_type is None:
-            from deepwiki_cli.config import get_embedder_type
+            from deepwiki_cli.infrastructure.config import get_embedder_type
 
             embedder_type = get_embedder_type()
 
@@ -821,7 +821,10 @@ def prepare_data_pipeline(
     Returns:
         adal.Sequential: The data transformation pipeline
     """
-    from deepwiki_cli.config import get_embedder_config, get_embedder_type
+    from deepwiki_cli.infrastructure.config import (
+        get_embedder_config,
+        get_embedder_type,
+    )
 
     # Handle backward compatibility
     if embedder_type is None and is_ollama_embedder is not None:

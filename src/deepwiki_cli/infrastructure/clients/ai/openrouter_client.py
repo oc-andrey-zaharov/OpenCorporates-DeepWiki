@@ -237,9 +237,7 @@ class OpenRouterClient(ModelClient):
                                                     ).replace("  >", ">")
 
                                                     # Try to parse the fixed XML
-                                                    from defusedxml.minidom import (  # type: ignore[import-untyped]
-                                                        parseString,
-                                                    )
+                                                    from xml.minidom import parseString
 
                                                     dom = parseString(fixed_xml)
 

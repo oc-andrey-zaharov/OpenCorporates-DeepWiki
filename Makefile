@@ -83,7 +83,10 @@ all-checks: format lint mypy test/coverage
 
 clean:
 	@rm -rf dist build .mypy_cache .pytest_cache .ruff_cache
-	@find . -type d -name '__pycache__' -exec rm -rf {} +
+	@rm -rf .coverage htmlcov coverage .hypothesis .deepeval
+	@find . -type d \( -name '.venv' -o -name 'venv' -o -name 'env' \) -prune -o -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d \( -name '.venv' -o -name 'venv' -o -name 'env' \) -prune -o -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d \( -name '.venv' -o -name 'venv' -o -name 'env' \) -prune -o -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
 
 cli:
 	@./deepwiki $(ARGS)

@@ -4,7 +4,7 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 
 ## Features
 
-- **Instant Documentation**: Turn any repo into a wiki in seconds
+- **Instant Documentation**: Turn any repo into a wiki in minutes
 - **Private Repository Support**: Securely access private repositories with tokens
 - **Smart Analysis**: AI-powered code understanding
 - **Beautiful Diagrams**: Automatic Mermaid diagrams for architecture and data flow
@@ -32,7 +32,7 @@ make cli ARGS="wiki generate"
 #### Prerequisites
 
 - [Poetry v2](https://python-poetry.org/) for Python dependencies
-- Python 3.11+
+- Python 3.13+
 
 #### Step 1: Setup Environment
 

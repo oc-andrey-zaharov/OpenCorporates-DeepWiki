@@ -31,6 +31,7 @@ wheels/
 .ruff_cache/
 .deepeval/
 .hypothesis/
+.factory/
 docs/wiki/
 src/logs/
 

@@ -1,5 +1,6 @@
 """Tests for CLI commands using click.testing.CliRunner."""
 
+import contextlib
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -8,10 +9,8 @@ from unittest.mock import patch
 # This prevents import conflicts when running tests in parallel with pytest-xdist
 import click
 
-try:
-    import click._textwrap
-except ImportError:
-    pass  # Some click versions may not have this module
+with contextlib.suppress(ImportError):
+    import click._textwrap  # Some click versions may not have this module
 from click.testing import CliRunner
 
 
@@ -116,52 +115,52 @@ class TestConfigCommand:
     def test_config_show(self) -> None:
         """Test config show command."""
         runner = CliRunner()
-        with runner.isolated_filesystem():
-            with patch("deepwiki_cli.cli.commands.config_cmd.load_config") as mock_load:
-                mock_load.return_value = {
-                    "default_provider": "google",
-                    "default_model": "gemini-2.0-flash-exp",
-                    "wiki_workspace": "docs/wiki",
-                    "export": {"layout": "single", "watch": False},
-                }
-                with patch(
-                    "deepwiki_cli.cli.commands.config_cmd.CONFIG_FILE"
-                ) as mock_file:
-                    mock_file.__str__ = lambda x: "/tmp/test_config.json"
-                    result = runner.invoke(get_cli(), ["config", "show"])
-                    assert result.exit_code == 0
-                    assert "DeepWiki CLI Configuration" in result.output
-                    assert "default_provider" in result.output
+        with (
+            runner.isolated_filesystem(),
+            patch("deepwiki_cli.cli.commands.config_cmd.load_config") as mock_load,
+            patch("deepwiki_cli.cli.commands.config_cmd.CONFIG_FILE") as mock_file,
+        ):
+            mock_load.return_value = {
+                "default_provider": "google",
+                "default_model": "gemini-2.0-flash-exp",
+                "wiki_workspace": "docs/wiki",
+                "export": {"layout": "single", "watch": False},
+            }
+            mock_file.__str__ = lambda _: str(Path.cwd() / "test_config.json")
+            result = runner.invoke(get_cli(), ["config", "show"])
+            assert result.exit_code == 0
+            assert "DeepWiki CLI Configuration" in result.output
+            assert "default_provider" in result.output
 
     def test_config_set(self) -> None:
         """Test config set command."""
         runner = CliRunner()
-        with runner.isolated_filesystem():
-            with patch(
-                "deepwiki_cli.cli.commands.config_cmd.set_config_value"
-            ) as mock_set:
-                mock_set.return_value = None
-                result = runner.invoke(
-                    get_cli(), ["config", "set", "default_provider", "openai"]
-                )
-                assert result.exit_code == 0
-                assert "Configuration updated" in result.output
-                mock_set.assert_called_once()
+        with (
+            runner.isolated_filesystem(),
+            patch("deepwiki_cli.cli.commands.config_cmd.set_config_value") as mock_set,
+        ):
+            mock_set.return_value = None
+            result = runner.invoke(
+                get_cli(), ["config", "set", "default_provider", "openai"]
+            )
+            assert result.exit_code == 0
+            assert "Configuration updated" in result.output
+            mock_set.assert_called_once()
 
     def test_config_set_json_value(self) -> None:
         """Test config set with JSON value."""
         runner = CliRunner()
-        with runner.isolated_filesystem():
-            with patch(
-                "deepwiki_cli.cli.commands.config_cmd.set_config_value"
-            ) as mock_set:
-                mock_set.return_value = None
-                result = runner.invoke(
-                    get_cli(),
-                    ["config", "set", "export.layout", '"multi"'],
-                )
-                assert result.exit_code == 0
-                assert "Configuration updated" in result.output
+        with (
+            runner.isolated_filesystem(),
+            patch("deepwiki_cli.cli.commands.config_cmd.set_config_value") as mock_set,
+        ):
+            mock_set.return_value = None
+            result = runner.invoke(
+                get_cli(),
+                ["config", "set", "export.layout", '"multi"'],
+            )
+            assert result.exit_code == 0
+            assert "Configuration updated" in result.output
 
 
 class TestExportCommand:
@@ -312,16 +311,16 @@ class TestSyncCommand:
     def test_sync_no_workspace(self) -> None:
         """Test sync when no workspace exists."""
         runner = CliRunner()
-        with runner.isolated_filesystem():
-            with patch("deepwiki_cli.cli.commands.sync.load_config") as mock_config:
-                mock_config.return_value = {"wiki_workspace": "docs/wiki"}
-                with patch(
-                    "deepwiki_cli.cli.commands.sync.list_manifests"
-                ) as mock_list:
-                    mock_list.return_value = []
-                    result = runner.invoke(get_cli(), ["sync"])
-                    assert result.exit_code != 0
-                    assert "No editable workspaces found" in result.output
+        with (
+            runner.isolated_filesystem(),
+            patch("deepwiki_cli.cli.commands.sync.load_config") as mock_config,
+            patch("deepwiki_cli.cli.commands.sync.list_manifests") as mock_list,
+        ):
+            mock_config.return_value = {"wiki_workspace": "docs/wiki"}
+            mock_list.return_value = []
+            result = runner.invoke(get_cli(), ["sync"])
+            assert result.exit_code != 0
+            assert "No editable workspaces found" in result.output
 
 
 class TestGenerateCommand:
@@ -391,14 +390,14 @@ class TestCliIsolatedFilesystem:
             config_file = Path.cwd() / "config.json"
             config_file.write_text(json.dumps({"test": "value"}))
 
-            with patch("deepwiki_cli.cli.commands.config_cmd.CONFIG_FILE") as mock_file:
-                mock_file.__str__ = lambda x: str(config_file)
-                with patch(
-                    "deepwiki_cli.cli.commands.config_cmd.load_config"
-                ) as mock_load:
-                    mock_load.return_value = {"test": "value"}
-                    result = runner.invoke(get_cli(), ["config", "show"])
-                    assert result.exit_code == 0
+            with (
+                patch("deepwiki_cli.cli.commands.config_cmd.CONFIG_FILE") as mock_file,
+                patch("deepwiki_cli.cli.commands.config_cmd.load_config") as mock_load,
+            ):
+                mock_file.__str__ = lambda _: str(config_file)
+                mock_load.return_value = {"test": "value"}
+                result = runner.invoke(get_cli(), ["config", "show"])
+                assert result.exit_code == 0
 
 
 class TestCliInputSimulation:

@@ -22,4 +22,3 @@ poetry install --no-interaction --quiet > /dev/null 2>&1 || {
 
 # Run deepwiki through poetry
 poetry run deepwiki "$@"
-

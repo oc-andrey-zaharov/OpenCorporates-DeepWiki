@@ -4,7 +4,7 @@ import base64
 import logging
 import os
 import re
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
     Literal,
@@ -15,12 +15,17 @@ from typing import (
 import backoff
 
 # optional import
-from adalflow.utils.lazy_import import OptionalPackages, safe_import
+from adalflow.utils.lazy_import import (
+    OptionalPackages,
+    safe_import,
+)
 from openai.types.chat.chat_completion import Choice
 
 openai = safe_import(OptionalPackages.OPENAI.value[0], OptionalPackages.OPENAI.value[1])
 
-from adalflow.components.model_client.utils import parse_embedding_response
+from adalflow.components.model_client.utils import (
+    parse_embedding_response,
+)
 from adalflow.core.model_client import ModelClient
 from adalflow.core.types import (
     CompletionUsage,
@@ -51,7 +56,7 @@ T = TypeVar("T")
 
 
 # completion parsing functions and you can combine them into one singple chat completion parser
-def get_first_message_content(completion: ChatCompletion) -> str:
+def get_first_message_content(completion: ChatCompletion) -> str | None:
     r"""When we only need the content of the first message.
     It is the default parser for chat completion.
     """
@@ -76,7 +81,7 @@ def estimate_token_count(text: str) -> int:
     return len(tokens)
 
 
-def parse_stream_response(completion: ChatCompletionChunk) -> str:
+def parse_stream_response(completion: ChatCompletionChunk) -> str | None:
     r"""Parse the response of the stream API."""
     return completion.choices[0].delta.content
 
@@ -89,7 +94,7 @@ def handle_streaming_response(generator: Stream[ChatCompletionChunk]):
         yield parsed_content
 
 
-def get_all_messages_content(completion: ChatCompletion) -> list[str]:
+def get_all_messages_content(completion: ChatCompletion) -> list[str | None]:
     r"""When the n > 1, get all the messages content."""
     return [c.message.content for c in completion.choices]
 
@@ -98,7 +103,11 @@ def get_probabilities(completion: ChatCompletion) -> list[list[TokenLogProb]]:
     r"""Get the probabilities of each token in the completion."""
     log_probs = []
     for c in completion.choices:
+        if c.logprobs is None:
+            continue
         content = c.logprobs.content
+        if content is None:
+            continue
         log_probs_for_choice = []
         for openai_token_logprob in content:
             token = openai_token_logprob.token
@@ -179,7 +188,9 @@ class OpenAIClient(ModelClient):
             chat_completion_parser or get_first_message_content
         )
         self._input_type = input_type
-        self._api_kwargs = {}  # add api kwargs when the OpenAI Client is called
+        self._api_kwargs: dict[
+            str, Any
+        ] = {}  # add api kwargs when the OpenAI Client is called
 
     def init_sync_client(self):
         api_key = self._api_key or os.getenv(self._env_api_key_name)
@@ -199,12 +210,12 @@ class OpenAIClient(ModelClient):
 
     def parse_chat_completion(
         self,
-        completion: ChatCompletion | Generator[ChatCompletionChunk],
+        completion: ChatCompletion,
     ) -> "GeneratorOutput":
         """Parse the completion, and put it into the raw_response."""
         log.debug(f"completion: {completion}, parser: {self.chat_completion_parser}")
         try:
-            data = self.chat_completion_parser(completion)
+            data = self.chat_completion_parser(completion)  # type: ignore[arg-type]
         except Exception as e:
             log.exception(f"Error parsing the completion: {e}")
             return GeneratorOutput(data=None, error=str(e), raw_response=completion)
@@ -223,9 +234,15 @@ class OpenAIClient(ModelClient):
 
     def track_completion_usage(
         self,
-        completion: ChatCompletion | Generator[ChatCompletionChunk],
+        completion: ChatCompletion,
     ) -> CompletionUsage:
         try:
+            if completion.usage is None:
+                return CompletionUsage(
+                    completion_tokens=0,
+                    prompt_tokens=0,
+                    total_tokens=0,
+                )
             usage: CompletionUsage = CompletionUsage(
                 completion_tokens=completion.usage.completion_tokens,
                 prompt_tokens=completion.usage.prompt_tokens,
@@ -288,7 +305,7 @@ class OpenAIClient(ModelClient):
             final_model_kwargs["input"] = input
         elif model_type == ModelType.LLM:
             # convert input to messages
-            messages: list[dict[str, str]] = []
+            messages: list[dict[str, Any]] = []
             images = final_model_kwargs.pop("images", None)
             detail = final_model_kwargs.pop("detail", "auto")
 
@@ -309,7 +326,7 @@ class OpenAIClient(ModelClient):
                 # re.DOTALL is to allow . to match newline so that (.*?) does not match in a single line
                 regex = re.compile(pattern, re.DOTALL)
                 # Match the pattern
-                match = regex.match(input)
+                match = regex.match(str(input or ""))
                 system_prompt, input_str = None, None
 
                 if match:
@@ -318,9 +335,9 @@ class OpenAIClient(ModelClient):
                 else:
                     pass
                 if system_prompt and input_str:
-                    messages.append({"role": "system", "content": system_prompt})
+                    messages.append({"role": "system", "content": str(system_prompt)})
                     if images:
-                        content = [{"type": "text", "text": input_str}]
+                        content = [{"type": "text", "text": str(input_str)}]
                         if isinstance(images, str | dict):
                             images = [images]
                         for img in images:
@@ -330,7 +347,7 @@ class OpenAIClient(ModelClient):
                         messages.append({"role": "user", "content": input_str})
             if len(messages) == 0:
                 if images:
-                    content = [{"type": "text", "text": input}]
+                    content = [{"type": "text", "text": str(input)}]
                     if isinstance(images, str | dict):
                         images = [images]
                     for img in images:
@@ -374,12 +391,11 @@ class OpenAIClient(ModelClient):
         """Parse the image generation response into a GeneratorOutput."""
         try:
             # Extract URLs or base64 data from the response
-            data = [img.url or img.b64_json for img in response]
+            data_list = [img.url or img.b64_json for img in response]
             # For single image responses, unwrap from list
-            if len(data) == 1:
-                data = data[0]
+            final_data = data_list[0] if len(data_list) == 1 else data_list
             return GeneratorOutput(
-                data=data,
+                data=final_data,
                 raw_response=str(response),
             )
         except Exception as e:
@@ -412,7 +428,7 @@ class OpenAIClient(ModelClient):
         if model_type == ModelType.LLM:
             if "stream" in api_kwargs and api_kwargs.get("stream", False):
                 log.debug("streaming call")
-                self.chat_completion_parser = handle_streaming_response
+                self.chat_completion_parser = handle_streaming_response  # type: ignore[assignment]
                 return self.sync_client.chat.completions.create(**api_kwargs)
             log.debug("non-streaming call converted to streaming")
             # Make a copy of api_kwargs to avoid modifying the original
@@ -497,7 +513,7 @@ class OpenAIClient(ModelClient):
             self.async_client = self.init_async_client()
         if self.async_client is None:
             raise ValueError("async_client not initialized")
-        if model_type == ModelType.EMBEDDER:
+        if model_type == ModelType.EMBEDDER:  # type: ignore[unreachable]
             return await self.async_client.embeddings.create(**api_kwargs)
         if model_type == ModelType.LLM:
             return await self.async_client.chat.completions.create(**api_kwargs)
@@ -520,20 +536,24 @@ class OpenAIClient(ModelClient):
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
-        obj = super().from_dict(data)
+        from typing import cast
+
+        obj = cast("Self", super().from_dict(data))
         # recreate the existing clients
         obj.sync_client = obj.init_sync_client()
         obj.async_client = obj.init_async_client()
         return obj
 
     def to_dict(self) -> dict[str, Any]:
+        from typing import cast
+
         r"""Convert the component to a dictionary."""
         # TODO: not exclude but save yes or no for recreating the clients
         exclude = [
             "sync_client",
             "async_client",
         ]  # unserializable object
-        return super().to_dict(exclude=exclude)
+        return cast("dict[str, Any]", super().to_dict(exclude=exclude))
 
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64 string.

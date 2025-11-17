@@ -2,7 +2,7 @@
 
 import logging
 
-import enlighten
+import enlighten  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class ProgressManager:
                 autorefresh=True,
                 min_delta=0.5,
             )
-        self.status_bar.update(stage=message)
+        self.status_bar.update(stage=message)  # type: ignore[attr-defined]
 
     def init_overall_progress(self, total: int, desc: str = "Overall Progress") -> None:
         """Initialize the overall progress bar."""
@@ -88,7 +88,7 @@ class ProgressManager:
 
         self.completed += 1
         if self.overall_bar:
-            self.overall_bar.update()
+            self.overall_bar.update(1)  # type: ignore[unreachable]
 
     def close(self) -> None:
         """Close all progress bars and the manager."""
@@ -99,12 +99,12 @@ class ProgressManager:
 
         # Close overall bar
         if self.overall_bar:
-            self.overall_bar.close()
+            self.overall_bar.close()  # type: ignore[unreachable]
             self.overall_bar = None
 
         # Close status bar
         if self.status_bar:
-            self.status_bar.close()
+            self.status_bar.close()  # type: ignore[unreachable]
             self.status_bar = None
 
         # Stop the manager

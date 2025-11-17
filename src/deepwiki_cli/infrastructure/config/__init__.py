@@ -28,7 +28,7 @@ from deepwiki_cli.infrastructure.config.settings import (
     OPENAI_API_KEY,
     OPENROUTER_API_KEY,
     Config,
-    _config,
+    _config_instance,
     _refresh_config,
 )
 
@@ -78,13 +78,15 @@ def get_embedder_config() -> dict[str, Any]:
         >>> isinstance(config, dict)
         True
     """
+    from typing import cast
+
     # Read from config instance to get current value (supports module reload)
-    embedder_type = _config.embedder_type.lower()
+    embedder_type = _config_instance[0].embedder_type.lower()
     if embedder_type == "google" and "embedder_google" in configs:
-        return configs.get("embedder_google", {})
+        return cast("dict[str, Any]", configs.get("embedder_google", {}))
     if embedder_type == "ollama" and "embedder_ollama" in configs:
-        return configs.get("embedder_ollama", {})
-    return configs.get("embedder", {})
+        return cast("dict[str, Any]", configs.get("embedder_ollama", {}))
+    return cast("dict[str, Any]", configs.get("embedder", {}))
 
 
 def is_ollama_embedder() -> bool:
@@ -144,7 +146,7 @@ def get_embedder_type() -> str:
         str: 'ollama', 'google', or 'openai' (default)
     """
     # Read from config instance to get current value (supports module reload)
-    current_type = _config.embedder_type.lower()
+    current_type = _config_instance[0].embedder_type.lower()
     # Prioritize the explicit embedder_type from config over embedder detection
     if current_type == "ollama":
         return "ollama"
@@ -234,9 +236,9 @@ def get_model_config(
 def __getattr__(name: str) -> Any:
     """Dynamic attribute access for backward compatibility."""
     if name == "EMBEDDER_TYPE":
-        from deepwiki_cli.infrastructure.config.settings import _config
+        from deepwiki_cli.infrastructure.config.settings import _config_instance
 
-        return _config.embedder_type.lower()
+        return _config_instance[0].embedder_type.lower()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 

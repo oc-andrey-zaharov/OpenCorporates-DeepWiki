@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 ENV_FILE_ENV_VAR = "DEEPWIKI_ENV_FILE"
 CONFIG_DIR_ENV_VAR = "DEEPWIKI_CONFIG_DIR"
 DEFAULT_HOME_ENV_FILE = Path.home() / ".deepwiki" / ".env"
-_ENV_FILES_LOADED = False
+_env_files_loaded = [False]
 
 
 def _normalize_env_path(path: Path) -> Path:
@@ -36,8 +36,7 @@ def _normalize_env_path(path: Path) -> Path:
 
 def _load_env_files() -> None:
     """Load environment variables from supported .env locations once per process."""
-    global _ENV_FILES_LOADED
-    if _ENV_FILES_LOADED:
+    if _env_files_loaded[0]:
         return
 
     candidate_paths: list[Path] = []
@@ -94,7 +93,7 @@ def _load_env_files() -> None:
             status="info",
         )
 
-    _ENV_FILES_LOADED = True
+    _env_files_loaded[0] = True
 
 
 class Config(BaseSettings):
@@ -180,29 +179,32 @@ CLIENT_CLASSES = {
 # Read embedder_type directly from env to ensure it's current
 # This handles module reloads correctly
 _load_env_files()
-_config = Config(
-    embedder_type=os.environ.get("DEEPWIKI_EMBEDDER_TYPE", "openai").lower(),
-)
+_config_instance = [
+    Config(
+        embedder_type=os.environ.get("DEEPWIKI_EMBEDDER_TYPE", "openai").lower(),
+    )
+]
 
 
 def _refresh_config() -> None:
     """Refresh the global config instance to pick up environment variable changes."""
-    global _config
-    _config = Config()
+    _config_instance[0] = Config(
+        embedder_type=os.environ.get("DEEPWIKI_EMBEDDER_TYPE", "openai").lower(),
+    )
 
 
 # Backward compatibility: expose as module-level variables
 # These will be updated when module is reloaded or _refresh_config() is called
-OPENAI_API_KEY = _config.openai_api_key
-GOOGLE_API_KEY = _config.google_api_key
-OPENROUTER_API_KEY = _config.openrouter_api_key
-AWS_ACCESS_KEY_ID = _config.aws_access_key_id
-AWS_SECRET_ACCESS_KEY = _config.aws_secret_access_key
-AWS_REGION = _config.aws_region
-AWS_ROLE_ARN = _config.aws_role_arn
-GITHUB_TOKEN = _config.github_token
+OPENAI_API_KEY = _config_instance[0].openai_api_key
+GOOGLE_API_KEY = _config_instance[0].google_api_key
+OPENROUTER_API_KEY = _config_instance[0].openrouter_api_key
+AWS_ACCESS_KEY_ID = _config_instance[0].aws_access_key_id
+AWS_SECRET_ACCESS_KEY = _config_instance[0].aws_secret_access_key
+AWS_REGION = _config_instance[0].aws_region
+AWS_ROLE_ARN = _config_instance[0].aws_role_arn
+GITHUB_TOKEN = _config_instance[0].github_token
 # EMBEDDER_TYPE reads dynamically from _config to support module reloads
-CONFIG_DIR = _config.config_dir
+CONFIG_DIR = _config_instance[0].config_dir
 
 
 # Use __getattr__ to make EMBEDDER_TYPE read dynamically from _config
@@ -211,5 +213,5 @@ def __getattr__(name: str) -> Any:
     """Dynamic attribute access for backward compatibility."""
     if name == "EMBEDDER_TYPE":
         # Always read from current _config instance
-        return _config.embedder_type.lower()
+        return _config_instance[0].embedder_type.lower()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

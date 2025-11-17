@@ -109,6 +109,9 @@ def load_json_config(filename: str) -> Result[dict[str, Any], str]:
         with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
             result = replace_env_placeholders(config)
+            # Ensure result is a dict for the Success type
+            if not isinstance(result, dict):
+                result = {}
             logger.info(
                 "Configuration loaded successfully",
                 operation="load_json_config",

@@ -567,168 +567,134 @@ IMPORTANT FORMATTING RULES:
             f"Using {len(self.transformed_docs)} documents with valid embeddings for retrieval",
         )
 
-        try:
-            # Use the appropriate embedder for retrieval
-            retrieve_embedder = (
-                self.query_embedder if self.is_ollama_embedder else self.embedder
-            )
+        # Use the appropriate embedder for retrieval
+        retrieve_embedder = (
+            self.query_embedder if self.is_ollama_embedder else self.embedder
+        )
 
-            # Filter out documents with invalid vectors and ensure vectors are Python lists
-            # FAISSRetriever expects Python lists, not numpy arrays
-            valid_docs = []
-            embedding_dim = None
+        # Filter out documents with invalid vectors and ensure vectors are Python lists
+        # FAISSRetriever expects Python lists, not numpy arrays
+        valid_docs: list[Any] = []
+        embedding_dim = None
 
-            for doc in self.transformed_docs:
-                if not hasattr(doc, "vector") or doc.vector is None:
+        for doc in self.transformed_docs:
+            if not hasattr(doc, "vector") or doc.vector is None:
+                file_path = getattr(doc, "meta_data", {}).get(
+                    "file_path",
+                    "unknown",
+                )
+                logger.warning(
+                    f"Document '{file_path}' has no vector attribute, skipping",
+                )
+                continue
+
+            try:
+                # Convert to Python list if needed
+                if isinstance(doc.vector, list):
+                    vector_list = doc.vector
+                elif hasattr(doc.vector, "tolist"):
+                    # Convert numpy array to list
+                    vector_list = doc.vector.tolist()
+                elif hasattr(doc.vector, "__len__"):
+                    # Convert other sequence types to list
+                    vector_list = list(doc.vector)
+                else:
                     file_path = getattr(doc, "meta_data", {}).get(
                         "file_path",
                         "unknown",
                     )
                     logger.warning(
-                        f"Document '{file_path}' has no vector attribute, skipping",
+                        f"Document '{file_path}' has invalid vector type {type(doc.vector).__name__}, skipping",  # type: ignore[operator]
                     )
                     continue
 
-                try:
-                    # Convert to Python list if needed
-                    if isinstance(doc.vector, list):
-                        vector_list = doc.vector
-                    elif hasattr(doc.vector, "tolist"):
-                        # Convert numpy array to list
-                        vector_list = doc.vector.tolist()
-                    elif hasattr(doc.vector, "__len__"):
-                        # Convert other sequence types to list
-                        vector_list = list(doc.vector)
-                    else:
-                        file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path",
-                            "unknown",
-                        )
-                        logger.warning(
-                            f"Document '{file_path}' has invalid vector type {type(doc.vector)}, skipping",
-                        )
-                        continue
-
-                    # Check for empty vectors
-                    if len(vector_list) == 0:
-                        file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path",
-                            "unknown",
-                        )
-                        logger.warning(
-                            f"Document '{file_path}' has empty vector, skipping",
-                        )
-                        continue
-
-                    # Get embedding dimension from first valid vector
-                    if embedding_dim is None:
-                        embedding_dim = len(vector_list)
-
-                    # Verify dimension consistency
-                    if len(vector_list) != embedding_dim:
-                        file_path = getattr(doc, "meta_data", {}).get(
-                            "file_path",
-                            "unknown",
-                        )
-                        logger.warning(
-                            f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping",
-                        )
-                        continue
-
-                    # Update document vector to Python list
-                    doc.vector = vector_list
-                    valid_docs.append(doc)
-
-                except Exception as e:
+                # Check for empty vectors
+                if len(vector_list) == 0:
                     file_path = getattr(doc, "meta_data", {}).get(
                         "file_path",
                         "unknown",
                     )
                     logger.warning(
-                        f"Error processing vector for {file_path}: {e}, skipping document",
+                        f"Document '{file_path}' has empty vector, skipping",
                     )
                     continue
 
-            # Update transformed_docs to only include valid documents
-            if len(valid_docs) < len(self.transformed_docs):
-                logger.info(
-                    f"Filtered {len(self.transformed_docs) - len(valid_docs)} documents with invalid vectors",
-                )
-            self.transformed_docs = valid_docs
+                # Get embedding dimension from first valid vector
+                if embedding_dim is None:
+                    embedding_dim = len(vector_list)
 
-            if not self.transformed_docs:
-
-                def _raise_value_error() -> None:
-                    raise ValueError(
-                        "No valid documents with vectors found. Cannot create retriever.",
+                # Verify dimension consistency
+                if len(vector_list) != embedding_dim:
+                    file_path = getattr(doc, "meta_data", {}).get(
+                        "file_path",
+                        "unknown",
                     )
+                    logger.warning(
+                        f"Document '{file_path}' has dimension {len(vector_list)} != {embedding_dim}, skipping",
+                    )
+                    continue
 
-                _raise_value_error()
+                # Update document vector to Python list
+                doc.vector = vector_list
+                valid_docs.append(doc)
 
-            logger.info(
-                f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})",
-            )
-
-            num_docs = len(self.transformed_docs)
-
-            retriever_config = configs["retriever"].copy()
-
-            # Log retriever config for debugging
-            logger.info(f"Retriever config: {retriever_config}")
-            logger.info(
-                f"Creating FAISS retriever with {num_docs} documents (dim={embedding_dim})",
-            )
-
-            # Extract vectors from documents for FAISSRetriever
-            # Vectors are already Python lists from the validation step above
-            # Reference: adalflow docs show documents_embeddings = [x.embedding for x in output.data]
-            document_vectors = [doc.vector for doc in self.transformed_docs]
-
-            logger.info(
-                f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing",
-            )
-
-            # Create FAISSRetriever with list of lists (Python format)
-            # FAISSRetriever will handle internal conversion to numpy arrays for FAISS operations
-            self.retriever = FAISSRetriever(
-                **retriever_config,
-                embedder=retrieve_embedder,
-                documents=document_vectors,
-            )
-            logger.info("FAISS retriever created successfully")
-        except Exception as e:
-            # Get error message using repr to avoid any str() issues
-            error_msg = repr(e)
-            logger.exception(f"Error creating FAISS retriever: {error_msg}")
-            # Try to provide more specific error information
-            if "All embeddings should be of the same size" in error_msg:
-                logger.exception(
-                    "Embedding size validation failed. This suggests there are still inconsistent embedding sizes.",
+            except Exception as e:
+                file_path = getattr(doc, "meta_data", {}).get(
+                    "file_path",
+                    "unknown",
                 )
-                # Log embedding sizes for debugging
-                sizes = []
-                for i, doc in enumerate(
-                    self.transformed_docs[:10],
-                ):  # Check first 10 docs
-                    if hasattr(doc, "vector") and doc.vector is not None:
-                        try:
-                            if isinstance(doc.vector, list):
-                                size = len(doc.vector)
-                            elif hasattr(doc.vector, "shape"):
-                                size = (
-                                    doc.vector.shape[0]
-                                    if len(doc.vector.shape) == 1
-                                    else doc.vector.shape[-1]
-                                )
-                            elif hasattr(doc.vector, "__len__"):
-                                size = len(doc.vector)
-                            else:
-                                size = "unknown"
-                            sizes.append(f"doc_{i}: {size}")
-                        except Exception:
-                            sizes.append(f"doc_{i}: error")
-                logger.exception(f"Sample embedding sizes: {', '.join(sizes)}")
-            raise
+                logger.warning(
+                    f"Error processing vector for {file_path}: {e}, skipping document",
+                )
+                continue
+
+        # Update transformed_docs to only include valid documents
+        if len(valid_docs) < len(self.transformed_docs):
+            logger.info(
+                f"Filtered {len(self.transformed_docs) - len(valid_docs)} documents with invalid vectors",
+            )
+        self.transformed_docs = valid_docs
+
+        if not self.transformed_docs:
+
+            def _raise_value_error() -> None:
+                raise ValueError(
+                    "No valid documents with vectors found. Cannot create retriever.",
+                )
+
+            _raise_value_error()
+
+        logger.info(
+            f"Verified {len(self.transformed_docs)} documents with Python list vectors (dim={embedding_dim})",
+        )
+
+        num_docs = len(self.transformed_docs)
+
+        retriever_config = configs["retriever"].copy()
+
+        # Log retriever config for debugging
+        logger.info(f"Retriever config: {retriever_config}")
+        logger.info(
+            f"Creating FAISS retriever with {num_docs} documents (dim={embedding_dim})",
+        )
+
+        # Extract vectors from documents for FAISSRetriever
+        # Vectors are already Python lists from the validation step above
+        # Reference: adalflow docs show documents_embeddings = [x.embedding for x in output.data]
+        document_vectors = [doc.vector for doc in self.transformed_docs]
+
+        logger.info(
+            f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing",
+        )
+
+        # Create FAISSRetriever with list of lists (Python format)
+        # FAISSRetriever will handle internal conversion to numpy arrays for FAISS operations
+        self.retriever = FAISSRetriever(
+            **retriever_config,
+            embedder=retrieve_embedder,
+            documents=document_vectors,
+        )
+        logger.info("FAISS retriever created successfully")
 
     def call(self, query: str) -> list:
         """Process a query using RAG.
@@ -775,7 +741,9 @@ IMPORTANT FORMATTING RULES:
                 for doc_index in retrieved_documents[0].doc_indices
             ]
 
-            return retrieved_documents
+            from typing import cast
+
+            return cast("list[Any]", retrieved_documents)
 
         except Exception as e:
             logger.exception(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from adalflow.core.types import Document
@@ -55,7 +55,7 @@ def test_transform_documents_and_save_to_db_fails_without_vectors(
         def __init__(self) -> None:
             self.transformed_items: dict[str, list[Document]] = {}
 
-        def register_transformer(self, transformer, key: str) -> None:
+        def register_transformer(self, transformer: Any, key: str) -> None:
             self.key = key
 
         def load(self, docs: list[Document]) -> None:
@@ -77,7 +77,7 @@ def test_transform_documents_and_save_to_db_fails_without_vectors(
         lambda *_, **__: object(),
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r".*"):
         data_pipeline.transform_documents_and_save_to_db(
             documents,
             str(tmp_path / "db.pkl"),
@@ -98,7 +98,7 @@ def test_transform_documents_and_save_to_db_filters_invalid_vectors(
         def __init__(self) -> None:
             self.transformed_items: dict[str, list[Document]] = {}
 
-        def register_transformer(self, transformer, key: str) -> None:
+        def register_transformer(self, transformer: Any, key: str) -> None:
             self.key = key
 
         def load(self, docs: list[Document]) -> None:

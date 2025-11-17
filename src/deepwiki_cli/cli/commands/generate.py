@@ -7,6 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import click
 
@@ -806,11 +807,11 @@ def prepare_repository_state(
         )
         file_tree = data.get("file_tree", "")
         readme = data.get("readme", "")
-        tree_files = data.get("tree_files")
-        if tree_files is None:
-            tree_files = []
+        from typing import cast
+
+        tree_files = cast("list[dict[str, Any]] | None", data.get("tree_files")) or []
         snapshot = build_snapshot_from_tree(
-            tree_files,
+            cast("list[dict[str, str]] | None", tree_files),
             reference=f"{owner}/{repo_name}",
         )
         return RepositoryState(file_tree=file_tree, readme=readme, snapshot=snapshot)
@@ -893,7 +894,7 @@ def generate(force: bool) -> None:
             progress.close()
 
             def _abort() -> None:
-                raise click.Abort
+                raise click.Abort  # noqa: TRY301
 
             _abort()
 
@@ -924,14 +925,14 @@ def generate(force: bool) -> None:
                 _display_change_summary(
                     repo_name,
                     selected_cache_entry,
-                    change_summary,
+                    cast("dict[str, list[str]] | None", change_summary),
                     existing_cache.wiki_structure,
                     affected_pages,
                 )
                 can_update = bool(update_candidate_page_ids)
                 action = _prompt_generation_action(
                     allow_new=True,
-                    can_update=can_update,
+                    can_update_pages=can_update,
                 )
                 if action == "cancel":
                     progress.close()
@@ -1009,7 +1010,7 @@ def generate(force: bool) -> None:
         if action == "update" and existing_cache:
             wiki_structure = existing_cache.wiki_structure
             if wiki_structure is None:
-                raise ValueError("Existing cache has no wiki_structure")
+                raise ValueError("Existing cache has no wiki_structure")  # noqa: TRY301
             generated_pages = dict(existing_cache.generated_pages)
             pages_to_generate = [
                 page for page in wiki_structure.pages if page.id in selected_page_ids
@@ -1050,12 +1051,13 @@ def generate(force: bool) -> None:
                 progress.close()
 
                 def _abort() -> None:
-                    raise click.Abort
+                    raise click.Abort  # noqa: TRY301
 
                 _abort()
 
             # At this point wiki_structure is guaranteed to be non-None
-            assert wiki_structure is not None
+            if wiki_structure is None:
+                raise ValueError("wiki_structure is None")  # noqa: TRY301
             click.echo(f"✓ Structure created: {len(wiki_structure.pages)} pages")
 
             progress.set_status("Generating pages")
@@ -1106,7 +1108,7 @@ def generate(force: bool) -> None:
         )
 
         if wiki_structure is None:
-            raise ValueError("wiki_structure must be set before creating cache")
+            raise ValueError("wiki_structure must be set before creating cache")  # noqa: TRY301
 
         # Convert pages to WikiPage objects if they're dicts (from cache)
         pages_dict: dict[str, WikiPage] = {}
@@ -1115,8 +1117,11 @@ def generate(force: bool) -> None:
                 pages_dict[pid] = page
             else:
                 # Reconstruct WikiPage from dict (e.g., from cache)
-                pages_dict[pid] = WikiPage(**page) if isinstance(page, dict) else page
+                # When loading from cache, pages may be dicts instead of WikiPage objects
+                pages_dict[pid] = WikiPage(**page) if isinstance(page, dict) else page  # type: ignore[unreachable]
 
+        if wiki_structure is None:
+            raise ValueError("wiki_structure is None")  # noqa: TRY301
         cache_payload = WikiCacheData(
             wiki_structure=wiki_structure,
             generated_pages=pages_dict,

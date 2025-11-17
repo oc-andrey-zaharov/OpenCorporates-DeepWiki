@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Full integration test for Google AI embeddings."""
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+
+logger = logging.getLogger(__name__)
 
 
 def test_config_loading() -> bool | None:
@@ -119,8 +122,8 @@ def main() -> bool:
                 passed += 1
             else:
                 pass
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("Test failed: %s", e)
 
     return passed == total
 

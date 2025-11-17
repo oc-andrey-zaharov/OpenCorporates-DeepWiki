@@ -27,7 +27,7 @@ def test_collect_repository_files_returns_list(excluded_dirs: list[str]) -> None
     Note: This test may fail if path doesn't exist, which is expected behavior.
     """
     # Use a path that likely doesn't exist to test error handling
-    test_path = "/tmp/nonexistent_test_path_12345"
+    test_path = "/nonexistent_test_path_12345"
     try:
         result = collect_repository_files(test_path, excluded_dirs=excluded_dirs)
         assert isinstance(result, list)

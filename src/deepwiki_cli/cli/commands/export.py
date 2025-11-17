@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, Literal
 
 import click
 
@@ -133,13 +134,17 @@ def export(
         workspace_dir / "wiki.md" if layout_choice == "single" else workspace_dir
     )
 
+    from typing import cast
+
+    if layout_choice not in ["single", "multi"]:
+        raise ValueError(f"Invalid layout: {layout_choice}")
     manifest = ExportManifest(
         owner=selected_wiki.get("owner"),
         repo=selected_wiki["repo"],
         repo_type=selected_wiki["repo_type"],
         version=selected_wiki["version"],
         cache_file=str(selected_wiki["path"].resolve()),
-        layout=layout_choice,
+        layout=cast("Literal['single', 'multi']", layout_choice),
         format="markdown",
         root_dir=str(workspace_dir),
         artifact=str(artifact_path),
@@ -212,9 +217,13 @@ def _select_wiki(wikis: list[dict], identifier: str | None) -> dict:
     return select_wiki_from_list(wikis, "Select wiki to export")
 
 
-def _load_cache(cache_file: Path) -> dict:
+def _load_cache(cache_file: Path) -> dict[Any, Any]:
+    from typing import cast
+
     try:
-        return json.loads(cache_file.read_text(encoding="utf-8"))
+        return cast(
+            "dict[Any, Any]", json.loads(cache_file.read_text(encoding="utf-8"))
+        )
     except (OSError, json.JSONDecodeError) as exc:
         raise click.ClickException(f"Failed to load cache {cache_file}: {exc}") from exc
 
@@ -267,11 +276,14 @@ def _filter_pages(
 
 
 def _resolve_repo_url(cache_data: dict) -> str | None:
+    from typing import cast
+
     repo_info = cache_data.get("repo")
     if not repo_info:
         return None
-    if repo_info.get("repoUrl"):
-        return repo_info["repoUrl"]
+    repo_url = repo_info.get("repoUrl")
+    if repo_url:
+        return cast("str", repo_url)
     if repo_info.get("owner") and repo_info.get("repo"):
         return f"https://github.com/{repo_info['owner']}/{repo_info['repo']}"
     return None

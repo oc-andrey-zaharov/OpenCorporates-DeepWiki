@@ -7,8 +7,9 @@ import importlib
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent
@@ -35,7 +36,9 @@ class TestRunner:
         self.tests_failed = 0
         self.failures = []
 
-    def run_test(self, test_func, test_name=None) -> bool | None:
+    def run_test(
+        self, test_func: Callable, test_name: str | None = None
+    ) -> bool | None:
         """Run a single test function."""
         if test_name is None:
             test_name = test_func.__name__
@@ -59,7 +62,7 @@ class TestRunner:
             logger.exception("❌ %s FAILED", test_name)
             return False
 
-    def run_test_class(self, test_class) -> None:
+    def run_test_class(self, test_class: type[Any]) -> None:
         """Run all test methods in a test class."""
         instance = test_class()
         test_methods = [
@@ -72,14 +75,19 @@ class TestRunner:
             test_name = f"{test_class.__name__}.{test_method.__name__}"
             self.run_test(test_method, test_name)
 
-    def run_parametrized_test(self, test_func, parameters, test_name_base=None) -> None:
+    def run_parametrized_test(
+        self,
+        test_func: Callable,
+        parameters: list[Any],
+        test_name_base: str | None = None,
+    ) -> None:
         """Run a test function with multiple parameter sets."""
         if test_name_base is None:
             test_name_base = test_func.__name__
 
         for _i, param in enumerate(parameters):
             test_name = f"{test_name_base}[{param}]"
-            self.run_test(lambda: test_func(param), test_name)
+            self.run_test(lambda param=param: test_func(param), test_name)
 
     def summary(self):
         """Print test summary."""
@@ -150,30 +158,15 @@ class TestEmbedderConfiguration:
             assert not is_ollama
             assert not is_google
 
-    def test_get_embedder_config(self, embedder_type=None) -> None:
+    def test_get_embedder_config(self) -> None:
         """Test getting embedder config for each type."""
         from deepwiki_cli.infrastructure.config import get_embedder_config
 
-        if embedder_type:
-            # Mock the EMBEDDER_TYPE for testing
-            with patch(
-                "deepwiki_cli.infrastructure.config.settings._config.embedder_type",
-                embedder_type,
-            ):
-                config = get_embedder_config()
-                assert isinstance(config, dict), (
-                    f"Config for {embedder_type} should be dict"
-                )
-                assert "model_client" in config or "client_class" in config, (
-                    f"No client specified for {embedder_type}"
-                )
-        else:
-            # Test current configuration
-            config = get_embedder_config()
-            assert isinstance(config, dict), "Config should be dict"
-            assert "model_client" in config or "client_class" in config, (
-                "No client specified"
-            )
+        config = get_embedder_config()
+        assert isinstance(config, dict), "Config should be dict"
+        assert "model_client" in config or "client_class" in config, (
+            "Config should have model_client or client_class"
+        )
 
 
 class TestEmbedderFactory:
@@ -274,49 +267,34 @@ class TestEmbedderClients:
 class TestDataPipelineFunctions:
     """Test data pipeline functions that use embedders."""
 
-    def test_count_tokens(self, embedder_type=None) -> None:
+    def test_count_tokens(self) -> None:
         """Test token counting with different embedder types."""
         from deepwiki_cli.services.data_pipeline import count_tokens
 
         test_text = "This is a test string for token counting."
 
-        if embedder_type is not None:
-            # Test with specific is_ollama_embedder value
-            token_count = count_tokens(test_text, is_ollama_embedder=embedder_type)
+        # Test with all values
+        for is_ollama in [None, True, False]:
+            token_count = count_tokens(test_text, is_ollama_embedder=is_ollama)
             assert isinstance(token_count, int), "Token count should be an integer"
             assert token_count > 0, "Token count should be positive"
-        else:
-            # Test with all values
-            for is_ollama in [None, True, False]:
-                token_count = count_tokens(test_text, is_ollama_embedder=is_ollama)
-                assert isinstance(token_count, int), "Token count should be an integer"
-                assert token_count > 0, "Token count should be positive"
 
-    def test_prepare_data_pipeline(self, is_ollama=None) -> None:
+    def test_prepare_data_pipeline(self) -> None:
         """Test data pipeline preparation with different embedder types."""
         from deepwiki_cli.services.data_pipeline import prepare_data_pipeline
 
-        if is_ollama is not None:
+        # Test with all values
+        for is_ollama_val in [None, True, False]:
             try:
-                pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama)
+                pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama_val)
                 assert pipeline is not None, "Data pipeline should be created"
                 assert callable(pipeline), "Pipeline should be callable"
             except (ImportError, ValueError, RuntimeError) as e:
-                # Some configurations might fail if services aren't available
-                logger.warning("Pipeline creation failed (might be expected): %s", e)
-        else:
-            # Test with all values
-            for is_ollama_val in [None, True, False]:
-                try:
-                    pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama_val)
-                    assert pipeline is not None, "Data pipeline should be created"
-                    assert callable(pipeline), "Pipeline should be callable"
-                except (ImportError, ValueError, RuntimeError) as e:
-                    logger.warning(
-                        "Pipeline creation failed for is_ollama=%s: %s",
-                        is_ollama_val,
-                        e,
-                    )
+                logger.warning(
+                    "Pipeline creation failed for is_ollama=%s: %s",
+                    is_ollama_val,
+                    e,
+                )
 
 
 class TestRAGIntegration:
@@ -358,15 +336,10 @@ class TestRAGIntegration:
 class TestEnvironmentVariableHandling:
     """Test embedder selection via environment variables."""
 
-    def test_embedder_type_env_var(self, embedder_type=None) -> None:
+    def test_embedder_type_env_var(self) -> None:
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
-        if embedder_type:
-            # Test specific embedder type
+        for embedder_type in ["openai", "google", "ollama"]:
             self._test_single_embedder_type(embedder_type)
-        else:
-            # Test all embedder types
-            for et in ["openai", "google", "ollama"]:
-                self._test_single_embedder_type(et)
 
     def _test_single_embedder_type(self, embedder_type: str) -> None:
         """Test a single embedder type."""

@@ -179,7 +179,7 @@ def encode_marker(page_id: str, title: str) -> str:
 def decode_marker(marker_text: str) -> dict[str, str]:
     """Decode metadata from an embedded marker."""
     payload = base64.b64decode(marker_text.encode("ascii"))
-    return json.loads(payload)
+    return json.loads(payload)  # type: ignore[no-any-return]
 
 
 def _strip_generated_blocks(text: str) -> str:
@@ -274,11 +274,8 @@ def _single_related_block(
         anchor = anchor_lookup.get(related_id)
         if not anchor:
             continue
-        related_title = (
-            pages_by_id.get(related_id).title
-            if pages_by_id.get(related_id)
-            else related_id
-        )
+        related_page = pages_by_id.get(related_id)
+        related_title = related_page.title if related_page else related_id
         links.append(f"[{related_title}]({anchor})")
 
     if not links:
@@ -448,6 +445,8 @@ def sync_manifest(
     if manifest.layout == "multi":
         workspace = manifest.root_path.resolve()
         for page in manifest.pages:
+            if page.relative_path is None:
+                continue
             file_path = (workspace / page.relative_path).resolve()
             if changed_set and file_path not in changed_set:
                 continue

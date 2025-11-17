@@ -6,6 +6,7 @@ that can be used by both CLI and server.
 
 import base64
 import logging
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -21,7 +22,7 @@ def get_github_repo_structure_standalone(
     repo: str,
     repo_url: str | None = None,
     access_token: str | None = None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Get GitHub repository structure (file tree and README) synchronously.
 
     Args:

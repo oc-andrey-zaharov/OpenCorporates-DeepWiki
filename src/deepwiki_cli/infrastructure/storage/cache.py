@@ -101,7 +101,7 @@ def parse_cache_filename(path: Path) -> dict[str, str] | None:
         "owner": owner,
         "repo": repo,
         "language": language,
-        "version": version,
+        "version": str(version),
     }
 
 

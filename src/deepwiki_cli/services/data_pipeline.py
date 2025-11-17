@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -273,11 +274,12 @@ def _chunk_file_content(
     encoded_tokens = encoding.encode(content)
 
     chunks = []
-    chunk_index = 0
 
     # Split into chunks of max_chunk_tokens
-    for i in range(0, len(encoded_tokens), max_chunk_tokens):
-        chunk_tokens = encoded_tokens[i : i + max_chunk_tokens]
+    for chunk_index, start in enumerate(
+        range(0, len(encoded_tokens), max_chunk_tokens)
+    ):
+        chunk_tokens = encoded_tokens[start : start + max_chunk_tokens]
         chunk_text = encoding.decode(chunk_tokens)
         chunk_token_count = len(chunk_tokens)
 
@@ -296,7 +298,6 @@ def _chunk_file_content(
             },
         )
         chunks.append(chunk_doc)
-        chunk_index += 1
 
     logger.info(
         "File chunked successfully",
@@ -326,43 +327,47 @@ def download_repo(
     Returns:
         str: The output message from the `git` command.
     """
-    try:
-        # Check if Git is installed
-        logger.info(
-            "Preparing to clone repository",
+    from pathlib import Path
+
+    local_path_path = Path(local_path)
+    logger.info(
+        "Downloading repository",
+        operation="download_repo",
+        status="started",
+        repo_url=repo_url,
+        local_path=local_path,
+    )
+    subprocess.run(
+        ["git", "--version"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Check if repository already exists
+    if local_path_path.exists() and any(local_path_path.iterdir()):
+        # Directory exists and is not empty
+        logger.warning(
+            "Repository already exists, using existing",
             operation="download_repo",
-            status="started",
-            repo_url=repo_url,
+            status="warning",
             local_path=local_path,
         )
-        subprocess.run(
-            ["git", "--version"],
-            check=True,
-            capture_output=True,
-        )
+        return f"Using existing repository at {local_path_path}"
 
-        # Check if repository already exists
-        if os.path.exists(local_path) and os.listdir(local_path):
-            # Directory exists and is not empty
-            logger.warning(
-                "Repository already exists, using existing",
-                operation="download_repo",
-                status="warning",
-                local_path=local_path,
-            )
-            return f"Using existing repository at {local_path}"
+    # Ensure the local path exists
+    local_path_path.mkdir(parents=True, exist_ok=True)
 
-        # Ensure the local path exists
-        os.makedirs(local_path, exist_ok=True)
+    # Build token-less clone URL (never embed token in URL for security)
+    clone_url = repo_url
+    logger.info(f"Cloning repository to {local_path}")
 
-        # Build token-less clone URL (never embed token in URL for security)
-        clone_url = repo_url
-        logger.info(f"Cloning repository to {local_path}")
+    # Prepare environment for Git with credential helper if token is provided
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"  # Disable terminal prompts
 
-        # Prepare environment for Git with credential helper if token is provided
-        env = os.environ.copy()
-        env["GIT_TERMINAL_PROMPT"] = "0"  # Disable terminal prompts
+    credential_script_name = None
 
+    try:
         # If access token is provided, use Git credential helper to supply credentials securely
         # This avoids embedding the token in command arguments or URLs
         if access_token:
@@ -375,14 +380,14 @@ def download_repo(
             import tempfile
 
             # Create a temporary credential helper script
-            credential_script = tempfile.NamedTemporaryFile(
+            with tempfile.NamedTemporaryFile(
                 mode="w",
                 delete=False,
                 suffix=".sh",
-            )
-            # For GitHub HTTPS, use token as username with empty password
-            # The script reads Git's credential request and outputs credentials
-            credential_script.write(f"""#!/bin/sh
+            ) as credential_script:
+                # For GitHub HTTPS, use token as username with empty password
+                # The script reads Git's credential request and outputs credentials
+                credential_script.write(f"""#!/bin/sh
 # Git credential helper - reads protocol, host, path and outputs credentials
 read protocol
 read host
@@ -391,10 +396,9 @@ read
 echo username={access_token}
 echo password=
 """)
-            credential_script.close()
 
             # Make it executable
-            os.chmod(credential_script.name, stat.S_IRUSR | stat.S_IXUSR)
+            Path(credential_script.name).chmod(stat.S_IRUSR | stat.S_IXUSR)
 
             # Configure Git to use our credential helper
             # Use absolute path to avoid PATH issues and ensure security
@@ -403,33 +407,22 @@ echo password=
             # Also set GIT_ASKPASS as fallback (though credential helper should handle HTTPS)
             env["GIT_ASKPASS"] = credential_script.name
 
-            try:
-                # Clone the repository with safe environment (token not in argv)
-                result = subprocess.run(
-                    [
-                        "git",
-                        "clone",
-                        "--depth=1",
-                        "--single-branch",
-                        clone_url,
-                        local_path,
-                    ],
-                    check=True,
-                    capture_output=True,
-                    env=env,
-                )
-            finally:
-                # Clean up the temporary credential helper script
-                with contextlib.suppress(OSError):
-                    os.unlink(credential_script.name)
-        else:
-            # No token, clone normally
-            result = subprocess.run(
-                ["git", "clone", "--depth=1", "--single-branch", clone_url, local_path],
-                check=True,
-                capture_output=True,
-                env=env,
-            )
+            credential_script_name = credential_script.name
+
+        # Clone the repository
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--single-branch",
+                clone_url,
+                str(local_path_path),
+            ],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
 
         logger.info(
             "Repository cloned successfully",
@@ -439,7 +432,6 @@ echo password=
             local_path=local_path,
         )
         return result.stdout.decode("utf-8")
-
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode("utf-8")
         # Sanitize error message to remove any tokens that might have leaked
@@ -455,6 +447,11 @@ echo password=
         raise ValueError(f"Error during cloning: {error_msg}")
     except Exception as e:
         raise ValueError(f"An unexpected error occurred: {e!s}")
+    finally:
+        # Clean up the temporary credential helper script if it was created
+        if credential_script_name:
+            with contextlib.suppress(OSError):
+                Path(credential_script_name).unlink()
 
 
 # Alias for backward compatibility
@@ -742,7 +739,7 @@ def read_all_documents(
     all_files = []
     discovered_files = collect_repository_files(path)
     for file_path in discovered_files:
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = Path(file_path).suffix.lower()
         if ext in code_extensions:
             is_code = True
         elif ext in doc_extensions:
@@ -893,7 +890,7 @@ def transform_documents_and_save_to_db(
         context="database build",
     )
     db.transformed_items["split_and_embed"] = validated_docs
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     db.save_state(filepath=db_path)
     return db
 
@@ -922,14 +919,22 @@ def get_github_file_content(
         # Parse the repository URL to support both github.com and enterprise GitHub
         parsed_url = urlparse(repo_url)
         if not parsed_url.scheme or not parsed_url.netloc:
-            raise ValueError("Not a valid GitHub repository URL")
+
+            def _raise_error() -> None:
+                raise ValueError("Not a valid GitHub repository URL")  # noqa: TRY301
+
+            _raise_error()
 
         # Check if it's a GitHub-like URL structure
         path_parts = parsed_url.path.strip("/").split("/")
         if len(path_parts) < 2:
-            raise ValueError(
-                "Invalid GitHub URL format - expected format: https://domain/owner/repo",
-            )
+
+            def _raise_error() -> None:
+                raise ValueError(  # noqa: TRY301
+                    "Invalid GitHub URL format - expected format: https://domain/owner/repo",
+                )
+
+            _raise_error()
 
         owner = path_parts[-2]
         repo = path_parts[-1].replace(".git", "")
@@ -959,11 +964,19 @@ def get_github_file_content(
         try:
             content_data = response.json()
         except json.JSONDecodeError:
-            raise ValueError("Invalid response from GitHub API")
+
+            def _raise_error() -> None:
+                raise ValueError("Invalid response from GitHub API")
+
+            _raise_error()
 
         # Check if we got an error response
         if "message" in content_data and "documentation_url" in content_data:
-            raise ValueError(f"GitHub API error: {content_data['message']}")
+
+            def _raise_error() -> None:
+                raise ValueError(f"GitHub API error: {content_data['message']}")  # noqa: TRY301
+
+            _raise_error()
 
         # GitHub API returns file content as base64 encoded string
         if "content" in content_data and "encoding" in content_data:
@@ -971,8 +984,8 @@ def get_github_file_content(
                 # The content might be split into lines, so join them first
                 content_base64 = content_data["content"].replace("\n", "")
                 return base64.b64decode(content_base64).decode("utf-8")
-            raise ValueError(f"Unexpected encoding: {content_data['encoding']}")
-        raise ValueError("File content not found in GitHub API response")
+            raise ValueError(f"Unexpected encoding: {content_data['encoding']}")  # noqa: TRY301
+        raise ValueError("Unexpected response format from GitHub API")  # noqa: TRY301
 
     except Exception as e:
         raise ValueError(f"Failed to get file content: {e!s}")
@@ -1007,7 +1020,7 @@ class DatabaseManager:
     def __init__(self) -> None:
         self.db: LocalDB | None = None
         self.repo_url_or_path: str | None = None
-        self.repo_paths: Dict[str, str] | None = None
+        self.repo_paths: dict[str, str] | None = None
 
     def prepare_database(
         self,
@@ -1097,7 +1110,7 @@ class DatabaseManager:
         try:
             root_path = get_adalflow_default_root_path()
 
-            os.makedirs(root_path, exist_ok=True)
+            Path(root_path).mkdir(parents=True, exist_ok=True)
             # url
             if repo_url_or_path.startswith(("https://", "http://")):
                 # Extract the repository name from the URL
@@ -1110,7 +1123,9 @@ class DatabaseManager:
                 save_repo_dir = os.path.join(root_path, "repos", repo_name)
 
                 # Check if the repository directory already exists and is not empty
-                if not (os.path.exists(save_repo_dir) and os.listdir(save_repo_dir)):
+                if not (
+                    Path(save_repo_dir).exists() and any(Path(save_repo_dir).iterdir())
+                ):
                     # Only download if the repository doesn't exist or is empty
                     download_repo(
                         repo_url_or_path,
@@ -1127,8 +1142,8 @@ class DatabaseManager:
                 save_repo_dir = repo_url_or_path
 
             save_db_file = os.path.join(root_path, "databases", f"{repo_name}.pkl")
-            os.makedirs(save_repo_dir, exist_ok=True)
-            os.makedirs(os.path.dirname(save_db_file), exist_ok=True)
+            Path(save_repo_dir).mkdir(parents=True, exist_ok=True)
+            Path(save_db_file).parent.mkdir(parents=True, exist_ok=True)
 
             self.repo_paths = {
                 "save_repo_dir": save_repo_dir,
@@ -1241,7 +1256,7 @@ class DatabaseManager:
                                     )
 
                                     try:
-                                        current_mtime = os.path.getmtime(full_path)
+                                        current_mtime = Path(full_path).stat().st_mtime
                                         if (
                                             existing_mtime is None
                                             or abs(current_mtime - existing_mtime) > 1.0
@@ -1259,8 +1274,8 @@ class DatabaseManager:
                                             self.repo_paths["save_repo_dir"],
                                             file_path,
                                         )
-                                        doc.meta_data["file_mtime"] = os.path.getmtime(
-                                            full_path,
+                                        doc.meta_data["file_mtime"] = (
+                                            Path(full_path).stat().st_mtime
                                         )
                                     except OSError:
                                         pass
@@ -1352,9 +1367,9 @@ class DatabaseManager:
                 )
                 backup_path = f"{db_path}.invalid"
                 with contextlib.suppress(OSError):
-                    if os.path.exists(backup_path):
-                        os.remove(backup_path)
-                    os.replace(db_path, backup_path)
+                    if Path(backup_path).exists():
+                        Path(backup_path).unlink()
+                    Path(db_path).replace(backup_path)
             except Exception as e:
                 logger.exception(f"Error loading existing database: {e}")
                 # Continue to create a new database
@@ -1382,7 +1397,7 @@ class DatabaseManager:
                         self.repo_paths["save_repo_dir"],
                         file_path,
                     )
-                    doc.meta_data["file_mtime"] = os.path.getmtime(full_path)
+                    doc.meta_data["file_mtime"] = Path(full_path).stat().st_mtime
                 except OSError:
                     pass
 

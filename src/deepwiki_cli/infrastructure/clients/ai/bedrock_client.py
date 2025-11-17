@@ -208,18 +208,20 @@ class BedrockClient(ModelClient):
             The generated text
         """
         if provider == "anthropic":
-            return response.get("content", [{}])[0].get("text", "")
+            return str(response.get("content", [{}])[0].get("text", ""))
         if provider == "amazon":
-            return response.get("results", [{}])[0].get("outputText", "")
+            return str(response.get("results", [{}])[0].get("outputText", ""))
         if provider == "cohere":
-            return response.get("generations", [{}])[0].get("text", "")
+            return str(response.get("generations", [{}])[0].get("text", ""))
         if provider == "ai21":
-            return response.get("completions", [{}])[0].get("data", {}).get("text", "")
+            return str(
+                response.get("completions", [{}])[0].get("data", {}).get("text", "")
+            )
         # Try to extract text from the response
         if isinstance(response, dict):
             for key in ["text", "content", "output", "completion"]:
                 if key in response:
-                    return response[key]
+                    return str(response[key])
         return str(response)
 
     @backoff.on_exception(

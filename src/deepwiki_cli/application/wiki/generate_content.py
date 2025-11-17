@@ -38,17 +38,19 @@ OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED")
 
 
 def _extract_completion_text(completion: Any) -> str | None:
+    from typing import cast
+
     try:
         choices = getattr(completion, "choices", [])
         if choices:
             first_choice = choices[0]
             message = getattr(first_choice, "message", None)
             if message and hasattr(message, "content"):
-                return message.content
+                return cast("str | None", message.content)
             delta = getattr(first_choice, "delta", None)
             if delta and hasattr(delta, "content"):
-                return delta.content
-        return getattr(completion, "content", None)
+                return cast("str | None", delta.content)
+        return cast("str | None", getattr(completion, "content", None))
     except Exception as exc:
         logger.warning(f"Failed to extract text from completion: {exc}")
         return None
@@ -63,7 +65,7 @@ def _async_to_sync_generator(
     import queue
     import threading
 
-    q = queue.Queue()
+    q: queue.Queue[tuple[str, Any]] = queue.Queue()
     exception = None
 
     def run_async() -> None:
@@ -93,7 +95,8 @@ def _async_to_sync_generator(
 
     while True:
         try:
-            msg_type, value = q.get(timeout=1.0)  # Increased timeout to 1 second
+            item = q.get(timeout=1.0)  # Increased timeout to 1 second
+            msg_type, value = item
             if msg_type == "item":
                 yield value
             elif msg_type == "error":
@@ -242,7 +245,7 @@ def generate_wiki_content(
                     logger.info(f"Retrieved {len(documents)} documents")
 
                     # Group documents by file path
-                    docs_by_file = {}
+                    docs_by_file: dict[str, list[Any]] = {}
                     for doc in documents:
                         doc_file_path = doc.meta_data.get("file_path", "unknown")
                         if doc_file_path not in docs_by_file:
@@ -549,7 +552,7 @@ def generate_wiki_content(
                 # Google Generative AI
                 model_client = genai.GenerativeModel(
                     model_name=model_config["model"],
-                    generation_config={
+                    generation_config={  # type: ignore[arg-type]
                         "temperature": model_config["temperature"],
                         "top_p": model_config["top_p"],
                         "top_k": model_config["top_k"],
@@ -587,7 +590,7 @@ def generate_wiki_content(
                     if provider == "google":
                         fallback_model = genai.GenerativeModel(
                             model_name=model_config["model"],
-                            generation_config={
+                            generation_config={  # type: ignore[arg-type]
                                 "temperature": model_config.get("temperature", 0.7),
                                 "top_p": model_config.get("top_p", 0.8),
                                 "top_k": model_config.get("top_k", 40),

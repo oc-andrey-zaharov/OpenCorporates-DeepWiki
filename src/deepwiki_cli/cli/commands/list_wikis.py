@@ -88,7 +88,7 @@ def list_wikis() -> None:
             click.echo(f"Warning: Could not parse {cache_file.name}: {e}", err=True)
 
     # Sort by name (repo), then by version (descending)
-    wikis.sort(key=lambda x: (x["name"], -x["version"]))
+    wikis.sort(key=lambda x: (x["name"], -int(str(x["version"]))))
 
     # Display wikis
     for i, wiki in enumerate(wikis, 1):
@@ -97,7 +97,7 @@ def list_wikis() -> None:
             f"   Type: {wiki['repo_type']} | Wiki Type: {wiki['wiki_type']}",
         )
         click.echo(f"   Pages: {wiki['page_count']} | Size: {wiki['size']}")
-        click.echo(f"   Modified: {wiki['modified'].strftime('%Y-%m-%d %H:%M:%S')}")
+        click.echo(f"   Modified: {wiki['modified'].strftime('%Y-%m-%d %H:%M:%S')}")  # type: ignore[attr-defined]
         click.echo(f"   Path: {wiki['path']}")
         click.echo()
 

@@ -226,7 +226,7 @@ class GoogleEmbedderClient(ModelClient):
             else:
 
                 def _raise_value_error() -> None:
-                    raise ValueError("Either 'content' or 'contents' must be provided")
+                    raise ValueError("Either 'content' or 'contents' must be provided")  # noqa: TRY301
 
                 _raise_value_error()
 

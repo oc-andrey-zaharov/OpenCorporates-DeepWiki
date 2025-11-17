@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from deepwiki_cli.domain.models import (
     RepoSnapshot,
@@ -18,6 +18,15 @@ from deepwiki_cli.domain.models import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class ChangeSummary(TypedDict):
+    changed_files: list[str]
+    new_files: list[str]
+    deleted_files: list[str]
+    unchanged_count: int
+    snapshot: RepoSnapshot | None
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +91,7 @@ def build_snapshot_from_tree(
             snapshot_files[path] = RepoSnapshotFile(
                 path=path,
                 hash=entry.get("sha"),
-                size=entry.get("size"),
+                size=int(entry["size"]) if entry.get("size") else None,
             )
 
     return RepoSnapshot(
@@ -127,9 +136,9 @@ def detect_repo_changes(
     repo_path: str | None,
     existing_cache: WikiCacheData | None,
     current_snapshot: RepoSnapshot | None,
-) -> dict[str, list[str]]:
+) -> ChangeSummary:
     """Compare snapshots and return change summary."""
-    summary = {
+    summary: ChangeSummary = {
         "changed_files": [],
         "new_files": [],
         "deleted_files": [],

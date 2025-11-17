@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 try:
-    from simple_term_menu import TerminalMenu
+    from simple_term_menu import TerminalMenu  # type: ignore[import-untyped]
 
     SIMPLE_TERM_MENU_AVAILABLE = True
 except ImportError:
@@ -132,7 +132,7 @@ def parse_repository_input(
     )
 
 
-def format_file_size(size_bytes: int) -> str:
+def format_file_size(size_bytes: float) -> str:
     """Format file size in human-readable format.
 
     Args:
@@ -154,7 +154,9 @@ def get_cache_path() -> Path:
     Returns:
         Path to cache directory
     """
-    from adalflow.utils import get_adalflow_default_root_path
+    from adalflow.utils import (
+        get_adalflow_default_root_path,
+    )
 
     return Path(get_adalflow_default_root_path()) / "wikicache"
 
@@ -227,10 +229,12 @@ def select_from_list(
             click.echo("(You can also enter a custom value)")
 
         while True:
-            user_input = click.prompt(
-                "Select option",
-                default=default or "",
-                show_default=bool(default),
+            user_input = str(
+                click.prompt(
+                    "Select option",
+                    default=default or "",
+                    show_default=bool(default),
+                )
             )
             if user_input in choices or (allow_custom and user_input):
                 return user_input
@@ -271,14 +275,14 @@ def select_from_list(
             sys.exit(1)
 
         # Get selected value
-        selected_value = display_choices[selected_index]
+        selected_value: str = display_choices[selected_index]
 
         # Handle custom input
         if selected_value == CUSTOM_OPTION:
             import click
 
             click.echo()  # New line after selection
-            custom_value = click.prompt("Enter custom value", type=str)
+            custom_value = str(click.prompt("Enter custom value", type=str))
             if not custom_value:
                 raise ValueError("Custom value cannot be empty")
             return custom_value
@@ -419,7 +423,7 @@ def confirm_action(
             click.echo("\n✗ Selection cancelled.", err=True)
             sys.exit(1)
 
-        return selected_index == 0  # 0 = Yes, 1 = No
+        return bool(selected_index == 0)  # 0 = Yes, 1 = No
 
     except KeyboardInterrupt:
         import click
@@ -456,7 +460,9 @@ def prompt_text_input(
 
         if not SIMPLE_TERM_MENU_AVAILABLE:
             # Fallback to direct prompt
-            return click.prompt(prompt_text, default=default, show_default=show_default)
+            return str(
+                click.prompt(prompt_text, default=default, show_default=show_default)
+            )
 
         try:
             terminal_menu = TerminalMenu(
@@ -466,10 +472,10 @@ def prompt_text_input(
                 clear_screen=False,
             )
 
-            selected_index = terminal_menu.show()
+            selected_index = int(terminal_menu.show())
 
             if selected_index is None:
-                click.echo("\n✗ Selection cancelled.", err=True)
+                click.echo("\n✗ Selection cancelled.", err=True)  # type: ignore[unreachable]
                 sys.exit(1)
 
             # Show appropriate hint based on selection
@@ -485,7 +491,7 @@ def prompt_text_input(
             sys.exit(1)
 
     # Get text input
-    return click.prompt(prompt_text, default=default, show_default=show_default)
+    return str(click.prompt(prompt_text, default=default, show_default=show_default))
 
 
 def select_wiki_from_list(
@@ -530,7 +536,7 @@ def select_wiki_from_list(
             try:
                 selection = click.prompt("\nSelect wiki (enter number)", type=int)
                 if 1 <= selection <= len(wikis):
-                    return wikis[selection - 1]
+                    return wikis[selection - 1]  # type: ignore[no-any-return]
                 click.echo(f"✗ Invalid selection. Please choose 1-{len(wikis)}")
             except click.Abort:
                 raise
@@ -552,7 +558,7 @@ def select_wiki_from_list(
             click.echo("\n✗ Selection cancelled.", err=True)
             sys.exit(1)
 
-        return wikis[selected_index]
+        return wikis[selected_index]  # type: ignore[no-any-return]
 
     except KeyboardInterrupt:
         click.echo("\n✗ Selection cancelled.", err=True)

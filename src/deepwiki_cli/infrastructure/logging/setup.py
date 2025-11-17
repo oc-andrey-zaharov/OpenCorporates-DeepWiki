@@ -18,12 +18,10 @@ class IgnoreMLflowWarningFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         # Suppress warnings about MLflow not being available
-        if (
+        return not (
             record.name == "adalflow.tracing.mlflow_integration"
             and "MLflow not available" in record.getMessage()
-        ):
-            return False
-        return True
+        )
 
 
 def setup_logging(format: str | None = None) -> None:
@@ -39,7 +37,8 @@ def setup_logging(format: str | None = None) -> None:
     both rotating file and console handlers.
     """
     # Determine log directory and default file path
-    base_dir = Path(__file__).parent.parent.parent.parent
+    # From src/deepwiki_cli/infrastructure/logging/setup.py, go up 3 levels to src/deepwiki_cli/
+    base_dir = Path(__file__).parent.parent.parent
     log_dir = base_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     default_log_file = log_dir / "application.log"

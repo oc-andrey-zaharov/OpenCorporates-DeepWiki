@@ -50,7 +50,7 @@ def _build_structure(pages: list[WikiPage]) -> WikiStructureModel:
     )
 
 
-def test_export_and_sync_multi_layout(tmp_path):
+def test_export_and_sync_multi_layout(tmp_path: Path):
     cache_file = tmp_path / "cache.json"
     pages = _build_pages()
     structure = _build_structure(pages)

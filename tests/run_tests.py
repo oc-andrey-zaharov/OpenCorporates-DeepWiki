@@ -16,7 +16,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 
-def run_test_file(test_file) -> bool | None:
+def run_test_file(test_file: str) -> bool | None:
     """Run a single test file and return success status."""
     try:
         result = subprocess.run(
@@ -40,7 +40,7 @@ def run_test_file(test_file) -> bool | None:
         return False
 
 
-def run_tests(test_dirs) -> bool:
+def run_tests(test_dirs: list[str]) -> bool:
     """Run all tests in the specified directories."""
     total_tests = 0
     passed_tests = 0

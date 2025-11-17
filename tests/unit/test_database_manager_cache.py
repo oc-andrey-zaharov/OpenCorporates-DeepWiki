@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Never
+from typing import TYPE_CHECKING, Any, Never
 
 from adalflow.core.types import Document
 
@@ -46,7 +46,7 @@ def test_prepare_db_index_recovers_from_missing_module(
         "save_repo_dir": str(repo_dir),
     }
 
-    def fake_load_state(cls, filepath: str | None = None) -> Never:  # type: ignore[unused-argument]
+    def fake_load_state(cls: type[Any], filepath: str | None = None) -> Never:  # type: ignore[unused-argument]
         raise ModuleNotFoundError("No module named 'api'", name="api")
 
     monkeypatch.setattr(
@@ -60,7 +60,7 @@ def test_prepare_db_index_recovers_from_missing_module(
     monkeypatch.setattr(
         data_pipeline,
         "read_all_documents",
-        lambda *args, **kwargs: documents,
+        lambda *_args, **_kwargs: documents,
     )
 
     def fake_transform(

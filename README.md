@@ -20,7 +20,7 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 ### Using Makefile (Recommended)
 
 ```bash
-# Install dependencies
+# Install dependencieswiki
 make install
 
 # Use the CLI directly
@@ -90,7 +90,7 @@ poetry install
 
 ```bash
 # Generate a wiki (standalone mode - default)
-./deepwiki wiki generate
+./deepwiki generate
 
 # List available commands
 ./deepwiki --help
@@ -102,10 +102,10 @@ poetry install
 
 The DeepWiki CLI provides several commands:
 
-- `deepwiki wiki generate` - Generate or refresh a wiki for a repository
-- `deepwiki wiki export` - Export a cached wiki to markdown or JSON (version aware)
-- `deepwiki wiki delete` - Delete a specific cached wiki version
-- `deepwiki wiki list` - List all cached wikis with version, size, and metadata
+- `deepwiki generate` - Generate or refresh a wiki for a repository
+- `deepwiki export` - Export a cached wiki to markdown or JSON (version aware)
+- `deepwiki delete` - Delete a specific cached wiki version
+- `deepwiki list` - List all cached wikis with version, size, and metadata
 - `deepwiki config` - Manage configuration settings
 - `deepwiki sync` - Apply edits from `docs/wiki` workspaces back to the cache (optionally watch)
 
@@ -114,7 +114,7 @@ The DeepWiki CLI provides several commands:
 Interactive wiki generation from a repository:
 
 ```bash
-deepwiki wiki generate
+deepwiki generate
 ```
 
 You'll be prompted for:
@@ -139,7 +139,7 @@ Use `--force` to skip all prompts and overwrite the latest version in CI or scri
 Display all cached wikis:
 
 ```bash
-deepwiki wiki list
+deepwik list
 ```
 
 Shows repository name, type, language, wiki type, number of pages, cache version, file size, last modified date, and cache file path.
@@ -149,14 +149,14 @@ Shows repository name, type, language, wiki type, number of pages, cache version
 Export a cached wiki to Markdown or JSON:
 
 ```bash
-deepwiki wiki export
+deepwiki export
 ```
 
 You'll be prompted to select a wiki/version combo from the list, choose format (markdown or json), and specify output path (optional). The generated filename automatically includes the version suffix (e.g., `_v3`).
 
 ### Editable Wiki Workspaces
 
-Running `deepwiki wiki export` in **markdown** mode now creates an editable workspace under `docs/wiki/<owner-repo>_vN`. Two layouts are available:
+Running `deepwiki export` in **markdown** mode now creates an editable workspace under `docs/wiki/<owner-repo>_vN`. Two layouts are available:
 
 - `--layout single` – a single Markdown file that contains markers for each page.
 - `--layout multi` – one Markdown file per page, grouped into nested folders that mirror the wiki structure with automatic page linking.
@@ -174,7 +174,7 @@ The `deepwiki sync` command accepts `--workspace /path/to/docs/wiki/<workspace>`
 Delete a cached wiki from the cache:
 
 ```bash
-deepwiki wiki delete
+deepwiki delete
 ```
 
 You'll be prompted to select a wiki/version and confirm deletion (use `--yes` flag to skip confirmation). Server mode requests include the version so you can prune specific snapshots without touching others.

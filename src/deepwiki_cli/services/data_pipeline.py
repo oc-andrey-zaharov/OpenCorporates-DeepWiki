@@ -100,6 +100,88 @@ def _split_documents_by_embedding(
     return valid_documents, missing_paths
 
 
+def _get_expected_embedding_dimension(embedder_type: str | None) -> int | None:
+    """Get the expected embedding dimension for a given embedder type.
+
+    Args:
+        embedder_type: Embedder type ('openai', 'google', 'ollama').
+
+    Returns:
+        Expected embedding dimension, or None if unknown.
+    """
+    if embedder_type is None:
+        embedder_type = "openai"
+
+    # Known embedding dimensions for each embedder type
+    # OpenAI text-embedding-3-small: 256 (default), can be configured
+    # Google text-embedding-004: 768 (fixed)
+    # Ollama: varies by model
+    dimension_map = {
+        "openai": 256,  # Default for text-embedding-3-small
+        "google": 768,  # text-embedding-004 has fixed 768 dimensions
+        "ollama": None,  # Varies by model
+    }
+
+    return dimension_map.get(embedder_type.lower())
+
+
+def _validate_embedding_dimension(
+    documents: List[Document],
+    embedder_type: str | None,
+) -> bool:
+    """Validate that document embeddings match the expected dimension for the embedder.
+
+    Args:
+        documents: Documents with embeddings to validate.
+        embedder_type: Embedder type being used.
+
+    Returns:
+        True if dimensions match (or cannot be determined), False if mismatch detected.
+    """
+    expected_dim = _get_expected_embedding_dimension(embedder_type)
+    if expected_dim is None:
+        # Cannot validate (e.g., Ollama with variable dimensions)
+        return True
+
+    # Check first few documents to determine actual dimension
+    for doc in documents[:10]:
+        if not hasattr(doc, "vector") or doc.vector is None:
+            continue
+
+        try:
+            if isinstance(doc.vector, list):
+                actual_dim = len(doc.vector)
+            elif hasattr(doc.vector, "shape"):
+                actual_dim = (
+                    doc.vector.shape[0]
+                    if len(doc.vector.shape) == 1
+                    else doc.vector.shape[-1]
+                )
+            elif hasattr(doc.vector, "__len__"):
+                actual_dim = len(doc.vector)
+            else:
+                continue
+
+            if actual_dim != expected_dim:
+                logger.warning(
+                    f"Embedding dimension mismatch detected: expected {expected_dim} (for {embedder_type}), "
+                    f"found {actual_dim}. Cache was likely created with a different embedder type.",
+                    operation="validate_embedding_dimension",
+                    status="warning",
+                    embedder_type=embedder_type,
+                    expected_dim=expected_dim,
+                    actual_dim=actual_dim,
+                )
+                return False
+            # Found a valid dimension, assume all are consistent
+            return True
+        except Exception:
+            continue
+
+    # Couldn't determine dimension, assume it's okay
+    return True
+
+
 def _require_valid_embeddings(
     documents: List[Document],
     embedder_type: str | None,
@@ -1215,6 +1297,31 @@ class DatabaseManager:
                             missing_count=len(missing_cached),
                             sample_paths=missing_cached[:5],
                         )
+
+                    # Validate embedding dimensions match current embedder type
+                    if existing_documents and not _validate_embedding_dimension(
+                        existing_documents,
+                        embedder_type,
+                    ):
+                        logger.warning(
+                            "Embedding dimension mismatch detected. Forcing full rebuild with current embedder.",
+                            operation="prepare_db_index",
+                            status="warning",
+                            embedder_type=embedder_type,
+                        )
+                        # Delete the cached database to force regeneration
+                        try:
+                            os.remove(self.repo_paths["save_db_file"])
+                            logger.info(
+                                f"Removed cached database {self.repo_paths['save_db_file']} due to embedder mismatch",
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to remove cached database: {e}",
+                            )
+                        # Reset database and continue to full rebuild
+                        self.db = None
+                        existing_documents = []
 
                     if existing_documents:
                         logger.info(

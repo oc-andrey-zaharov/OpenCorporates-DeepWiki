@@ -219,3 +219,53 @@ priority = "supplemental"
 name = "ocpyupload"
 url = "https://open-corporates-089449186373.d.codeartifact.eu-west-2.amazonaws.com/pypi/dev/"
 priority = "explicit"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--disable-warnings",
+    "--tb=short",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests that take more than a few seconds",
+    "network: Tests that require network access",
+    "performance: Performance tests",
+    "security: Security tests",
+    "property: Property-based tests using Hypothesis",
+]
+
+[tool.coverage.run]
+source = ["src/deepwiki_cli"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"

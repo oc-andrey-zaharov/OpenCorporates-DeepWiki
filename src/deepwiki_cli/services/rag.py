@@ -47,7 +47,7 @@ class CustomConversation:
 # Import other adalflow components
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 
-from deepwiki_cli.infrastructure.config import configs
+from deepwiki_cli.infrastructure.config import configs, get_embedder_config
 from deepwiki_cli.services.data_pipeline import DatabaseManager, count_tokens
 
 logger = structlog.get_logger()
@@ -203,10 +203,7 @@ class RAG(adal.Component):
         self.model = model
 
         # Import the helper functions
-        from deepwiki_cli.infrastructure.config import (
-            get_embedder_config,
-            get_embedder_type,
-        )
+        from deepwiki_cli.infrastructure.config import get_embedder_type
 
         # Determine embedder type based on current configuration
         self.embedder_type = get_embedder_type()
@@ -325,11 +322,15 @@ IMPORTANT FORMATTING RULES:
 
         valid_documents: list[Any] = []
         embedding_sizes: dict[int, int] = {}
+        missing_vectors: int = 0
+        invalid_vectors: int = 0
+        empty_vectors: int = 0
+        error_count: int = 0
 
         # First pass: collect all embedding sizes and count occurrences
         for i, doc in enumerate(documents):
             if not hasattr(doc, "vector") or doc.vector is None:
-                logger.warning(f"Document {i} has no embedding vector, skipping")
+                missing_vectors += 1
                 continue
 
             try:
@@ -344,13 +345,11 @@ IMPORTANT FORMATTING RULES:
                 elif hasattr(doc.vector, "__len__"):
                     embedding_size = len(doc.vector)
                 else:
-                    logger.warning(
-                        f"Document {i} has invalid embedding vector type: {type(doc.vector)}, skipping",
-                    )
+                    invalid_vectors += 1
                     continue
 
                 if embedding_size == 0:
-                    logger.warning(f"Document {i} has empty embedding vector, skipping")
+                    empty_vectors += 1
                     continue
 
                 embedding_sizes[embedding_size] = (
@@ -358,30 +357,75 @@ IMPORTANT FORMATTING RULES:
                 )
 
             except Exception as e:
-                logger.warning(
-                    f"Error checking embedding size for document {i}: {e!s}, skipping",
+                error_count += 1
+                logger.debug(
+                    f"Error checking embedding size for document {i}: {e!s}",
                 )
                 continue
 
+        # Log summary of issues found
+        if missing_vectors > 0:
+            logger.warning(
+                f"{missing_vectors} documents missing embedding vectors",
+                operation="validate_embeddings",
+                status="warning",
+            )
+        if invalid_vectors > 0:
+            logger.warning(
+                f"{invalid_vectors} documents with invalid vector types",
+                operation="validate_embeddings",
+                status="warning",
+            )
+        if empty_vectors > 0:
+            logger.warning(
+                f"{empty_vectors} documents with empty embedding vectors",
+                operation="validate_embeddings",
+                status="warning",
+            )
+        if error_count > 0:
+            logger.warning(
+                f"{error_count} documents had errors during validation",
+                operation="validate_embeddings",
+                status="warning",
+            )
+
         if not embedding_sizes:
-            logger.error("No valid embeddings found in any documents")
+            logger.error(
+                "No valid embeddings found in any documents",
+                operation="validate_embeddings",
+                status="error",
+                total_documents=len(documents),
+                missing_vectors=missing_vectors,
+                invalid_vectors=invalid_vectors,
+                empty_vectors=empty_vectors,
+            )
             return []
 
         # Find the most common embedding size (this should be the correct one)
         target_size = max(embedding_sizes.keys(), key=lambda k: embedding_sizes[k])
         logger.info(
             f"Target embedding size: {target_size} (found in {embedding_sizes[target_size]} documents)",
+            operation="validate_embeddings",
+            status="info",
         )
 
-        # Log all embedding sizes found
-        for size, count in embedding_sizes.items():
-            if size != target_size:
-                logger.warning(
-                    f"Found {count} documents with incorrect embedding size {size}, will be filtered out",
-                )
+        # Log all embedding sizes found (only if there are mismatches)
+        mismatched_sizes = {
+            size: count
+            for size, count in embedding_sizes.items()
+            if size != target_size
+        }
+        if mismatched_sizes:
+            logger.warning(
+                f"Found documents with mismatched embedding sizes: {mismatched_sizes}",
+                operation="validate_embeddings",
+                status="warning",
+                target_size=target_size,
+            )
 
         # Second pass: filter documents with the target embedding size
         # Keep vectors as Python lists (FAISSRetriever will handle conversion internally)
+        filtered_files: list[str] = []
         for i, doc in enumerate(documents):
             if not hasattr(doc, "vector") or doc.vector is None:
                 continue
@@ -413,35 +457,47 @@ IMPORTANT FORMATTING RULES:
                 if embedding_size == target_size:
                     valid_documents.append(doc)
                 else:
-                    # Log which document is being filtered out
+                    # Collect filtered file paths for summary logging
                     file_path = getattr(doc, "meta_data", {}).get(
                         "file_path",
                         f"document_{i}",
                     )
-                    logger.warning(
-                        f"Filtering out document '{file_path}' due to embedding size mismatch: {embedding_size} != {target_size}",
-                    )
+                    filtered_files.append(file_path)
 
             except Exception as e:
                 file_path = getattr(doc, "meta_data", {}).get(
                     "file_path",
                     f"document_{i}",
                 )
-                logger.warning(
-                    f"Error validating embedding for document '{file_path}': {e!s}, skipping",
+                logger.debug(
+                    f"Error validating embedding for document '{file_path}': {e!s}",
                 )
                 continue
 
+        # Log summary of filtering results
+        if filtered_files:
+            logger.warning(
+                f"Filtered out {len(filtered_files)} documents due to embedding size mismatch",
+                operation="validate_embeddings",
+                status="warning",
+                filtered_count=len(filtered_files),
+                sample_files=filtered_files[:5],  # Show first 5 as sample
+            )
+
         logger.info(
             f"Embedding validation complete: {len(valid_documents)}/{len(documents)} documents have valid embeddings",
+            operation="validate_embeddings",
+            status="success",
+            valid_count=len(valid_documents),
+            total_count=len(documents),
         )
 
         if len(valid_documents) == 0:
-            logger.error("No documents with valid embeddings remain after filtering")
-        elif len(valid_documents) < len(documents):
-            filtered_count = len(documents) - len(valid_documents)
-            logger.warning(
-                f"Filtered out {filtered_count} documents due to embedding issues",
+            logger.error(
+                "No documents with valid embeddings remain after filtering",
+                operation="validate_embeddings",
+                status="error",
+                total_documents=len(documents),
             )
 
         return valid_documents
@@ -737,6 +793,93 @@ IMPORTANT FORMATTING RULES:
                     original_length=len(original_query),
                     truncated_length=len(query),
                 )
+
+            # Validate embedding dimension before querying
+            # This prevents FAISS assertion errors when dimensions don't match
+            if hasattr(self, "retriever") and self.retriever is not None:
+                # Get query embedding to check dimension
+                try:
+                    query_embedding_result = self.query_embedder(query)
+                    # Handle both single string embedder and regular embedder responses
+                    if (
+                        hasattr(query_embedding_result, "data")
+                        and query_embedding_result.data
+                    ):
+                        query_embedding = query_embedding_result.data[0].embedding
+                    elif (
+                        isinstance(query_embedding_result, list)
+                        and len(query_embedding_result) > 0
+                    ):
+                        query_embedding = query_embedding_result[0]
+                    else:
+                        query_embedding = query_embedding_result
+
+                    # Get embedding dimension
+                    if isinstance(query_embedding, list):
+                        query_dim = len(query_embedding)
+                    elif hasattr(query_embedding, "shape"):
+                        query_dim = (
+                            query_embedding.shape[0]
+                            if len(query_embedding.shape) == 1
+                            else query_embedding.shape[-1]
+                        )
+                    elif hasattr(query_embedding, "__len__"):
+                        query_dim = len(query_embedding)
+                    else:
+                        query_dim = None
+
+                    # Check FAISS index dimension
+                    if (
+                        hasattr(self.retriever, "index")
+                        and self.retriever.index is not None
+                    ):
+                        index_dim = self.retriever.index.d
+                        if query_dim is not None and query_dim != index_dim:
+                            # Provide specific guidance for Ollama
+                            if self.is_ollama_embedder:
+                                embedder_config = get_embedder_config()
+                                model_name = embedder_config.get(
+                                    "model_kwargs", {}
+                                ).get("model", "unknown")
+                                error_msg = (
+                                    f"Ollama embedding dimension mismatch detected!\n"
+                                    f"  Query embedding dimension: {query_dim}\n"
+                                    f"  FAISS index dimension: {index_dim}\n"
+                                    f"  Current Ollama model: {model_name}\n\n"
+                                    f"This happens when:\n"
+                                    f"  1. The database was created with a different Ollama model\n"
+                                    f"  2. The model configuration changed (e.g., 'dimensions' parameter)\n"
+                                    f"  3. The model was updated and now produces different dimensions\n\n"
+                                    f"Solution: Rebuild the database with the current model:\n"
+                                    f"  - Delete the cached database file, or\n"
+                                    f"  - Run 'deepwiki sync' command again\n\n"
+                                    f"Note: Different Ollama models produce different embedding dimensions. "
+                                    f"Ensure you use the same model for both indexing and querying."
+                                )
+                            else:
+                                error_msg = (
+                                    f"Embedding dimension mismatch: query embedding has dimension {query_dim}, "
+                                    f"but FAISS index expects dimension {index_dim}. "
+                                    f"This usually happens when the embedder model changed. "
+                                    f"Please rebuild the database by deleting the cached database file or "
+                                    f"running sync command again."
+                                )
+                            logger.error(
+                                error_msg,
+                                operation="rag_call",
+                                status="error",
+                                query_dim=query_dim,
+                                index_dim=index_dim,
+                                embedder_type=self.embedder_type,
+                            )
+                            return []
+                except Exception as dim_check_error:
+                    logger.warning(
+                        f"Could not validate embedding dimensions before query: {dim_check_error}",
+                        operation="rag_call",
+                        status="warning",
+                    )
+                    # Continue anyway - FAISS will raise its own error if dimensions don't match
 
             retrieved_documents = self.retriever(query)
 

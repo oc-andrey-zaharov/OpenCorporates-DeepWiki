@@ -8,6 +8,7 @@ from typing import Any
 import backoff
 from adalflow.core.model_client import ModelClient
 from adalflow.core.types import EmbedderOutput, ModelType
+from adalflow.utils.registry import EntityMapping
 
 try:
     import google.generativeai as genai
@@ -250,3 +251,7 @@ class GoogleEmbedderClient(ModelClient):
         if api_kwargs is None:
             api_kwargs = {}
         return self.call(api_kwargs, model_type)
+
+
+# Register GoogleEmbedderClient with adalflow's EntityMapping for proper serialization
+EntityMapping.register("GoogleEmbedderClient", GoogleEmbedderClient)

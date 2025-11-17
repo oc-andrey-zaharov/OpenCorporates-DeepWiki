@@ -15,7 +15,7 @@ help:
 	@echo "make test/integration   Run integration tests"
 	@echo "make test/coverage      Run tests with coverage reporting"
 	@echo "make all-checks         Run format + lint + mypy + test/coverage"
-	@echo "make cli [ARGS=...]     Run the DeepWiki CLI (e.g. make cli ARGS=\"wiki list\")"
+	@echo "make cli [ARGS=...]     Run the DeepWiki CLI (e.g. make cli list or make cli ARGS=\"list\")"
 	@echo "make publish            Publish package to ocpy repository"
 	@echo "make docs               Generate documentation (if configured)"
 	@echo "make clean              Remove caches and build artifacts"
@@ -89,7 +89,12 @@ clean:
 	@find . -type d \( -name '.venv' -o -name 'venv' -o -name 'env' \) -prune -o -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
 
 cli:
-	@./deepwiki $(ARGS)
+	@./deepwiki $(if $(ARGS),$(ARGS),$(filter-out $@,$(MAKECMDGOALS)))
+
+# Catch-all target to prevent Make from complaining about unknown targets
+# when using make cli <command>
+%:
+	@:
 
 publish:
 	@if [ -f tmp/.env_credentials ]; then \

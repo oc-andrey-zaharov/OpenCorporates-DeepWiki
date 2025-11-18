@@ -37,6 +37,7 @@ class TestGenerateMarkdownExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
+                metadata={"summary": "Overview", "keywords": ["core"]},
             ),
         ]
 
@@ -47,6 +48,8 @@ class TestGenerateMarkdownExport:
         assert "## Page 1" in result
         assert "Content of page 1" in result
         assert "Table of Contents" in result
+        assert "### Metadata" in result
+        assert "Overview" in result
 
     def test_generate_markdown_export_multiple_pages(self) -> None:
         """Test generating markdown export with multiple pages."""
@@ -183,6 +186,7 @@ class TestGenerateJsonExport:
                 filePaths=["file1.py"],
                 importance="high",
                 relatedPages=[],
+                metadata={"summary": "Intro"},
             ),
         ]
 
@@ -196,6 +200,7 @@ class TestGenerateJsonExport:
         assert len(data["pages"]) == 1
         assert data["pages"][0]["id"] == "page1"
         assert data["pages"][0]["title"] == "Page 1"
+        assert data["pages"][0]["metadata"]["summary"] == "Intro"
 
     def test_generate_json_export_multiple_pages(self) -> None:
         """Test generating JSON export with multiple pages."""

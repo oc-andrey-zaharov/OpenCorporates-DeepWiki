@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
+
 from deepwiki_cli.services.rag import RAG
 
 if TYPE_CHECKING:
@@ -74,6 +76,7 @@ class WikiGenerationContext:
         self,
         messages: list[dict[str, str]],
         *,
+        structured_schema: type[BaseModel] | None = None,
         file_path: str | None = None,
     ) -> Generator[str]:
         """Yield completion chunks using the cached retriever."""
@@ -85,6 +88,7 @@ class WikiGenerationContext:
             provider=self.provider,
             model=self.model,
             repo_type=self.repo_type,
+            structured_schema=structured_schema,
             token=self.token,
             excluded_dirs=self.excluded_dirs,
             excluded_files=self.excluded_files,

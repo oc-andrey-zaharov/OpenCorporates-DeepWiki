@@ -19,6 +19,7 @@ from adalflow.core.types import (
     Usage,
 )
 from requests.exceptions import RequestException
+from pydantic import BaseModel, ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -155,6 +156,66 @@ class OpenRouterClient(ModelClient):
         raise ValueError(
             f"Synchronous call not supported for model type: {model_type}",
         )
+
+    def call_structured(
+        self,
+        *,
+        schema: type[BaseModel],
+        messages: list[dict[str, Any]],
+        model_kwargs: dict | None = None,
+    ) -> BaseModel:
+        """Execute a non-streaming chat completion and parse it into the schema."""
+        if not messages:
+            raise ValueError("messages must be provided for structured calls")
+        model_kwargs = model_kwargs or {}
+        if not self.sync_client:
+            self.sync_client = self.init_sync_client()
+        api_key = self.sync_client.get("api_key") if self.sync_client else None
+        if not api_key:
+            raise ValueError(
+                "OPENROUTER_API_KEY not configured. Please set this environment variable.",
+            )
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/AsyncFuncAI/deepwiki-open",
+            "X-Title": "DeepWiki",
+        }
+        payload = {
+            "model": model_kwargs.get("model", "openai/gpt-4o-mini"),
+            "messages": messages,
+            "stream": False,
+        }
+        if "temperature" in model_kwargs:
+            payload["temperature"] = model_kwargs["temperature"]
+        if "top_p" in model_kwargs:
+            payload["top_p"] = model_kwargs["top_p"]
+
+        response = requests.post(
+            f"{self.sync_client['base_url']}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if isinstance(content, list):
+            combined = []
+            for fragment in content:
+                if isinstance(fragment, dict) and fragment.get("type") == "text":
+                    combined.append(fragment.get("text", ""))
+            content = "".join(combined)
+
+        if not isinstance(content, str):
+            content = str(content)
+
+        try:
+            return schema.model_validate_json(content)
+        except ValidationError as exc:
+            log.error("OpenRouter structured response validation failed: %s", exc)
+            raise
 
     @backoff.on_exception(
         backoff.expo,
@@ -307,6 +368,7 @@ class OpenRouterClient(ModelClient):
                     api_kwargs.get("model"),
                 )
             raise
+
     def _ensure_payload_dict(self, response: Any) -> dict[str, Any]:
         """Normalize various response types to a dictionary."""
         if isinstance(response, requests.Response):
@@ -560,262 +622,30 @@ class OpenRouterClient(ModelClient):
 
                         # Create a generator that yields the content
 
-                    async def content_generator() -> AsyncGenerator[str]:
-                        if "choices" in data and len(data["choices"]) > 0:
-                            choice = data["choices"][0]
-                            if "message" in choice and "content" in choice["message"]:
-                                content = choice["message"]["content"]
-                                log.info("Successfully retrieved response")
-
-                                # Check if the content is XML and ensure it's properly formatted
-                                if content.strip().startswith("<") and ">" in content:
-                                    # It's likely XML, let's make sure it's properly formatted
-                                    try:
-                                        # Extract the XML content
-                                        xml_content = content
-
-                                        # Check if it's a wiki_structure XML
-                                        if "<wiki_structure>" in xml_content:
-                                            log.info(
-                                                "Found wiki_structure XML, ensuring proper format",
-                                            )
-
-                                            # Extract just the wiki_structure XML
-                                            import re
-
-                                            wiki_match = re.search(
-                                                r"<wiki_structure>[\s\S]*?<\/wiki_structure>",
-                                                xml_content,
-                                            )
-                                            if wiki_match:
-                                                # Get the raw XML
-                                                raw_xml = wiki_match.group(0)
-
-                                                # Clean the XML by removing any leading/trailing whitespace
-                                                # and ensuring it's properly formatted
-                                                clean_xml = raw_xml.strip()
-
-                                                # Try to fix common XML issues
-                                                try:
-                                                    # Replace problematic characters in XML
-                                                    fixed_xml = clean_xml
-
-                                                    # Replace & with &amp; if not already part of an entity
-                                                    fixed_xml = re.sub(
-                                                        r"&(?!amp;|lt;|gt;|apos;|quot;)",
-                                                        "&amp;",
-                                                        fixed_xml,
-                                                    )
-
-                                                    # Fix other common XML issues
-                                                    fixed_xml = fixed_xml.replace(
-                                                        "</",
-                                                        "</",
-                                                    ).replace("  >", ">")
-
-                                                    # Try to parse the fixed XML
-                                                    from xml.dom.minidom import (
-                                                        parseString,
-                                                    )
-
-                                                    dom = parseString(fixed_xml)
-
-                                                    # Get the pretty-printed XML with proper indentation
-                                                    pretty_xml = dom.toprettyxml()
-
-                                                    # Remove XML declaration
-                                                    if pretty_xml.startswith(
-                                                        "<?xml",
-                                                    ):
-                                                        pretty_xml = pretty_xml[
-                                                            pretty_xml.find(
-                                                                "?>",
-                                                            )
-                                                            + 2 :
-                                                        ].strip()
-
-                                                    log.info(
-                                                        f"Extracted and validated XML: {pretty_xml[:100]}...",
-                                                    )
-                                                    yield pretty_xml
-                                                except Exception as xml_parse_error:
-                                                    log.warning(
-                                                        f"XML validation failed: {xml_parse_error!s}, using raw XML",
-                                                    )
-
-                                                    # If XML validation fails, try a more aggressive approach
-                                                    try:
-                                                        # Use regex to extract just the structure without any problematic characters
-                                                        import re
-
-                                                        # Extract the basic structure
-                                                        structure_match = re.search(
-                                                            r"<wiki_structure>(.*?)</wiki_structure>",
-                                                            clean_xml,
-                                                            re.DOTALL,
-                                                        )
-                                                        if structure_match:
-                                                            structure = (
-                                                                structure_match.group(
-                                                                    1,
-                                                                ).strip()
-                                                            )
-
-                                                            # Rebuild a clean XML structure
-                                                            clean_structure = (
-                                                                "<wiki_structure>\n"
-                                                            )
-
-                                                            # Extract title
-                                                            title_match = re.search(
-                                                                r"<title>(.*?)</title>",
-                                                                structure,
-                                                                re.DOTALL,
-                                                            )
-                                                            if title_match:
-                                                                title = (
-                                                                    title_match.group(
-                                                                        1,
-                                                                    ).strip()
-                                                                )
-                                                                clean_structure += f"  <title>{title}</title>\n"
-
-                                                            # Extract description
-                                                            desc_match = re.search(
-                                                                r"<description>(.*?)</description>",
-                                                                structure,
-                                                                re.DOTALL,
-                                                            )
-                                                            if desc_match:
-                                                                desc = desc_match.group(
-                                                                    1,
-                                                                ).strip()
-                                                                clean_structure += f"  <description>{desc}</description>\n"
-
-                                                            # Add pages section
-                                                            clean_structure += (
-                                                                "  <pages>\n"
-                                                            )
-
-                                                            # Extract pages
-                                                            pages = re.findall(
-                                                                r'<page id="(.*?)">(.*?)</page>',
-                                                                structure,
-                                                                re.DOTALL,
-                                                            )
-                                                            for (
-                                                                page_id,
-                                                                page_content,
-                                                            ) in pages:
-                                                                clean_structure += f'    <page id="{page_id}">\n'
-
-                                                                # Extract page title
-                                                                page_title_match = re.search(
-                                                                    r"<title>(.*?)</title>",
-                                                                    page_content,
-                                                                    re.DOTALL,
-                                                                )
-                                                                if page_title_match:
-                                                                    page_title = page_title_match.group(
-                                                                        1,
-                                                                    ).strip()
-                                                                    clean_structure += f"      <title>{page_title}</title>\n"
-
-                                                                # Extract page description
-                                                                page_desc_match = re.search(
-                                                                    r"<description>(.*?)</description>",
-                                                                    page_content,
-                                                                    re.DOTALL,
-                                                                )
-                                                                if page_desc_match:
-                                                                    page_desc = page_desc_match.group(
-                                                                        1,
-                                                                    ).strip()
-                                                                    clean_structure += f"      <description>{page_desc}</description>\n"
-
-                                                                # Extract importance
-                                                                importance_match = re.search(
-                                                                    r"<importance>(.*?)</importance>",
-                                                                    page_content,
-                                                                    re.DOTALL,
-                                                                )
-                                                                if importance_match:
-                                                                    importance = importance_match.group(
-                                                                        1,
-                                                                    ).strip()
-                                                                    clean_structure += f"      <importance>{importance}</importance>\n"
-
-                                                                # Extract relevant files
-                                                                clean_structure += "      <relevant_files>\n"
-                                                                file_paths = re.findall(
-                                                                    r"<file_path>(.*?)</file_path>",
-                                                                    page_content,
-                                                                    re.DOTALL,
-                                                                )
-                                                                for (
-                                                                    file_path
-                                                                ) in file_paths:
-                                                                    clean_structure += f"        <file_path>{file_path.strip()}</file_path>\n"
-                                                                clean_structure += "      </relevant_files>\n"
-
-                                                                # Extract related pages
-                                                                clean_structure += "      <related_pages>\n"
-                                                                related_pages = re.findall(
-                                                                    r"<related>(.*?)</related>",
-                                                                    page_content,
-                                                                    re.DOTALL,
-                                                                )
-                                                                for (
-                                                                    related
-                                                                ) in related_pages:
-                                                                    clean_structure += f"        <related>{related.strip()}</related>\n"
-                                                                clean_structure += "      </related_pages>\n"
-
-                                                                clean_structure += (
-                                                                    "    </page>\n"
-                                                                )
-
-                                                            clean_structure += "  </pages>\n</wiki_structure>"
-
-                                                            log.info(
-                                                                "Successfully rebuilt clean XML structure",
-                                                            )
-                                                            yield clean_structure
-                                                        else:
-                                                            log.warning(
-                                                                "Could not extract wiki structure, using raw XML",
-                                                            )
-                                                            yield clean_xml
-                                                    except Exception as rebuild_error:
-                                                        log.warning(
-                                                            f"Failed to rebuild XML: {rebuild_error!s}, using raw XML",
-                                                        )
-                                                        yield clean_xml
-                                            else:
-                                                # If we can't extract it, just yield the original content
-                                                log.warning(
-                                                    "Could not extract wiki_structure XML, yielding original content",
-                                                )
-                                                yield xml_content
+                        async def content_generator() -> AsyncGenerator[str]:
+                            if "choices" in data and data["choices"]:
+                                choice = data["choices"][0]
+                                message = choice.get("message", {})
+                                content = message.get("content")
+                                if isinstance(content, list):
+                                    flattened: list[str] = []
+                                    for part in content:
+                                        if isinstance(part, dict):
+                                            flattened.append(str(part.get("text", "")))
                                         else:
-                                            # For other XML content, just yield it as is
-                                            yield content
-                                    except Exception as xml_error:
-                                        log.exception(
-                                            f"Error processing XML content: {xml_error!s}",
-                                        )
-                                        yield content
-                                else:
-                                    # Not XML, just yield the content
+                                            flattened.append(str(part))
+                                    content = "".join(flattened)
+                                if isinstance(content, str) and content.strip():
+                                    log.info("Successfully retrieved response")
                                     yield content
-                            else:
+                                    return
                                 log.error(f"Unexpected response format: {data}")
                                 yield "Error: Unexpected response format from OpenRouter API"
-                        else:
+                                return
                             log.error(f"No choices in response: {data}")
                             yield "Error: No response content from OpenRouter API"
 
-                    return content_generator()
+                        return content_generator()
             except aiohttp.ClientError as e:
                 e_client = e
                 log.exception(

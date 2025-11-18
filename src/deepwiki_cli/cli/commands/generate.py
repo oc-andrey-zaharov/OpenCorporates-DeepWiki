@@ -7,9 +7,10 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import click
+from pydantic import ValidationError
 
 from deepwiki_cli.application.repository.change_detection import (
     build_snapshot_from_local,
@@ -38,10 +39,12 @@ from deepwiki_cli.domain.models import (
     WikiPage,
     WikiStructureModel,
 )
+from deepwiki_cli.domain.schemas import WikiPageSchema, WikiStructureSchema
 from deepwiki_cli.infrastructure.clients.github.client import (
     get_github_repo_structure_standalone as get_github_repo_structure,
 )
-from deepwiki_cli.infrastructure.config.settings import GITHUB_TOKEN
+from deepwiki_cli.infrastructure.config import get_model_config
+from deepwiki_cli.infrastructure.config.settings import CLIENT_CLASSES, GITHUB_TOKEN
 from deepwiki_cli.infrastructure.prompts.builders import (
     build_wiki_page_prompt,
     build_wiki_structure_prompt,
@@ -69,7 +72,11 @@ except ValueError:
 
 
 class WikiStructureParseError(ValueError):
-    """Raised when the wiki structure XML cannot be parsed."""
+    """Raised when the structured wiki response cannot be parsed."""
+
+
+class WikiPageParseError(ValueError):
+    """Raised when a generated wiki page cannot be parsed."""
 
 
 @dataclass
@@ -454,7 +461,13 @@ def generate_page_content_sync(
         # Create the prompt (matching web UI exactly for quality)
         file_paths_list = "\n".join([f"- [{path}]" for path in page.filePaths])
 
-        prompt = build_wiki_page_prompt(page_title, file_paths_list)
+        prompt = build_wiki_page_prompt(
+            page_title,
+            file_paths_list,
+            page_id=page_id,
+            importance=page.importance,
+            related_pages=page.relatedPages,
+        )
 
         if extra_feedback:
             prompt += "\nUser feedback and guidance:\n" + extra_feedback.strip() + "\n"
@@ -467,17 +480,20 @@ def generate_page_content_sync(
         page_bar.update(50)  # Request sent
 
         # Collect streamed content with incremental progress updates
-        content = ""
+        raw_response = ""
         chunk_count = 0
         start_time = time.time()
         last_update_time = start_time
         last_progress = 50
 
         try:
-            stream = generation_context.stream_completion(messages=messages)
+            stream = generation_context.stream_completion(
+                messages=messages,
+                structured_schema=WikiPageSchema,
+            )
             for chunk in stream:
                 if chunk:
-                    content += chunk if isinstance(chunk, str) else str(chunk)
+                    raw_response += chunk if isinstance(chunk, str) else str(chunk)
                 chunk_count += 1
                 current_time = time.time()
                 elapsed = current_time - start_time
@@ -515,15 +531,30 @@ def generate_page_content_sync(
             if page_bar.count < 90:
                 page_bar.update(90 - page_bar.count)
 
-            # Clean up content
-            content = content.strip()
+            try:
+                schema_response = _parse_wiki_page_json(raw_response)
+            except WikiPageParseError as parse_exc:
+                logger.error(
+                    "Failed to parse wiki page %s: %s",
+                    page_id,
+                    parse_exc,
+                )
+                _dump_failed_page_response(raw_response)
+                raise
+
+            content = schema_response.content.strip()
             if content.startswith("```markdown"):
                 content = content[len("```markdown") :].strip()
             if content.endswith("```"):
                 content = content[:-3].strip()
 
-            # Update page
+            # Update page with parsed data
             page.content = content
+            page.metadata = schema_response.metadata.model_dump()
+            if schema_response.metadata.related_page_ids:
+                page.relatedPages = schema_response.metadata.related_page_ids
+            if schema_response.metadata.referenced_files:
+                page.filePaths = schema_response.metadata.referenced_files
 
             page_bar.update(100)  # Complete
             progress_manager.complete_page(page_id)
@@ -531,7 +562,7 @@ def generate_page_content_sync(
             logger.exception(f"Error generating page {page_title}: {e}")
             return None
 
-        if not content:
+        if not page.content:
             logger.warning(f"No content generated for page {page_title}")
             return None
 
@@ -543,8 +574,8 @@ def generate_page_content_sync(
         return None
 
 
-def _dump_failed_structure_response(xml_content: str) -> None:
-    """Persist raw XML to a temp file for debugging."""
+def _dump_failed_structure_response(raw_content: str) -> None:
+    """Persist raw structured output to a temp file for debugging."""
     import tempfile
 
     debug_file = os.path.join(
@@ -553,130 +584,192 @@ def _dump_failed_structure_response(xml_content: str) -> None:
     )
     try:
         with open(debug_file, "w", encoding="utf-8") as handle:
-            handle.write(xml_content)
+            handle.write(raw_content)
         logger.error("Full response saved to: %s", debug_file)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.exception("Failed to save debug file: %s", exc)
 
 
-def _parse_wiki_structure_xml(xml_content: str) -> WikiStructureModel:
-    """Parse XML returned by the LLM into a WikiStructureModel."""
-    import html
-    import re
-    import xml.etree.ElementTree as ET
+def _strip_code_fence(raw_content: str) -> str:
+    """Remove common markdown fences from model output."""
+    stripped = raw_content.strip()
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1 :]
+        stripped = stripped.strip()
+        if stripped.endswith("```"):
+            stripped = stripped[: stripped.rfind("```")].strip()
+    return stripped
 
-    xml_content = xml_content.strip()
-    logger.debug("Raw response length: %s", len(xml_content))
-    logger.debug("First 500 chars: %s", xml_content[:500])
-    logger.debug("Last 500 chars: %s", xml_content[-500:])
 
-    if xml_content.startswith(("```xml", "```")):
-        xml_content = xml_content.split("\n", 1)[1] if "\n" in xml_content else ""
-    if xml_content.endswith("```"):
-        xml_content = xml_content.rsplit("\n", 1)[0] if "\n" in xml_content else ""
-
-    xml_match = re.search(
-        r"<wiki_structure>.*?</wiki_structure>",
-        xml_content,
-        re.DOTALL,
-    )
-    if not xml_match:
-        xml_match = re.search(
-            r"<wiki_structure>.*",
-            xml_content,
-            re.DOTALL,
+def _schema_to_model(structure_schema: WikiStructureSchema) -> WikiStructureModel:
+    """Convert schema response to the runtime wiki structure model."""
+    pages = [
+        WikiPage(
+            id=page.page_id,
+            title=page.title,
+            content="",
+            filePaths=page.relevant_files,
+            importance=page.importance,
+            relatedPages=page.related_page_ids,
         )
-        if xml_match:
-            logger.warning(
-                "Found opening <wiki_structure> tag but no closing tag - response may be incomplete",
-            )
-    if not xml_match:
-        xml_match = re.search(
-            r"<wiki_structure>.*?</wiki_structure>",
-            xml_content,
-            re.DOTALL | re.IGNORECASE,
-        )
-    if not xml_match:
-        raise WikiStructureParseError("No <wiki_structure> block found in response")
-
-    xml_text = xml_match.group(0)
-    if not xml_text.strip().endswith("</wiki_structure>"):
-        logger.warning("XML structure appears incomplete, attempting to close it")
-        xml_text += "\n</wiki_structure>"
-
-    xml_text = html.unescape(xml_text)
-    xml_text = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", xml_text)
-
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as exc:
-        raise WikiStructureParseError(f"XML parsing failed: {exc}") from exc
-
-    title_el = root.find("title")
-    title = title_el.text if title_el is not None and title_el.text else "Wiki"
-    description_el = root.find("description")
-    description = (
-        description_el.text if description_el is not None and description_el.text else ""
-    )
-    pages: list[WikiPage] = []
-    pages_el = root.find("pages")
-    if pages_el is not None:
-        for page_el in pages_el.findall("page"):
-            page_id = page_el.get("id", f"page-{len(pages) + 1}")
-            page_title_el = page_el.find("title")
-            page_title = (
-                page_title_el.text
-                if page_title_el is not None and page_title_el.text
-                else "Untitled"
-            )
-            importance_el = page_el.find("importance")
-            importance_text = (
-                importance_el.text
-                if importance_el is not None and importance_el.text
-                else "medium"
-            )
-            importance_lower = (
-                importance_text.lower() if importance_text else "medium"
-            )
-            importance = (
-                importance_lower
-                if importance_lower in ["high", "medium", "low"]
-                else "medium"
-            )
-            file_paths: list[str] = []
-            relevant_files_el = page_el.find("relevant_files")
-            if relevant_files_el is not None:
-                for fp in relevant_files_el.findall("file_path"):
-                    if fp.text:
-                        file_paths.append(fp.text.strip())
-            related_pages: list[str] = []
-            related_pages_el = page_el.find("related_pages")
-            if related_pages_el is not None:
-                for rel in related_pages_el.findall("related"):
-                    if rel.text:
-                        related_pages.append(rel.text.strip())
-            pages.append(
-                WikiPage(
-                    id=page_id,
-                    title=page_title,
-                    content="",
-                    filePaths=file_paths,
-                    importance=importance,
-                    relatedPages=related_pages,
-                ),
-            )
-
+        for page in structure_schema.pages
+    ]
     if not pages:
         raise WikiStructureParseError("No pages found in wiki structure")
 
     return WikiStructureModel(
         id="wiki",
-        title=title,
-        description=description,
+        title=structure_schema.title,
+        description=structure_schema.description,
         pages=pages,
         sections=[],
         rootSections=[],
     )
+
+
+def _parse_wiki_structure_json(raw_content: str) -> WikiStructureSchema:
+    """Parse JSON returned by the LLM into a WikiStructureSchema."""
+    stripped = _strip_code_fence(raw_content)
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start == -1 or end == -1 or start >= end:
+        raise WikiStructureParseError("Structured JSON block not found in response")
+    json_payload = stripped[start : end + 1]
+    logger.debug("Structured JSON candidate: %s", json_payload[:500])
+    try:
+        return WikiStructureSchema.model_validate_json(json_payload)
+    except ValidationError as exc:
+        raise WikiStructureParseError(f"JSON parsing failed: {exc}") from exc
+
+
+def _dump_failed_page_response(raw_content: str) -> None:
+    """Persist raw wiki page output to disk for debugging."""
+    import tempfile
+
+    debug_file = os.path.join(
+        tempfile.gettempdir(),
+        f"deepwiki_page_debug_{os.getpid()}.txt",
+    )
+    try:
+        with open(debug_file, "w", encoding="utf-8") as handle:
+            handle.write(raw_content)
+        logger.error("Full page response saved to: %s", debug_file)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to save page debug file: %s", exc)
+
+
+def _parse_wiki_page_json(raw_content: str) -> WikiPageSchema:
+    """Parse JSON returned by the LLM into a WikiPageSchema."""
+    stripped = _strip_code_fence(raw_content)
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start == -1 or end == -1 or start >= end:
+        raise WikiPageParseError("Structured JSON block not found in response")
+    json_payload = stripped[start : end + 1]
+    try:
+        return WikiPageSchema.model_validate_json(json_payload)
+    except ValidationError as exc:
+        sanitized = _sanitize_page_json(json_payload)
+        if sanitized is None:
+            raise WikiPageParseError(f"Page JSON parsing failed: {exc}") from exc
+        logger.warning(
+            "Recovered malformed JSON content by escaping embedded quotes.",
+            extra={"problem_field": "content"},
+        )
+        try:
+            return WikiPageSchema.model_validate_json(sanitized)
+        except ValidationError as sanitized_exc:  # pragma: no cover - defensive
+            raise WikiPageParseError(
+                f"Page JSON parsing failed: {sanitized_exc}",
+            ) from sanitized_exc
+
+
+def _sanitize_page_json(json_payload: str) -> str | None:
+    """Escape embedded quotes inside the content field when providers omit escaping."""
+    try:
+        import json
+
+        json.loads(json_payload)
+        return json_payload
+    except Exception:  # pragma: no cover - only triggered on invalid JSON
+        pass
+
+    marker = '"content": "'
+    if marker not in json_payload:
+        return None
+    try:
+        prefix, remainder = json_payload.split(marker, 1)
+        content_raw, suffix = remainder.rsplit('"\n}', 1)
+    except ValueError:
+        return None
+    import json as _json
+
+    escaped = _json.dumps(content_raw)
+    return prefix + '"content": ' + escaped + "\n}" + suffix
+
+
+def _structured_client_for(provider: str, model: str):
+    """Instantiate a provider client when structured calls are supported."""
+    model_config = get_model_config(provider, model)
+    client_name = model_config.get("model_client")
+    client_cls = CLIENT_CLASSES.get(client_name)
+    if not client_cls:
+        return None, model_config
+    client = client_cls()
+    if not hasattr(client, "call_structured"):
+        return None, model_config
+    return client, model_config
+
+
+def _call_structured_wiki_schema(
+    provider: str,
+    model: str,
+    messages: list[dict[str, Any]],
+) -> WikiStructureSchema | None:
+    """Call provider-specific structured output if supported."""
+    client, model_config = _structured_client_for(provider, model)
+    if client is None:
+        return None
+    call_fn: Callable[..., WikiStructureSchema] = getattr(client, "call_structured")
+    return call_fn(
+        schema=WikiStructureSchema,
+        messages=messages,
+        model_kwargs=model_config.get("model_kwargs"),
+    )
+
+
+def _stream_structure_response(
+    prompt: str,
+    repo_url: str,
+    provider: str,
+    model: str,
+    repo_type: str,
+    generation_context: WikiGenerationContext | None,
+) -> str:
+    """Fallback streaming request for providers lacking structured APIs."""
+    if generation_context:
+        stream = generation_context.stream_completion(
+            messages=[{"role": "user", "content": prompt}],
+        )
+    else:
+        from deepwiki_cli.application.wiki.generate_content import generate_wiki_content
+
+        stream = generate_wiki_content(
+            repo_url=repo_url,
+            messages=[{"role": "user", "content": prompt}],
+            provider=provider,
+            model=model,
+            repo_type=repo_type,
+            structured_schema=None,
+        )
+
+    aggregated = ""
+    for chunk in stream:
+        if chunk:
+            aggregated += chunk if isinstance(chunk, str) else str(chunk)
+    return aggregated
 
 
 def generate_wiki_structure(
@@ -725,33 +818,27 @@ def generate_wiki_structure(
     )
 
     max_attempts = max(1, WIKI_STRUCTURE_MAX_ATTEMPTS)
+    messages = [{"role": "user", "content": prompt}]
     for attempt in range(1, max_attempts + 1):
-        xml_content = ""
+        raw_content = ""
         try:
-            if generation_context:
-                stream = generation_context.stream_completion(
-                    messages=[{"role": "user", "content": prompt}],
-                )
-            else:
-                from deepwiki_cli.application.wiki.generate_content import (
-                    generate_wiki_content,
-                )
-
-                stream = generate_wiki_content(
+            schema_response = _call_structured_wiki_schema(
+                provider=provider,
+                model=model,
+                messages=messages,
+            )
+            if schema_response is None:
+                raw_content = _stream_structure_response(
+                    prompt=prompt,
                     repo_url=repo_url,
-                    messages=[{"role": "user", "content": prompt}],
                     provider=provider,
                     model=model,
                     repo_type=repo_type,
+                    generation_context=generation_context,
                 )
-
-            for chunk in stream:
-                if chunk:
-                    xml_content += chunk if isinstance(chunk, str) else str(chunk)
-
-            structure = _parse_wiki_structure_xml(xml_content)
-            return structure
-        except WikiStructureParseError as parse_error:
+                schema_response = _parse_wiki_structure_json(raw_content)
+            return _schema_to_model(schema_response)
+        except (WikiStructureParseError, ValidationError) as parse_error:
             is_last = attempt >= max_attempts
             log_fn = logger.error if is_last else logger.warning
             log_fn(
@@ -761,7 +848,7 @@ def generate_wiki_structure(
                 parse_error,
             )
             if is_last:
-                _dump_failed_structure_response(xml_content)
+                _dump_failed_structure_response(raw_content)
                 return None
         except Exception as exc:
             is_last = attempt >= max_attempts

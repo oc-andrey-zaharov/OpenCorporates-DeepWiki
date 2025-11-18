@@ -59,26 +59,6 @@
         }
       }
     },
-    "ollama": {
-      "default_model": "qwen3:1.7b",
-      "supportsCustomModel": true,
-      "models": {
-        "qwen3:1.7b": {
-          "options": {
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "num_ctx": 32000
-          }
-        },
-        "qwen3:8b": {
-          "options": {
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "num_ctx": 32000
-          }
-        }
-      }
-    },
     "bedrock": {
       "client_class": "BedrockClient",
       "default_model": "anthropic.claude-3-sonnet-20240229-v1:0",

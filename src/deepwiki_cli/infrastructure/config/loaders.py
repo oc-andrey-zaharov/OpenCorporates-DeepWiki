@@ -6,11 +6,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from adalflow import GoogleGenAIClient, OllamaClient
+from adalflow import GoogleGenAIClient
 from returns.result import Failure, Result, Success
 
 # Import client classes for mapping
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
+from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 from deepwiki_cli.infrastructure.config.settings import (
@@ -169,14 +170,14 @@ def load_generator_config() -> dict[str, Any]:
                 "google",
                 "openai",
                 "openrouter",
-                "ollama",
+                "lmstudio",
                 "bedrock",
             ]:
                 default_map = {
                     "google": GoogleGenAIClient,
                     "openai": OpenAIClient,
                     "openrouter": OpenRouterClient,
-                    "ollama": OllamaClient,
+                    "lmstudio": LMStudioClient,
                     "bedrock": BedrockClient,
                 }
                 provider_config["model_client"] = default_map[provider_id]
@@ -200,7 +201,7 @@ def load_embedder_config() -> dict[str, Any]:
 
     Example:
         >>> config = load_embedder_config()
-        >>> "embedder" in config or "embedder_ollama" in config
+        >>> "embedder" in config or "embedder_lmstudio" in config
         True
     """
     result = load_json_config("embedder.json")
@@ -209,7 +210,7 @@ def load_embedder_config() -> dict[str, Any]:
     # Process client classes
     for key in [
         "embedder_openai",
-        "embedder_ollama",
+        "embedder_lmstudio",
         "embedder_openrouter",
     ]:
         if key in embedder_config and "client_class" in embedder_config[key]:

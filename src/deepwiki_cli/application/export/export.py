@@ -49,6 +49,22 @@ def generate_markdown_export(repo_url: str, pages: list[WikiPage]) -> str:
 
         # Add page content
         markdown += f"{page.content}\n\n"
+        metadata = getattr(page, "metadata", None) or {}
+        if metadata:
+            markdown += "### Metadata\n\n"
+            summary = metadata.get("summary")
+            if summary:
+                markdown += f"- **Summary:** {summary}\n"
+            keywords = metadata.get("keywords")
+            if keywords:
+                markdown += "- **Keywords:** " + ", ".join(keywords) + "\n"
+            referenced = metadata.get("referenced_files")
+            if referenced:
+                markdown += "- **Referenced Files:** " + ", ".join(referenced) + "\n"
+            diagrams = metadata.get("diagram_types")
+            if diagrams:
+                markdown += "- **Diagram Types:** " + ", ".join(diagrams) + "\n"
+            markdown += "\n"
         markdown += "---\n\n"
 
     return markdown
@@ -79,5 +95,3 @@ def generate_json_export(repo_url: str, pages: list[WikiPage]) -> str:
 
 
 __all__ = ["generate_json_export", "generate_markdown_export"]
-
-

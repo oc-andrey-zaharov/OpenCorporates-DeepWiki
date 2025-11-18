@@ -22,6 +22,7 @@ def _build_pages() -> list[WikiPage]:
         filePaths=["README.md"],
         importance="high",
         relatedPages=["setup"],
+        metadata={"summary": "Overview", "keywords": ["overview"]},
     )
     page_two = WikiPage(
         id="setup",
@@ -30,6 +31,7 @@ def _build_pages() -> list[WikiPage]:
         filePaths=["setup.md"],
         importance="medium",
         relatedPages=[],
+        metadata={"summary": "Setup", "keywords": ["setup"]},
     )
     return [page_one, page_two]
 
@@ -89,6 +91,7 @@ def test_export_and_sync_multi_layout(tmp_path: Path):
     exported_file = Path(manifest.root_dir) / first_page.relative_path
 
     original_text = exported_file.read_text(encoding="utf-8")
+    assert "<!-- deepwiki-metadata:start -->" in original_text
     updated_text = original_text.replace(
         "Original overview content.",
         "Updated overview content with more detail.",

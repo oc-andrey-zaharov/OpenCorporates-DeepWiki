@@ -2,15 +2,16 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-import structlog
-from adalflow import GoogleGenAIClient, OllamaClient
+from deepwiki_cli.shared.structlog import structlog
+from adalflow import GoogleGenAIClient
 from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
+from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 
@@ -105,8 +106,12 @@ class Config(BaseSettings):
         aws_region: AWS region for AWS services.
         aws_role_arn: AWS role ARN for assuming roles.
         github_token: GitHub token for repository access.
-        embedder_type: Type of embedder to use (openai, ollama, openrouter).
+        embedder_type: Type of embedder to use (openai, lmstudio, openrouter).
         config_dir: Optional directory path for configuration files.
+        toon_cli_path: Path to the TOON CLI binary (optional).
+        toon_enabled: Whether TOON conversion is enabled.
+        use_json_compact: Toggle for compact JSON serialization by default.
+        format_preference: Preferred serialization format when multiple are available.
 
     Example:
         >>> config = Config()
@@ -128,6 +133,22 @@ class Config(BaseSettings):
         validation_alias="DEEPWIKI_EMBEDDER_TYPE",
     )  # type: ignore[call-overload]
     config_dir: str | None = Field(default=None, env="DEEPWIKI_CONFIG_DIR")  # type: ignore[call-overload]
+    toon_cli_path: str | None = Field(
+        default=None,
+        env="TOON_CLI_PATH",
+    )  # type: ignore[call-overload]
+    toon_enabled: bool = Field(
+        default=False,
+        env="TOON_ENABLED",
+    )  # type: ignore[call-overload]
+    use_json_compact: bool = Field(
+        default=True,
+        env="USE_JSON_COMPACT",
+    )  # type: ignore[call-overload]
+    format_preference: Literal["json", "json-compact", "toon"] = Field(
+        default="json-compact",
+        env="FORMAT_PREFERENCE",
+    )  # type: ignore[call-overload]
 
     class Config:
         """Pydantic configuration."""
@@ -160,6 +181,8 @@ class Config(BaseSettings):
             os.environ["AWS_REGION"] = self.aws_region
         if self.aws_role_arn:
             os.environ["AWS_ROLE_ARN"] = self.aws_role_arn
+        if self.toon_cli_path:
+            os.environ["TOON_CLI_PATH"] = self.toon_cli_path
 
 
 # Client class mapping
@@ -167,7 +190,7 @@ CLIENT_CLASSES = {
     "GoogleGenAIClient": GoogleGenAIClient,
     "OpenAIClient": OpenAIClient,
     "OpenRouterClient": OpenRouterClient,
-    "OllamaClient": OllamaClient,
+    "LMStudioClient": LMStudioClient,
     "BedrockClient": BedrockClient,
 }
 
@@ -201,6 +224,10 @@ AWS_ROLE_ARN = _config_instance[0].aws_role_arn
 GITHUB_TOKEN = _config_instance[0].github_token
 # EMBEDDER_TYPE reads dynamically from _config to support module reloads
 CONFIG_DIR = _config_instance[0].config_dir
+TOON_CLI_PATH = _config_instance[0].toon_cli_path
+TOON_ENABLED = _config_instance[0].toon_enabled
+USE_JSON_COMPACT = _config_instance[0].use_json_compact
+FORMAT_PREFERENCE = _config_instance[0].format_preference
 
 
 # Use __getattr__ to make EMBEDDER_TYPE read dynamically from _config

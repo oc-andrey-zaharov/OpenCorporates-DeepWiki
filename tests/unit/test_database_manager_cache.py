@@ -67,7 +67,7 @@ def test_prepare_db_index_recovers_from_missing_module(
         docs: list[Document],
         db_path: str,
         embedder_type: str | None = None,
-        is_ollama_embedder: bool | None = None,
+        is_lmstudio_embedder: bool | None = None,
     ) -> DummyDB:
         return DummyDB(docs)
 

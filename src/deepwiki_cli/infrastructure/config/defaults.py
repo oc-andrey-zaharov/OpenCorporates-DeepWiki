@@ -155,5 +155,3 @@ DEFAULT_EXCLUDED_FILES: list[str] = [
     ".devcontainer",
     ".cursor",
 ]
-
-

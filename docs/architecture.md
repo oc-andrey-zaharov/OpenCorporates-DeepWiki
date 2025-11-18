@@ -8,7 +8,8 @@ This document gives a quick overview of the technologies in use and how the main
 | ----- | ---------- | ----- |
 | CLI | Python Click | Command-line interface for wiki generation |
 | Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `src/deepwiki_cli/services/rag.py` |
-| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama | Configurable via `src/deepwiki_cli/config` and environment variables |
+| Prompt Schemas | Pydantic (`src/deepwiki_cli/domain/schemas.py`) | `WikiStructureSchema`, `WikiPageSchema`, and `RAGContextSchema` enforce structured LLM IO |
+| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock | Configurable via `src/deepwiki_cli/config` and environment variables |
 | Persistence | Local cache (filesystem) | Stores generated wiki artifacts and repo snapshots for reuse/versioning |
 | Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
 | Tooling | Poetry + Makefile | Simplifies local development and testing |
@@ -62,7 +63,7 @@ sequenceDiagram
 DeepWiki now operates solely as a CLI-first application. All repository scanning, wiki generation, caching, and editable workspace features run locally. The only outbound calls are to:
 
 - Git hosting providers (GitHub REST API)
-- LLM providers (Google, OpenAI, OpenRouter, Bedrock, or local Ollama)
+- LLM providers (Google, OpenAI, OpenRouter, Bedrock)
 
 There is no FastAPI or WebSocket server to deploy or configure.
 
@@ -99,8 +100,8 @@ The RAG (Retrieval-Augmented Generation) pipeline:
 1. Fetches repository content
 2. Generates embeddings for code files
 3. Stores embeddings in vector store (FAISS)
-4. Retrieves relevant context for prompts
-5. Generates wiki content using LLM
+4. Retrieves relevant context for prompts and serializes it via `RAGContextSchema`
+5. Generates wiki content using LLM (providers receive the JSON context payload first)
 
 ### Model Clients
 
@@ -123,6 +124,16 @@ Support for multiple AI providers:
 7. **Change Detection Loop**: Subsequent runs diff snapshots, select impacted pages, and optionally solicit user feedback before regenerating
 8. **Caching**: Generated wiki artifacts plus the new snapshot are cached locally for reuse/versioning
 9. **Export**: Cached wikis can be exported to markdown or JSON
+
+## Structured Output Schemas
+
+All prompts embed the Pydantic schemas in `src/deepwiki_cli/domain/schemas.py` to guarantee parseable responses:
+
+- `WikiStructureSchema`: replaces prior XML instructions with compact JSON for structure generation.
+- `WikiPageSchema`: captures page metadata (summary, keywords, referenced files, diagram types) alongside Markdown content.
+- `RAGContextSchema`: bundles the query, retrieved documents, and conversation history so downstream providers consume a single JSON payload.
+
+Model clients attempt JSON-mode/function-calling first (OpenAI, Bedrock, OpenRouter, etc.) and automatically fall back to streaming text parsing if a provider lacks structured support. Editable workspaces and exports persist the structured metadata block so the information is available during manual updates.
 
 ## Configuration
 

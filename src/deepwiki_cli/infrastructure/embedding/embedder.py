@@ -4,35 +4,35 @@ from deepwiki_cli.infrastructure.config import configs, get_embedder_type
 
 
 def get_embedder(
-    is_local_ollama: bool = False,
+    is_local_lmstudio: bool = False,
     embedder_type: str | None = None,
 ) -> adal.Embedder:
     """Get embedder based on configuration or parameters.
 
     Args:
-        is_local_ollama: Legacy parameter for Ollama embedder
-        embedder_type: Direct specification of embedder type ('ollama', 'openrouter', 'openai')
+        is_local_lmstudio: Legacy parameter for LM Studio embedder
+        embedder_type: Direct specification of embedder type ('lmstudio', 'openrouter', 'openai')
 
     Returns:
         adal.Embedder: Configured embedder instance
     """
     # Determine which embedder config to use
     if embedder_type:
-        if embedder_type == "ollama":
-            embedder_config = configs["embedder_ollama"]
+        if embedder_type == "lmstudio":
+            embedder_config = configs["embedder_lmstudio"]
         elif embedder_type == "openrouter":
             embedder_config = configs["embedder_openrouter"]
         elif embedder_type == "openai":
             embedder_config = configs.get("embedder_openai", configs["embedder"])
         else:  # default to openai
             embedder_config = configs.get("embedder_openai", configs["embedder"])
-    elif is_local_ollama:
-        embedder_config = configs["embedder_ollama"]
+    elif is_local_lmstudio:
+        embedder_config = configs["embedder_lmstudio"]
     else:
         # Auto-detect based on current configuration
         current_type = get_embedder_type()
-        if current_type == "ollama":
-            embedder_config = configs["embedder_ollama"]
+        if current_type == "lmstudio":
+            embedder_config = configs["embedder_lmstudio"]
         elif current_type == "openrouter":
             embedder_config = configs["embedder_openrouter"]
         else:

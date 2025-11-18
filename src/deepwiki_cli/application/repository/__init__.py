@@ -23,5 +23,3 @@ __all__ = [
     "is_git_repo",
     "load_existing_cache",
 ]
-
-

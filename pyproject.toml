@@ -155,7 +155,6 @@ ignore = [
   "D205",  # Missing blank line after docstring summary (style preference)
   "D417",  # Missing argument descriptions in the docstring (style preference)
   "B904",  # Within an `except` clause, raise exceptions with `raise ... from err` (style preference)
-  "S314",  # Using `xml` to parse untrusted data (often false positive for trusted data)
   "N815",  # MixedCase variable in function scope (style preference)
   "N806",  # Variable in function should be lowercase (style preference)
   "A001",  # Variable is shadowing a Python builtin (sometimes necessary)

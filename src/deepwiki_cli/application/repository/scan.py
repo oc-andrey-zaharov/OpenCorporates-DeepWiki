@@ -7,7 +7,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
-import structlog
+from deepwiki_cli.shared.structlog import structlog
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -222,5 +222,3 @@ def collect_repository_files(
 
 
 __all__ = ["DEFAULT_EXCLUDED_DIRS", "collect_repository_files", "is_git_repo"]
-
-

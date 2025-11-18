@@ -1,7 +1,14 @@
 """Module containing all prompts used in the DeepWiki project."""
 
+import json
 from pathlib import Path
 from string import Template
+
+from deepwiki_cli.domain.schemas import (
+    RAGContextSchema,
+    WikiPageSchema,
+    WikiStructureSchema,
+)
 
 # System prompt for RAG
 RAG_SYSTEM_PROMPT = r"""
@@ -29,33 +36,16 @@ Think step by step and ensure your answer is well-structured and visually organi
 """
 
 # Template for RAG
-RAG_TEMPLATE = r"""<START_OF_SYS_PROMPT>
-{system_prompt}
+RAG_TEMPLATE = r"""{system_prompt}
 {output_format_str}
-<END_OF_SYS_PROMPT>
-{# OrderedDict of DialogTurn #}
-{% if conversation_history %}
-<START_OF_CONVERSATION_HISTORY>
-{% for key, dialog_turn in conversation_history.items() %}
-{{key}}.
-User: {{dialog_turn.user_query.query_str}}
-You: {{dialog_turn.assistant_response.response_str}}
-{% endfor %}
-<END_OF_CONVERSATION_HISTORY>
-{% endif %}
-{% if contexts %}
-<START_OF_CONTEXT>
-{% for context in contexts %}
-{{loop.index}}.
-File Path: {{context.meta_data.get('file_path', 'unknown')}}
-Content: {{context.text}}
-{% endfor %}
-<END_OF_CONTEXT>
-{% endif %}
-<START_OF_USER_PROMPT>
-{{input_str}}
-<END_OF_USER_PROMPT>
-"""
+
+You will receive a serialized JSON payload that matches the `RAGContextSchema`.
+Use ONLY the information in this payload to answer the embedded query.
+
+Structured payload:
+{{ context_json }}
+
+Respond with the final answer described in the schema (markdown content only)."""
 
 # System prompt for wiki generation
 SIMPLE_CHAT_SYSTEM_PROMPT = """<role>
@@ -107,11 +97,47 @@ STRUCTURE_PROMPT_TEMPLATE = Template(
 )
 
 
-def build_wiki_page_prompt(page_title: str, file_paths_list: str) -> str:
+def build_wiki_page_prompt(
+    page_title: str,
+    file_paths_list: str,
+    *,
+    page_id: str,
+    importance: str,
+    related_pages: list[str],
+) -> str:
     """Return the canonical prompt for generating wiki page content."""
+    schema_definition = json.dumps(
+        WikiPageSchema.model_json_schema(),
+        indent=2,
+    ).replace("$", "$$")
+    example_response = json.dumps(
+        {
+            "schema_name": "wiki_page",
+            "schema_version": "1.0",
+            "page_id": page_id,
+            "title": page_title,
+            "importance": importance,
+            "metadata": {
+                "summary": f"Concise overview for {page_title}.",
+                "keywords": ["architecture", "overview"],
+                "related_page_ids": related_pages,
+                "referenced_files": ["README.md"],
+                "diagram_types": ["flowchart"],
+            },
+            "content": "<details>...</details>\\n# Title\\n...",
+        },
+        indent=2,
+    )
+    related_pages_text = ", ".join(related_pages) if related_pages else "None supplied"
+
     return PAGE_PROMPT_TEMPLATE.substitute(
+        page_id=page_id,
         page_title=page_title,
         file_paths_list=file_paths_list,
+        importance=importance,
+        related_pages=related_pages_text,
+        schema_definition=schema_definition,
+        example_response=example_response,
     )
 
 
@@ -144,6 +170,30 @@ def build_wiki_structure_prompt(
     """Return the prompt used for structure generation."""
     section_guidance = _section_guidance(is_comprehensive)
     wiki_scope = "comprehensive" if is_comprehensive else "concise"
+    schema_definition = json.dumps(
+        WikiStructureSchema.model_json_schema(),
+        indent=2,
+    ).replace("$", "$$")
+    example_response = json.dumps(
+        {
+            "schema_name": "wiki_structure",
+            "schema_version": "1.0",
+            "title": "Project DeepWiki",
+            "description": "Technical reference capturing architecture, workflows, and developer onboarding guidance.",
+            "pages": [
+                {
+                    "page_id": "overview",
+                    "title": "System Overview",
+                    "summary": "High-level system context, primary capabilities, and deployment footprint.",
+                    "importance": "high",
+                    "relevant_files": ["README.md", "docs/architecture.md"],
+                    "related_page_ids": ["architecture"],
+                    "diagram_suggestions": ["flowchart", "sequenceDiagram"],
+                },
+            ],
+        },
+        indent=2,
+    )
 
     return STRUCTURE_PROMPT_TEMPLATE.substitute(
         file_tree=file_tree,
@@ -154,6 +204,6 @@ def build_wiki_structure_prompt(
         target_pages=target_pages,
         wiki_scope=wiki_scope,
         file_count=file_count,
+        schema_definition=schema_definition,
+        example_response=example_response,
     )
-
-

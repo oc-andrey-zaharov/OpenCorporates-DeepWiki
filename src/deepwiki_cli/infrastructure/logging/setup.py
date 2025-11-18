@@ -4,8 +4,11 @@ import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-import structlog
-from structlog.contextvars import bind_contextvars, clear_contextvars
+from deepwiki_cli.shared.structlog import (
+    bind_contextvars,
+    clear_contextvars,
+    structlog,
+)
 
 
 class IgnoreLogChangeDetectedFilter(logging.Filter):

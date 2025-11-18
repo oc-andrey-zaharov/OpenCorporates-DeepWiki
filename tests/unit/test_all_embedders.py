@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Comprehensive test suite for all embedder types (OpenAI, Google, Ollama).
+"""Comprehensive test suite for all embedder types (OpenAI, Google, LM Studio).
 This test file validates the embedder system before any modifications are made.
 """
 
@@ -114,7 +114,7 @@ class TestEmbedderConfiguration:
         # Check all embedder configurations exist
         assert "embedder" in configs, "OpenAI embedder config missing"
         assert "embedder_google" in configs, "Google embedder config missing"
-        assert "embedder_ollama" in configs, "Ollama embedder config missing"
+        assert "embedder_lmstudio" in configs, "LM Studio embedder config missing"
         assert "embedder_openrouter" in configs, "OpenRouter embedder config missing"
 
         # Check client classes are available
@@ -124,8 +124,8 @@ class TestEmbedderConfiguration:
         assert "GoogleEmbedderClient" in CLIENT_CLASSES, (
             "GoogleEmbedderClient missing from CLIENT_CLASSES"
         )
-        assert "OllamaClient" in CLIENT_CLASSES, (
-            "OllamaClient missing from CLIENT_CLASSES"
+        assert "LMStudioClient" in CLIENT_CLASSES, (
+            "LMStudioClient missing from CLIENT_CLASSES"
         )
         assert "OpenRouterClient" in CLIENT_CLASSES, (
             "OpenRouterClient missing from CLIENT_CLASSES"
@@ -136,21 +136,22 @@ class TestEmbedderConfiguration:
         from deepwiki_cli.infrastructure.config import (
             get_embedder_type,
             is_google_embedder,
-            is_ollama_embedder,
             is_openrouter_embedder,
         )
 
         # Default type should be detected
         current_type = get_embedder_type()
-        assert current_type in ["openai", "google", "ollama", "openrouter"], (
+        assert current_type in ["openai", "google", "lmstudio", "openrouter"], (
             f"Invalid embedder type: {current_type}"
         )
 
         # Boolean functions should work
-        is_ollama = is_ollama_embedder()
+        is_lmstudio = is_lmstudio_embedder()
         is_google = is_google_embedder()
         is_openrouter = is_openrouter_embedder()
-        assert isinstance(is_ollama, bool), "is_ollama_embedder should return boolean"
+        assert isinstance(is_lmstudio, bool), (
+            "is_lmstudio_embedder should return boolean"
+        )
         assert isinstance(is_google, bool), "is_google_embedder should return boolean"
         assert isinstance(
             is_openrouter,
@@ -158,20 +159,20 @@ class TestEmbedderConfiguration:
         ), "is_openrouter_embedder should return boolean"
 
         # Only one should be true at a time (unless using openai default)
-        if current_type == "ollama":
-            assert is_ollama
+        if current_type == "lmstudio":
+            assert is_lmstudio
             assert not is_google
             assert not is_openrouter
         elif current_type == "google":
-            assert not is_ollama
+            assert not is_lmstudio
             assert is_google
             assert not is_openrouter
         elif current_type == "openrouter":
-            assert not is_ollama
+            assert not is_lmstudio
             assert not is_google
             assert is_openrouter
         else:  # openai
-            assert not is_ollama
+            assert not is_lmstudio
             assert not is_google
             assert not is_openrouter
 
@@ -201,21 +202,21 @@ class TestEmbedderFactory:
         openai_embedder = get_embedder(embedder_type="openai")
         assert openai_embedder is not None, "OpenAI embedder should be created"
 
-        # Test Ollama embedder (may fail if Ollama not available, but should not crash)
+        # Test LM Studio embedder (may fail if LM Studio not available, but should not crash)
         try:
-            ollama_embedder = get_embedder(embedder_type="ollama")
-            assert ollama_embedder is not None, "Ollama embedder should be created"
+            lmstudio_embedder = get_embedder(embedder_type="lmstudio")
+            assert lmstudio_embedder is not None, "LM Studio embedder should be created"
         except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
-                "Ollama embedder creation failed (expected if Ollama not available): %s",
+                "LM Studio embedder creation failed (expected if LM Studio not available): %s",
                 e,
             )
         # Test OpenRouter embedder
         try:
             openrouter_embedder = get_embedder(embedder_type="openrouter")
-            assert (
-                openrouter_embedder is not None
-            ), "OpenRouter embedder should be created"
+            assert openrouter_embedder is not None, (
+                "OpenRouter embedder should be created"
+            )
         except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
                 "OpenRouter embedder creation failed (likely missing OPENROUTER_API_KEY): %s",
@@ -232,15 +233,15 @@ class TestEmbedderFactory:
             "Google embedder should be created with use_google_embedder=True"
         )
 
-        # Test with is_local_ollama=True
+        # Test with is_local_lmstudio=True
         try:
-            ollama_embedder = get_embedder(is_local_ollama=True)
-            assert ollama_embedder is not None, (
-                "Ollama embedder should be created with is_local_ollama=True"
+            lmstudio_embedder = get_embedder(is_local_lmstudio=True)
+            assert lmstudio_embedder is not None, (
+                "LM Studio embedder should be created with is_local_lmstudio=True"
             )
         except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
-                "Ollama embedder creation failed (expected if Ollama not available): %s",
+                "LM Studio embedder creation failed (expected if LM Studio not available): %s",
                 e,
             )
 
@@ -302,8 +303,8 @@ class TestDataPipelineFunctions:
         test_text = "This is a test string for token counting."
 
         # Test with all values
-        for is_ollama in [None, True, False]:
-            token_count = count_tokens(test_text, is_ollama_embedder=is_ollama)
+        for is_lmstudio in [None, True, False]:
+            token_count = count_tokens(test_text, is_lmstudio_embedder=is_lmstudio)
             assert isinstance(token_count, int), "Token count should be an integer"
             assert token_count > 0, "Token count should be positive"
 
@@ -312,15 +313,15 @@ class TestDataPipelineFunctions:
         from deepwiki_cli.services.data_pipeline import prepare_data_pipeline
 
         # Test with all values
-        for is_ollama_val in [None, True, False]:
+        for is_lmstudio_val in [None, True, False]:
             try:
-                pipeline = prepare_data_pipeline(is_ollama_embedder=is_ollama_val)
+                pipeline = prepare_data_pipeline(is_lmstudio_embedder=is_lmstudio_val)
                 assert pipeline is not None, "Data pipeline should be created"
                 assert callable(pipeline), "Pipeline should be callable"
             except (ImportError, ValueError, RuntimeError) as e:
                 logger.warning(
-                    "Pipeline creation failed for is_ollama=%s: %s",
-                    is_ollama_val,
+                    "Pipeline creation failed for is_lmstudio=%s: %s",
+                    is_lmstudio_val,
                     e,
                 )
 
@@ -337,8 +338,8 @@ class TestRAGIntegration:
             rag = RAG(provider="google", model="gemini-1.5-flash")
             assert rag is not None, "RAG should be initialized"
             assert hasattr(rag, "embedder"), "RAG should have embedder"
-            assert hasattr(rag, "is_ollama_embedder"), (
-                "RAG should have is_ollama_embedder attribute"
+            assert hasattr(rag, "is_lmstudio_embedder"), (
+                "RAG should have is_lmstudio_embedder attribute"
             )
         except (ImportError, ValueError, RuntimeError, TypeError) as e:
             logger.warning(
@@ -353,9 +354,11 @@ class TestRAGIntegration:
         try:
             rag = RAG()
             # Should have the embedder type detection logic
-            assert hasattr(rag, "is_ollama_embedder"), "RAG should detect embedder type"
-            assert isinstance(rag.is_ollama_embedder, bool), (
-                "is_ollama_embedder should be boolean"
+            assert hasattr(rag, "is_lmstudio_embedder"), (
+                "RAG should detect embedder type"
+            )
+            assert isinstance(rag.is_lmstudio_embedder, bool), (
+                "is_lmstudio_embedder should be boolean"
             )
         except (ImportError, ValueError, RuntimeError, TypeError) as e:
             logger.warning("RAG initialization failed: %s", e)
@@ -366,7 +369,7 @@ class TestEnvironmentVariableHandling:
 
     def test_embedder_type_env_var(self) -> None:
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
-        for embedder_type in ["openai", "google", "ollama", "openrouter"]:
+        for embedder_type in ["openai", "google", "lmstudio", "openrouter"]:
             self._test_single_embedder_type(embedder_type)
 
     def _test_single_embedder_type(self, embedder_type: str) -> None:
@@ -420,14 +423,14 @@ class TestIssuesIdentified:
         """Test that RAG doesn't make binary assumptions about embedders."""
         from deepwiki_cli.services.rag import RAG
 
-        # The current implementation only considers is_ollama_embedder
+        # The current implementation only considers is_lmstudio_embedder
         # This test documents the current behavior and will help verify fixes
         try:
             rag = RAG()
 
-            # Current implementation only has is_ollama_embedder
-            assert hasattr(rag, "is_ollama_embedder"), (
-                "RAG should have is_ollama_embedder"
+            # Current implementation only has is_lmstudio_embedder
+            assert hasattr(rag, "is_lmstudio_embedder"), (
+                "RAG should have is_lmstudio_embedder"
             )
 
             # This is the issue: no explicit support for Google embedder detection
@@ -443,22 +446,22 @@ class TestIssuesIdentified:
             prepare_data_pipeline,
         )
 
-        # These functions currently only consider is_ollama_embedder parameter
+        # These functions currently only consider is_lmstudio_embedder parameter
         # This test documents the issue and will verify fixes
 
-        # count_tokens only considers ollama vs non-ollama
-        token_count_ollama = count_tokens("test", is_ollama_embedder=True)
-        token_count_other = count_tokens("test", is_ollama_embedder=False)
+        # count_tokens only considers lmstudio vs non-lmstudio
+        token_count_lmstudio = count_tokens("test", is_lmstudio_embedder=True)
+        token_count_other = count_tokens("test", is_lmstudio_embedder=False)
 
-        assert isinstance(token_count_ollama, int)
+        assert isinstance(token_count_lmstudio, int)
         assert isinstance(token_count_other, int)
 
-        # prepare_data_pipeline only accepts is_ollama_embedder parameter
+        # prepare_data_pipeline only accepts is_lmstudio_embedder parameter
         try:
-            pipeline_ollama = prepare_data_pipeline(is_ollama_embedder=True)
-            pipeline_other = prepare_data_pipeline(is_ollama_embedder=False)
+            pipeline_lmstudio = prepare_data_pipeline(is_lmstudio_embedder=True)
+            pipeline_other = prepare_data_pipeline(is_lmstudio_embedder=False)
 
-            assert pipeline_ollama is not None
+            assert pipeline_lmstudio is not None
             assert pipeline_other is not None
         except (ImportError, ValueError, RuntimeError) as e:
             logger.warning("Pipeline creation failed: %s", e)
@@ -491,7 +494,7 @@ def run_all_tests() -> bool:
 
     # Test embedder config with different types
     config_test = TestEmbedderConfiguration()
-    for embedder_type in ["openai", "google", "ollama"]:
+    for embedder_type in ["openai", "google", "lmstudio"]:
         runner.run_test(
             lambda et=embedder_type: config_test.test_get_embedder_config(et),
             f"TestEmbedderConfiguration.test_get_embedder_config[{embedder_type}]",
@@ -506,15 +509,15 @@ def run_all_tests() -> bool:
         )
 
     # Test pipeline preparation with different types
-    for is_ollama in [None, True, False]:
+    for is_lmstudio in [None, True, False]:
         runner.run_test(
-            lambda ol=is_ollama: pipeline_test.test_prepare_data_pipeline(ol),
-            f"TestDataPipelineFunctions.test_prepare_data_pipeline[{is_ollama}]",
+            lambda ls=is_lmstudio: pipeline_test.test_prepare_data_pipeline(ls),
+            f"TestDataPipelineFunctions.test_prepare_data_pipeline[{is_lmstudio}]",
         )
 
     # Test environment variable handling
     env_test = TestEnvironmentVariableHandling()
-    for embedder_type in ["openai", "google", "ollama"]:
+    for embedder_type in ["openai", "google", "lmstudio"]:
         runner.run_test(
             lambda et=embedder_type: env_test.test_embedder_type_env_var(et),
             f"TestEnvironmentVariableHandling.test_embedder_type_env_var[{embedder_type}]",

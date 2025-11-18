@@ -6,8 +6,9 @@ from typing import Any, ClassVar
 from uuid import uuid4
 
 import adalflow as adal
-import structlog
+from deepwiki_cli.shared.structlog import structlog
 
+from deepwiki_cli.domain.schemas import RAGContextSchema, RAGDocumentSchema
 from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
 from deepwiki_cli.infrastructure.prompts.builders import (
     RAG_SYSTEM_PROMPT,
@@ -219,7 +220,7 @@ class RAG(adal.Component):
         """Initialize the RAG component.
 
         Args:
-            provider: Model provider to use (google, openai, openrouter, ollama)
+            provider: Model provider to use (google, openai, openrouter, lmstudio)
             model: Model name to use with the provider
             use_s3: Whether to use S3 for database storage (default: False)
         """
@@ -233,22 +234,25 @@ class RAG(adal.Component):
 
         # Determine embedder type based on current configuration
         self.embedder_type = get_embedder_type()
-        self.is_ollama_embedder = (
-            self.embedder_type == "ollama"
+        self.is_lmstudio_embedder = (
+            self.embedder_type == "lmstudio"
         )  # Backward compatibility
 
-        # Check if Ollama model exists before proceeding
-        if self.is_ollama_embedder:
-            from deepwiki_cli.infrastructure.embedding.ollama_patch import (
-                check_ollama_model_exists,
+        # Check if LM Studio model exists before proceeding
+        # Store model name for prefix handling
+        self.lmstudio_model_name = None
+        if self.is_lmstudio_embedder:
+            from deepwiki_cli.infrastructure.embedding.lmstudio_patch import (
+                check_lmstudio_model_exists,
             )
 
             embedder_config = get_embedder_config()
             if embedder_config and embedder_config.get("model_kwargs", {}).get("model"):
                 model_name = embedder_config["model_kwargs"]["model"]
-                if not check_ollama_model_exists(model_name):
+                self.lmstudio_model_name = model_name
+                if not check_lmstudio_model_exists(model_name):
                     raise Exception(
-                        f"Ollama model '{model_name}' not found. Please run 'ollama pull {model_name}' to install it.",
+                        f"LM Studio model '{model_name}' not found. Please ensure the model is loaded in LM Studio.",
                     )
 
         # Initialize components
@@ -257,23 +261,31 @@ class RAG(adal.Component):
 
         self_weakref = weakref.ref(self)
 
-        # Patch: ensure query embedding is always single string for Ollama
+        # Patch: ensure query embedding is always single string for LM Studio
+        # Also add prefix for nomic-embed-code model queries
         def single_string_embedder(query: str | list[str]) -> Any:
             # Accepts either a string or a list, always returns embedding for a single string
             if isinstance(query, list):
                 if len(query) != 1:
-                    raise ValueError("Ollama embedder only supports a single string")
+                    raise ValueError("LM Studio embedder only supports a single string")
                 query = query[0]
             instance = self_weakref()
             if instance is None:
                 raise RuntimeError(
                     "RAG instance is no longer available, but the query embedder was called.",
                 )
+            # Check if we're using nomic-embed-code model and add required prefix
+            if (
+                instance.lmstudio_model_name
+                and "nomic-embed-code" in instance.lmstudio_model_name.lower()
+            ):
+                # nomic-embed-code requires this prefix for queries (not documents)
+                query = f"Represent this query for searching relevant code: {query}"
             return instance.embedder(input=query)
 
-        # Use single string embedder for Ollama, regular embedder for others
+        # Use single string embedder for LM Studio, regular embedder for others
         self.query_embedder = (
-            single_string_embedder if self.is_ollama_embedder else self.embedder
+            single_string_embedder if self.is_lmstudio_embedder else self.embedder
         )
 
         self.initialize_db_manager()
@@ -287,15 +299,11 @@ class RAG(adal.Component):
             + """
 
 IMPORTANT FORMATTING RULES:
-1. DO NOT include your thinking or reasoning process in the output
-2. Provide only the final, polished answer
-3. DO NOT include ```markdown fences at the beginning or end of your answer
-4. DO NOT wrap your response in any kind of fences
-5. Start your response directly with the content
-6. The content will already be rendered as markdown
-7. Do not use backslashes before special characters like [ ] { } in your answer
-8. When listing tags or similar items, write them as plain text without escape characters
-9. For pipe characters (|) in text, write them directly without escaping them"""
+1. Return exactly one JSON object with `rationale` and `answer` fields.
+2. The `answer` field must contain the final markdown (no surrounding fences).
+3. Do NOT expose chain-of-thought content; summarize reasoning in `rationale`.
+4. Start the markdown directly—no ```markdown fences at the beginning or end.
+5. Avoid escaping characters such as [ ] { } or | unless required by JSON."""
         )
 
         # Get model configuration based on provider and model
@@ -308,9 +316,8 @@ IMPORTANT FORMATTING RULES:
             template=RAG_TEMPLATE,
             prompt_kwargs={
                 "output_format_str": format_instructions,
-                "conversation_history": self.memory(),
                 "system_prompt": RAG_SYSTEM_PROMPT,
-                "contexts": None,
+                "context_json": "{}",
             },
             model_client=generator_config["model_client"](),
             model_kwargs=generator_config["model_kwargs"],
@@ -321,6 +328,49 @@ IMPORTANT FORMATTING RULES:
         """Initialize the database manager with local storage."""
         self.db_manager = DatabaseManager()
         self.transformed_docs: list[Any] = []
+
+    def _conversation_history_payload(self) -> list[dict[str, str]]:
+        """Return structured conversation history for prompt assembly."""
+        history = self.memory()
+        if not isinstance(history, dict):
+            return []
+        entries: list[dict[str, str]] = []
+        for key, turn in history.items():
+            if isinstance(turn, DialogTurn):
+                entries.append(
+                    {
+                        "id": key,
+                        "user_query": turn.user_query.query_str,
+                        "assistant_response": turn.assistant_response.response_str,
+                    },
+                )
+        return entries
+
+    def _build_context_schema(
+        self,
+        query: str,
+        documents: list[Any],
+    ) -> RAGContextSchema:
+        """Assemble a RAGContextSchema for downstream model calls."""
+        rag_documents: list[RAGDocumentSchema] = []
+        for index, doc in enumerate(documents, start=1):
+            meta = getattr(doc, "meta_data", {}) or {}
+            rag_documents.append(
+                RAGDocumentSchema(
+                    document_id=meta.get("doc_id") or f"doc-{index}",
+                    file_path=meta.get("file_path", "unknown"),
+                    content=getattr(doc, "text", ""),
+                    score=getattr(doc, "score", None),
+                    metadata=meta or None,
+                ),
+            )
+        return RAGContextSchema(
+            query=query,
+            documents=rag_documents,
+            conversation_history=self._conversation_history_payload(),
+            markdown_instructions=RAG_SYSTEM_PROMPT.strip(),
+            answer_guidance=None,
+        )
 
     def _validate_and_filter_embeddings(self, documents: list) -> list:
         """Validate embeddings and filter out documents with invalid or mismatched embedding sizes.
@@ -683,7 +733,7 @@ IMPORTANT FORMATTING RULES:
 
         # Use the appropriate embedder for retrieval
         retrieve_embedder = (
-            self.query_embedder if self.is_ollama_embedder else self.embedder
+            self.query_embedder if self.is_lmstudio_embedder else self.embedder
         )
 
         # Filter out documents with invalid vectors and ensure vectors are Python lists
@@ -906,25 +956,25 @@ IMPORTANT FORMATTING RULES:
                     ):
                         index_dim = self.retriever.index.d
                         if query_dim is not None and query_dim != index_dim:
-                            # Provide specific guidance for Ollama
-                            if self.is_ollama_embedder:
+                            # Provide specific guidance for LM Studio
+                            if self.is_lmstudio_embedder:
                                 embedder_config = get_embedder_config()
                                 model_name = embedder_config.get(
                                     "model_kwargs", {}
                                 ).get("model", "unknown")
                                 error_msg = (
-                                    f"Ollama embedding dimension mismatch detected!\n"
+                                    f"LM Studio embedding dimension mismatch detected!\n"
                                     f"  Query embedding dimension: {query_dim}\n"
                                     f"  FAISS index dimension: {index_dim}\n"
-                                    f"  Current Ollama model: {model_name}\n\n"
+                                    f"  Current LM Studio model: {model_name}\n\n"
                                     f"This happens when:\n"
-                                    f"  1. The database was created with a different Ollama model\n"
+                                    f"  1. The database was created with a different LM Studio model\n"
                                     f"  2. The model configuration changed (e.g., 'dimensions' parameter)\n"
                                     f"  3. The model was updated and now produces different dimensions\n\n"
                                     f"Solution: Rebuild the database with the current model:\n"
                                     f"  - Delete the cached database file, or\n"
                                     f"  - Run 'deepwiki sync' command again\n\n"
-                                    f"Note: Different Ollama models produce different embedding dimensions. "
+                                    f"Note: Different LM Studio models produce different embedding dimensions. "
                                     f"Ensure you use the same model for both indexing and querying."
                                 )
                             else:
@@ -959,6 +1009,21 @@ IMPORTANT FORMATTING RULES:
                 self.transformed_docs[doc_index]
                 for doc_index in retrieved_documents[0].doc_indices
             ]
+
+            context_schema = self._build_context_schema(
+                query,
+                retrieved_documents[0].documents,
+            )
+            context_json = context_schema.to_compact_json()
+            try:
+                self.generator.prompt_kwargs["context_json"] = context_json
+            except Exception:  # pragma: no cover - best effort
+                self.generator.prompt_kwargs = {
+                    **self.generator.prompt_kwargs,
+                    "context_json": context_json,
+                }
+            setattr(retrieved_documents[0], "context_schema", context_schema)
+            setattr(retrieved_documents[0], "context_json", context_json)
 
             from typing import cast
 

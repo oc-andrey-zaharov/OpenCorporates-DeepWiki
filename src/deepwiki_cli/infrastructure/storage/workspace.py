@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import structlog
+from deepwiki_cli.shared.structlog import structlog
 from watchfiles import watch
 
 if TYPE_CHECKING:
@@ -24,11 +24,17 @@ logger = structlog.get_logger(__name__)
 MANIFEST_FILENAME = ".deepwiki-manifest.json"
 RELATED_START = "<!-- deepwiki-related:start -->"
 RELATED_END = "<!-- deepwiki-related:end -->"
+METADATA_START = "<!-- deepwiki-metadata:start -->"
+METADATA_END = "<!-- deepwiki-metadata:end -->"
 PAGE_MARKER_PATTERN = re.compile(
     r"<!--\s*deepwiki-page:(?P<payload>[A-Za-z0-9+/=]+)\s*-->",
 )
 RELATED_BLOCK_PATTERN = re.compile(
     rf"{re.escape(RELATED_START)}.*?{re.escape(RELATED_END)}",
+    re.DOTALL,
+)
+METADATA_BLOCK_PATTERN = re.compile(
+    rf"{re.escape(METADATA_START)}.*?{re.escape(METADATA_END)}",
     re.DOTALL,
 )
 
@@ -185,6 +191,7 @@ def decode_marker(marker_text: str) -> dict[str, str]:
 def _strip_generated_blocks(text: str) -> str:
     """Remove auto-generated related blocks and anchor tags from content."""
     cleaned = RELATED_BLOCK_PATTERN.sub("", text)
+    cleaned = METADATA_BLOCK_PATTERN.sub("", cleaned)
     cleaned_lines = []
     for line in cleaned.splitlines():
         stripped = line.strip()
@@ -264,6 +271,20 @@ def _related_block(
     ]
 
 
+def _metadata_block(page: WikiPage) -> list[str]:
+    """Render structured metadata block for exports."""
+    metadata = getattr(page, "metadata", None) or {}
+    if not metadata:
+        return []
+    serialized = json.dumps(metadata, indent=2)
+    return [
+        METADATA_START,
+        serialized,
+        METADATA_END,
+        "",
+    ]
+
+
 def _single_related_block(
     page: WikiPage,
     anchor_lookup: dict[str, str],
@@ -322,6 +343,7 @@ def export_markdown_workspace(
                 page.content.strip(),
                 "",
             ]
+            lines.extend(_metadata_block(page))
             lines.extend(
                 _related_block(
                     page,
@@ -378,6 +400,7 @@ def export_markdown_workspace(
                 "",
             ],
         )
+        body.extend(_metadata_block(page))
         body.extend(
             _single_related_block(
                 page,
@@ -529,5 +552,3 @@ def watch_workspace(manifest: ExportManifest):
         if not changed_files:
             continue
         yield sync_manifest(manifest, changed_paths=changed_files)
-
-

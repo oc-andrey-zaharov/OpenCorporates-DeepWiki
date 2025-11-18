@@ -5,12 +5,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Sequence
-from typing import (
-    Any,
-    Literal,
-    Self,
-    TypeVar,
-)
+from typing import Any, Literal, Self, TypeVar
 
 import backoff
 
@@ -50,6 +45,7 @@ from openai.types import (
     Image,
 )
 from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
+from pydantic import BaseModel, ValidationError
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -304,57 +300,24 @@ class OpenAIClient(ModelClient):
                 raise TypeError("input must be a sequence of text")
             final_model_kwargs["input"] = input
         elif model_type == ModelType.LLM:
-            # convert input to messages
             messages: list[dict[str, Any]] = []
             images = final_model_kwargs.pop("images", None)
             detail = final_model_kwargs.pop("detail", "auto")
 
-            if self._input_type == "messages":
-                system_start_tag = "<START_OF_SYSTEM_PROMPT>"
-                system_end_tag = "<END_OF_SYSTEM_PROMPT>"
-                user_start_tag = "<START_OF_USER_PROMPT>"
-                user_end_tag = "<END_OF_USER_PROMPT>"
-
-                # new regex pattern to ignore special characters such as \n
-                pattern = (
-                    rf"{system_start_tag}\s*(.*?)\s*{system_end_tag}\s*"
-                    rf"{user_start_tag}\s*(.*?)\s*{user_end_tag}"
-                )
-
-                # Compile the regular expression
-
-                # re.DOTALL is to allow . to match newline so that (.*?) does not match in a single line
-                regex = re.compile(pattern, re.DOTALL)
-                # Match the pattern
-                match = regex.match(str(input or ""))
-                system_prompt, input_str = None, None
-
-                if match:
-                    system_prompt = match.group(1)
-                    input_str = match.group(2)
-                else:
-                    pass
-                if system_prompt and input_str:
-                    messages.append({"role": "system", "content": str(system_prompt)})
-                    if images:
-                        content = [{"type": "text", "text": str(input_str)}]
-                        if isinstance(images, str | dict):
-                            images = [images]
-                        for img in images:
-                            content.append(self._prepare_image_content(img, detail))
-                        messages.append({"role": "user", "content": content})
-                    else:
-                        messages.append({"role": "user", "content": input_str})
-            if len(messages) == 0:
+            if isinstance(input, list) and all(isinstance(msg, dict) for msg in input):
+                messages = list(input)
+            elif isinstance(input, dict) and input.get("role"):
+                messages = [input]
+            else:
+                content_payload: Any = input
                 if images:
-                    content = [{"type": "text", "text": str(input)}]
+                    content_payload = [{"type": "text", "text": str(input)}]
                     if isinstance(images, str | dict):
                         images = [images]
                     for img in images:
-                        content.append(self._prepare_image_content(img, detail))
-                    messages.append({"role": "user", "content": content})
-                else:
-                    messages.append({"role": "user", "content": input})
+                        content_payload.append(self._prepare_image_content(img, detail))
+                messages.append({"role": "user", "content": content_payload})
+
             final_model_kwargs["messages"] = messages
         elif model_type == ModelType.IMAGE_GENERATION:
             # For image generation, input is the prompt
@@ -386,6 +349,80 @@ class OpenAIClient(ModelClient):
             raise ValueError(f"model_type {model_type} is not supported")
 
         return final_model_kwargs
+
+    def _format_schema_for_provider(
+        self,
+        schema: type[BaseModel],
+    ) -> dict[str, Any]:
+        """Translate a Pydantic schema into OpenAI specific response format."""
+        return {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema.__name__,
+                    "schema": schema.model_json_schema(),
+                },
+            },
+        }
+
+    def _extract_structured_content(self, completion: ChatCompletion) -> str:
+        """Extract the structured JSON string from a completion."""
+        message: ChatCompletionMessage = completion.choices[0].message
+        content = message.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for fragment in content:
+                if isinstance(fragment, dict) and fragment.get("type") == "text":
+                    text = fragment.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            if parts:
+                return "".join(parts)
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            first_call = tool_calls[0]
+            arguments = getattr(first_call, "function", None)
+            if arguments and getattr(arguments, "arguments", None):
+                return str(arguments.arguments)
+        return ""
+
+    def call_structured(
+        self,
+        *,
+        schema: type[BaseModel],
+        messages: list[dict[str, Any]],
+        model_kwargs: dict | None = None,
+    ) -> BaseModel:
+        """Request a structured completion and validate against the provided schema."""
+        if not messages:
+            raise ValueError("messages must be provided for structured calls")
+
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        api_kwargs = {
+            **model_kwargs,
+            "messages": messages,
+            **self._format_schema_for_provider(schema),
+        }
+
+        try:
+            completion = self.sync_client.chat.completions.create(**api_kwargs)
+        except Exception as exc:
+            log.exception("OpenAI structured call failed: %s", exc)
+            raise
+
+        raw_payload = self._extract_structured_content(completion)
+        if not raw_payload:
+            raise ValueError("Structured response was empty")
+
+        try:
+            return schema.model_validate_json(raw_payload)
+        except ValidationError as exc:  # pragma: no cover - defensive guard
+            log.error("Failed to validate structured response: %s", exc)
+            raise
 
     def parse_image_generation_response(self, response: list[Image]) -> GeneratorOutput:
         """Parse the image generation response into a GeneratorOutput."""

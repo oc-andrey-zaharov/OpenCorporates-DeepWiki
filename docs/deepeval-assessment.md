@@ -21,8 +21,12 @@ OpenCorporates DeepWiki is a Python application that:
   - RAG pipeline (`src/deepwiki_cli/services/rag.py`) - retrieves code context and generates responses
   - Chat completion (`src/deepwiki_cli/core/chat.py`) - handles streaming LLM responses
   - Wiki generation - creates structured documentation from repository code
-- **Supports multiple providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, Ollama
+- **Supports multiple providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock
 - **Has existing test infrastructure**: pytest-based unit and integration tests
+
+### Structured Output Contracts
+
+All LLM prompts now emit compact JSON validated against the schemas in `src/deepwiki_cli/domain/schemas.py` (`WikiStructureSchema`, `WikiPageSchema`, `RAGContextSchema`). DeepEval tests should parse these JSON payloads before making assertions so we can validate both the structured metadata (summaries, keywords, referenced files, diagram types) and the Markdown `content`. When a provider lacks JSON mode, the CLI automatically falls back to streaming text, but schema validation is still enforced in post-processing.
 
 **Key Testing Requirements:**
 
@@ -632,7 +636,7 @@ def test_wiki_depth_metric(rag_instance, evaluator):
 - Use cheaper models for evaluation (e.g., `gpt-4o-mini` instead of `gpt-4`)
 - Cache evaluation results for identical inputs
 - Run evaluations selectively (not on every generation)
-- Use local models (Ollama) for evaluation when possible
+- Use local models (LM Studio) for evaluation when possible
 
 ### Challenge 2: Evaluation Latency
 

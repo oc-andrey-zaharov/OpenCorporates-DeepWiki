@@ -28,21 +28,24 @@ class StubContext:
         return _generator()
 
 
-VALID_XML = """
-<wiki_structure>
-  <title>Test Wiki</title>
-  <description>Example description</description>
-  <pages>
-    <page id="page-1">
-      <title>Overview</title>
-      <importance>high</importance>
-      <relevant_files>
-        <file_path>README.md</file_path>
-      </relevant_files>
-      <related_pages />
-    </page>
-  </pages>
-</wiki_structure>
+VALID_JSON = """
+{
+  "schema_name": "wiki_structure",
+  "schema_version": "1.0",
+  "title": "Test Wiki",
+  "description": "Example description",
+  "pages": [
+    {
+      "page_id": "page-1",
+      "title": "Overview",
+      "summary": "Intro page",
+      "importance": "high",
+      "relevant_files": ["README.md"],
+      "related_page_ids": [],
+      "diagram_suggestions": []
+    }
+  ]
+}
 """.strip()
 
 
@@ -59,12 +62,14 @@ def _run_generate_structure(context: StubContext) -> object | None:
     )
 
 
-def test_generate_structure_retries_after_stream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_structure_retries_after_stream_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The CLI should retry when the provider aborts mid-stream."""
     context = StubContext(
         [
-            ["<wiki_structure>", "__RAISE__"],
-            [VALID_XML],
+            ["{", "__RAISE__"],
+            [VALID_JSON],
         ],
     )
     monkeypatch.setattr(
@@ -77,9 +82,11 @@ def test_generate_structure_retries_after_stream_error(monkeypatch: pytest.Monke
     assert context.calls == 2
 
 
-def test_generate_structure_returns_none_after_exhausting_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_structure_returns_none_after_exhausting_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """After repeated failures the function should give up gracefully."""
-    context = StubContext([["plain text"], ["still bad"], ["no xml here"]])
+    context = StubContext([["plain text"], ["still bad"], ["no json here"]])
     monkeypatch.setattr(
         "deepwiki_cli.cli.commands.generate.time.sleep",
         lambda *_args, **_kwargs: None,

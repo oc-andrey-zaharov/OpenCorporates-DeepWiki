@@ -1,64 +1,41 @@
-Analyze this repository and create a wiki structure for it.
+You are the DeepWiki structure planner. Analyze the repository context and produce a JSON document that **strictly** matches the `WikiStructureSchema` below. The schema defines the contract consumed by downstream tools and must be followed exactly.
 
-1. The complete file tree of the project:
-<file_tree>
+---
+### Repository context
+**File tree** (truncated paths allowed but keep hierarchy readable):
+```text
 $file_tree
-</file_tree>
+```
 
-2. The README file of the project:
-<readme>
+**README excerpt**:
+```markdown
 $readme
-</readme>
+```
+---
 
-I want to create a wiki for this repository. Determine the most logical structure for a wiki based on the repository's content.
+### Structural expectations
+- Target a $wiki_scope wiki with $min_pages-$max_pages total pages (aim for ~$target_pages). The repository currently contains $file_count files, so scale coverage accordingly.
+- $section_guidance
+- Include pages that require visual support (architecture, workflows, data flow, component relationships).
+- Each page must list repository files in `relevant_files` so later steps can pull accurate context.
 
-IMPORTANT: The wiki content will be generated in English.
+### JSON schema contract
+The response MUST be a single JSON object that validates against this schema:
 
-When designing the wiki structure, include pages that would benefit from visual diagrams, such as:
-- Architecture overviews
-- Data flow descriptions
-- Component relationships
-- Process workflows
-- State machines
-- Class hierarchies
+```json
+$schema_definition
+```
 
-$section_guidance
+### Example JSON response
+```json
+$example_response
+```
 
-Return your analysis in the following XML format:
+### Output rules
+1. Return **only** the JSON document—no narration, code fences, or commentary.
+2. Ensure every page ID is unique and referenced consistently in `related_page_ids`.
+3. Populate `diagram_suggestions` when a Mermaid diagram would clarify the topic.
+4. Keep titles concise (60 characters max) and summaries to 1—2 sentences.
+5. Use real file paths from the file tree/README within `relevant_files`.
 
-<wiki_structure>
-  <title>[Overall title for the wiki]</title>
-  <description>[Brief description of the repository]</description>
-  <pages>
-    <page id="page-1">
-      <title>[Page title]</title>
-      <description>[Brief description of what this page will cover]</description>
-      <importance>high|medium|low</importance>
-      <relevant_files>
-        <file_path>[Path to a relevant file]</file_path>
-        <!-- More file paths as needed -->
-      </relevant_files>
-      <related_pages>
-        <related>page-2</related>
-        <!-- More related page IDs as needed -->
-      </related_pages>
-    </page>
-    <!-- More pages as needed -->
-  </pages>
-</wiki_structure>
-
-IMPORTANT FORMATTING INSTRUCTIONS:
-- Return ONLY the valid XML structure specified above
-- DO NOT wrap the XML in markdown code blocks (no ``` or ```xml)
-- DO NOT include any explanation text before or after the XML
-- Ensure the XML is properly formatted and valid
-- Start directly with <wiki_structure> and end with </wiki_structure>
-
-IMPORTANT:
-1. Create $min_pages-$max_pages pages (aim for $target_pages pages) that would make a $wiki_scope wiki for this repository. The repository contains $file_count files, so adjust the number of pages accordingly - larger repositories may need more pages to cover all important aspects.
-2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
-3. The relevant_files should be actual files from the repository that would be used to generate that page
-4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
-
-
-
+Generate the JSON now.

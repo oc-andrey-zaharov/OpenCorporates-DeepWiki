@@ -16,10 +16,10 @@
       "top_k": 20
     }
   },
-  "embedder_ollama": {
-    "client_class": "OllamaClient",
+  "embedder_lmstudio": {
+    "client_class": "LMStudioClient",
     "model_kwargs": {
-      "model": "manutic/nomic-embed-code:7b-Q4_K_M"
+      "model": "text-embedding-nomic-embed-code"
     },
     "text_splitter": {
       "split_by": "token",

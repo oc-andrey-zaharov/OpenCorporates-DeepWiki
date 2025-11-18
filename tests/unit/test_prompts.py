@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 from deepwiki_cli.infrastructure.prompts.builders import (
+    RAG_TEMPLATE,
     build_wiki_page_prompt,
     build_wiki_structure_prompt,
 )
 
 
-def test_build_wiki_page_prompt_includes_page_title_and_files() -> None:
-    """Test that wiki page prompt includes page title and files."""
-    prompt = build_wiki_page_prompt("System Overview", "- [src/app.py]")
-    assert "# System Overview" in prompt
+def test_build_wiki_page_prompt_includes_json_schema() -> None:
+    """Test that wiki page prompt embeds schema guidance and inputs."""
+    prompt = build_wiki_page_prompt(
+        "System Overview",
+        "- [src/app.py]",
+        page_id="page-1",
+        importance="high",
+        related_pages=["architecture"],
+    )
+    assert '"schema_name": "wiki_page"' in prompt
+    assert "System Overview" in prompt
     assert "- [src/app.py]" in prompt
-    assert "Mermaid" in prompt  # sanity check that template loaded correctly
 
 
 def test_build_wiki_structure_prompt_handles_comprehensive_mode() -> None:
@@ -27,6 +34,12 @@ def test_build_wiki_structure_prompt_handles_comprehensive_mode() -> None:
         target_pages=5,
         file_count=42,
     )
-    assert "<file_tree>\nsrc/app.py\n</file_tree>" in prompt
-    assert "Create a structured wiki" in prompt
-    assert "4-6 pages" in prompt
+    assert "DeepWiki structure planner" in prompt
+    assert "```text" in prompt and "src/app.py" in prompt
+    assert "comprehensive wiki with 4-6 total pages" in prompt
+    assert '"schema_name": "wiki_structure"' in prompt
+
+
+def test_rag_template_references_context_json() -> None:
+    """Ensure the RAG template references the structured context payload."""
+    assert "{{ context_json }}" in RAG_TEMPLATE

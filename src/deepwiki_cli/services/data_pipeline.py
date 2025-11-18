@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import adalflow as adal
 import requests
-import structlog
+from deepwiki_cli.shared.structlog import structlog
 import tiktoken
 from adalflow.components.data_process import TextSplitter, ToEmbeddings
 from adalflow.core.db import LocalDB
@@ -25,7 +25,9 @@ from deepwiki_cli.infrastructure.config.defaults import (
     DEFAULT_EXCLUDED_FILES,
 )
 from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
-from deepwiki_cli.infrastructure.embedding.ollama_patch import OllamaDocumentProcessor
+from deepwiki_cli.infrastructure.embedding.lmstudio_patch import (
+    LMStudioDocumentProcessor,
+)
 
 logger = structlog.get_logger()
 
@@ -104,7 +106,7 @@ def _get_expected_embedding_dimension(embedder_type: str | None) -> int | None:
     """Get the expected embedding dimension for a given embedder type.
 
     Args:
-        embedder_type: Embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type: Embedder type ('openai', 'lmstudio', 'openrouter').
 
     Returns:
         Expected embedding dimension, or None if unknown.
@@ -114,10 +116,10 @@ def _get_expected_embedding_dimension(embedder_type: str | None) -> int | None:
 
     # Known embedding dimensions for each embedder type
     # OpenAI text-embedding-3-small: 256 (default), can be configured
-    # Ollama: varies by model
+    # LM Studio: varies by model
     dimension_map = {
         "openai": 256,  # Default for text-embedding-3-small
-        "ollama": None,  # Varies by model
+        "lmstudio": None,  # Varies by model
         "openrouter": None,  # Depends on upstream provider/model configuration
     }
 
@@ -139,7 +141,7 @@ def _validate_embedding_dimension(
     """
     expected_dim = _get_expected_embedding_dimension(embedder_type)
     if expected_dim is None:
-        # Cannot validate (e.g., Ollama with variable dimensions)
+        # Cannot validate (e.g., LM Studio with variable dimensions)
         return True
 
     # Check first few documents to determine actual dimension
@@ -217,7 +219,7 @@ def _require_valid_embeddings(
         raise ValueError(
             f"No embeddings were produced by the '{embedder_label}' embedder during {context}. "
             "Ensure the API credentials are valid, networking is permitted, or "
-            "configure DEEPWIKI_EMBEDDER_TYPE to use a local embedder such as Ollama.",
+            "configure DEEPWIKI_EMBEDDER_TYPE to use a local embedder such as LM Studio.",
         )
 
     return valid_documents
@@ -226,7 +228,7 @@ def _require_valid_embeddings(
 def _get_encoding(embedder_type: str) -> Any:
     """Get or create cached encoding object."""
     if embedder_type not in _encoding_cache:
-        if embedder_type == "ollama":
+        if embedder_type == "lmstudio":
             _encoding_cache[embedder_type] = tiktoken.get_encoding("cl100k_base")
         else:  # OpenAI or default
             _encoding_cache[embedder_type] = tiktoken.encoding_for_model(
@@ -238,15 +240,15 @@ def _get_encoding(embedder_type: str) -> Any:
 def count_tokens(
     text: str,
     embedder_type: str | None = None,
-    is_ollama_embedder: bool | None = None,
+    is_lmstudio_embedder: bool | None = None,
 ) -> int:
     """Count the number of tokens in a text string using tiktoken.
 
     Args:
         text (str): The text to count tokens for.
-        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type (str, optional): The embedder type ('openai', 'lmstudio', 'openrouter').
                                      If None, will be determined from configuration.
-        is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+        is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
 
     Returns:
@@ -254,8 +256,8 @@ def count_tokens(
     """
     try:
         # Handle backward compatibility
-        if embedder_type is None and is_ollama_embedder is not None:
-            embedder_type = "ollama" if is_ollama_embedder else None
+        if embedder_type is None and is_lmstudio_embedder is not None:
+            embedder_type = "lmstudio" if is_lmstudio_embedder else None
 
         # Determine embedder type if not specified
         if embedder_type is None:
@@ -287,7 +289,7 @@ def count_tokens_batch(
 
     Args:
         texts (List[str]): List of texts to count tokens for.
-        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type (str, optional): The embedder type ('openai', 'lmstudio', 'openrouter').
                                      If None, will be determined from configuration.
         num_threads (int, optional): Number of threads for parallel processing.
                                     If None, uses default (typically CPU count).
@@ -542,7 +544,7 @@ download_github_repo = download_repo
 def read_all_documents(
     path: str,
     embedder_type: str | None = None,
-    is_ollama_embedder: bool | None = None,
+    is_lmstudio_embedder: bool | None = None,
     excluded_dirs: List[str] = None,
     excluded_files: List[str] = None,
     included_dirs: List[str] = None,
@@ -552,9 +554,9 @@ def read_all_documents(
 
     Args:
         path (str): The root directory path.
-        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type (str, optional): The embedder type ('openai', 'lmstudio', 'openrouter').
                                      If None, will be determined from configuration.
-        is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+        is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
         excluded_dirs (List[str], optional): List of directories to exclude from processing.
             Overrides the default configuration if provided.
@@ -569,8 +571,8 @@ def read_all_documents(
         list: A list of Document objects with metadata.
     """
     # Handle backward compatibility
-    if embedder_type is None and is_ollama_embedder is not None:
-        embedder_type = "ollama" if is_ollama_embedder else None
+    if embedder_type is None and is_lmstudio_embedder is not None:
+        embedder_type = "lmstudio" if is_lmstudio_embedder else None
 
     # Resolve embedder_type from config if still None
     if embedder_type is None:
@@ -889,14 +891,14 @@ def read_all_documents(
 
 def prepare_data_pipeline(
     embedder_type: str | None = None,
-    is_ollama_embedder: bool | None = None,
+    is_lmstudio_embedder: bool | None = None,
 ):
     """Creates and returns the data transformation pipeline.
 
     Args:
-        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type (str, optional): The embedder type ('openai', 'lmstudio', 'openrouter').
                                      If None, will be determined from configuration.
-        is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+        is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
 
     Returns:
@@ -908,8 +910,8 @@ def prepare_data_pipeline(
     )
 
     # Handle backward compatibility
-    if embedder_type is None and is_ollama_embedder is not None:
-        embedder_type = "ollama" if is_ollama_embedder else None
+    if embedder_type is None and is_lmstudio_embedder is not None:
+        embedder_type = "lmstudio" if is_lmstudio_embedder else None
 
     # Determine embedder type if not specified
     if embedder_type is None:
@@ -925,9 +927,9 @@ def prepare_data_pipeline(
     embedder = get_embedder(embedder_type=embedder_type)
 
     # Choose appropriate processor based on embedder type
-    if embedder_type == "ollama":
-        # Use Ollama document processor for single-document processing
-        embedder_transformer = OllamaDocumentProcessor(embedder=embedder)
+    if embedder_type == "lmstudio":
+        # Use LM Studio document processor for single-document processing
+        embedder_transformer = LMStudioDocumentProcessor(embedder=embedder)
     else:
         # Use batch processing for OpenAI and OpenRouter embedders
         # Increase batch size for better performance (OpenAI supports up to 2048)
@@ -952,20 +954,20 @@ def transform_documents_and_save_to_db(
     documents: List[Document],
     db_path: str,
     embedder_type: str | None = None,
-    is_ollama_embedder: bool | None = None,
+    is_lmstudio_embedder: bool | None = None,
 ) -> LocalDB:
     """Transforms a list of documents and saves them to a local database.
 
     Args:
         documents (list): A list of `Document` objects.
         db_path (str): The path to the local database file.
-        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
+        embedder_type (str, optional): The embedder type ('openai', 'lmstudio', 'openrouter').
                                      If None, will be determined from configuration.
-        is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+        is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
     """
     # Get the data transformer
-    data_transformer = prepare_data_pipeline(embedder_type, is_ollama_embedder)
+    data_transformer = prepare_data_pipeline(embedder_type, is_lmstudio_embedder)
 
     # Save the documents to a local database
     db = LocalDB()
@@ -1117,7 +1119,7 @@ class DatabaseManager:
         repo_type: str | None = None,
         access_token: str | None = None,
         embedder_type: str | None = None,
-        is_ollama_embedder: bool | None = None,
+        is_lmstudio_embedder: bool | None = None,
         excluded_dirs: List[str] = None,
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
@@ -1130,9 +1132,9 @@ class DatabaseManager:
             repo_type(str): Type of repository
             repo_url_or_path (str): The URL or local path of the repository
             access_token (str, optional): Access token for private repositories
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'openrouter').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'lmstudio', 'openrouter').
                                          If None, will be determined from configuration.
-            is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+            is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
             excluded_dirs (List[str], optional): List of directories to exclude from processing
             excluded_files (List[str], optional): List of file patterns to exclude from processing
@@ -1144,8 +1146,8 @@ class DatabaseManager:
             List[Document]: List of Document objects
         """
         # Handle backward compatibility
-        if embedder_type is None and is_ollama_embedder is not None:
-            embedder_type = "ollama" if is_ollama_embedder else None
+        if embedder_type is None and is_lmstudio_embedder is not None:
+            embedder_type = "lmstudio" if is_lmstudio_embedder else None
 
         self.reset_database()
         self._create_repo(repo_url_or_path, repo_type, access_token)
@@ -1251,7 +1253,7 @@ class DatabaseManager:
     def prepare_db_index(
         self,
         embedder_type: str | None = None,
-        is_ollama_embedder: bool | None = None,
+        is_lmstudio_embedder: bool | None = None,
         excluded_dirs: List[str] = None,
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
@@ -1262,9 +1264,9 @@ class DatabaseManager:
         Uses incremental updates when possible to speed up subsequent runs.
 
         Args:
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'openrouter').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'lmstudio', 'openrouter').
                                          If None, will be determined from configuration.
-            is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
+            is_lmstudio_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
             excluded_dirs (List[str], optional): List of directories to exclude from processing
             excluded_files (List[str], optional): List of file patterns to exclude from processing
@@ -1276,8 +1278,8 @@ class DatabaseManager:
             List[Document]: List of Document objects
         """
         # Handle backward compatibility
-        if embedder_type is None and is_ollama_embedder is not None:
-            embedder_type = "ollama" if is_ollama_embedder else None
+        if embedder_type is None and is_lmstudio_embedder is not None:
+            embedder_type = "lmstudio" if is_lmstudio_embedder else None
 
         # Check the database
         cached_db_available = self.repo_paths is not None and os.path.exists(
@@ -1421,7 +1423,7 @@ class DatabaseManager:
                                 if files_to_process:
                                     data_transformer = prepare_data_pipeline(
                                         embedder_type=embedder_type,
-                                        is_ollama_embedder=is_ollama_embedder,
+                                        is_lmstudio_embedder=is_lmstudio_embedder,
                                     )
                                     temp_db = LocalDB()
                                     temp_db.register_transformer(

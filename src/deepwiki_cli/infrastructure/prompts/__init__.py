@@ -19,5 +19,3 @@ __all__ = [
     "build_wiki_page_prompt",
     "build_wiki_structure_prompt",
 ]
-
-

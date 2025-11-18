@@ -27,7 +27,9 @@ def _build_response(payload_size: int) -> Response:
     return response
 
 
-def test_openrouter_client_chunks_large_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openrouter_client_chunks_large_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Ensure large batches get split before calling the API."""
     client = OpenRouterClient()
     client.max_embed_batch_size = 2

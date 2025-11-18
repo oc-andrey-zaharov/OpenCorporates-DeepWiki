@@ -12,6 +12,19 @@ from deepwiki_cli.domain.models import (
     WikiSection,
     WikiStructureModel,
 )
+from deepwiki_cli.domain.schemas import (
+    FileTreeNodeSchema,
+    FileTreeSchema,
+    PromptDataSchema,
+    PromptMetadata,
+    PromptSchemaName,
+    RAGContextSchema,
+    RAGDocumentSchema,
+    WikiPageMetadata,
+    WikiPageSchema,
+    WikiStructurePageSchema,
+    WikiStructureSchema,
+)
 
 __all__ = [
     "ProcessedProjectEntry",
@@ -24,6 +37,15 @@ __all__ = [
     "WikiPage",
     "WikiSection",
     "WikiStructureModel",
+    "FileTreeNodeSchema",
+    "FileTreeSchema",
+    "PromptDataSchema",
+    "PromptMetadata",
+    "PromptSchemaName",
+    "RAGContextSchema",
+    "RAGDocumentSchema",
+    "WikiPageMetadata",
+    "WikiPageSchema",
+    "WikiStructurePageSchema",
+    "WikiStructureSchema",
 ]
-
-

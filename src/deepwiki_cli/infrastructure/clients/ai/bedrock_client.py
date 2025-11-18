@@ -9,6 +9,7 @@ import boto3
 import botocore
 from adalflow.core.model_client import ModelClient
 from adalflow.core.types import ModelType
+from pydantic import BaseModel, ValidationError
 
 # Configure logging
 from deepwiki_cli.infrastructure.logging.setup import setup_logging
@@ -197,6 +198,30 @@ class BedrockClient(ModelClient):
         # Default format
         return {"prompt": prompt}
 
+    def _format_schema_for_provider(
+        self,
+        provider: str,
+        schema: type[BaseModel],
+    ) -> dict[str, Any]:
+        """Map a schema definition to provider-specific fields."""
+        schema_payload = schema.model_json_schema()
+        if provider == "anthropic":
+            return {
+                "response_format": {
+                    "type": "json",
+                    "schema": schema_payload,
+                },
+            }
+        if provider == "amazon":
+            target = schema_payload.copy()
+            return {
+                "outputConfig": {
+                    "tokenizer": "json",
+                    "schema": target,
+                },
+            }
+        return {"json_schema": schema_payload}
+
     def _extract_response_text(self, provider: str, response: dict[str, Any]) -> str:
         """Extract the generated text from the response.
 
@@ -252,6 +277,12 @@ class BedrockClient(ModelClient):
 
             # Format the prompt according to the provider
             request_body = self._format_prompt_for_provider(provider, prompt, messages)
+            if "response_format" in api_kwargs:
+                request_body["response_format"] = api_kwargs["response_format"]
+            if "json_schema" in api_kwargs:
+                request_body["json_schema"] = api_kwargs["json_schema"]
+            if "outputConfig" in api_kwargs:
+                request_body["outputConfig"] = api_kwargs["outputConfig"]
 
             # Add model parameters if provided
             if "temperature" in api_kwargs:
@@ -332,3 +363,38 @@ class BedrockClient(ModelClient):
         raise ValueError(
             f"Model type {model_type} is not supported by AWS Bedrock client",
         )
+
+    def call_structured(
+        self,
+        *,
+        schema: type[BaseModel],
+        messages: list[dict[str, Any]],
+        model_kwargs: dict | None = None,
+    ) -> BaseModel:
+        """Call the Bedrock API and parse the response into the provided schema."""
+        if not messages:
+            raise ValueError("messages must be provided for structured calls")
+        model_kwargs = model_kwargs or {}
+        model_id = model_kwargs.get(
+            "model",
+            "anthropic.claude-3-sonnet-20240229-v1:0",
+        )
+        provider = self._get_model_provider(model_id)
+        api_kwargs = {
+            "model": model_id,
+            "messages": messages,
+            "input": "",
+            "temperature": model_kwargs.get("temperature"),
+            "top_p": model_kwargs.get("top_p"),
+        }
+        provider_config = self._format_schema_for_provider(provider, schema)
+        api_kwargs.update(provider_config)
+        response_text = self.call(api_kwargs=api_kwargs, model_type=ModelType.LLM)
+        if not isinstance(response_text, str):
+            response_text = str(response_text)
+
+        try:
+            return schema.model_validate_json(response_text)
+        except ValidationError as exc:
+            log.error("Bedrock structured response validation failed: %s", exc)
+            raise

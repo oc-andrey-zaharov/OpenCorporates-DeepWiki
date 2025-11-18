@@ -11,9 +11,10 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 - **DeepResearch**: Multi-turn research process for complex topics
 - **Incremental Regeneration**: Detects repo changes, updates only affected pages, and preserves untouched content
 - **Versioned Cache Management**: Maintain multiple wiki snapshots per repo with clear version numbering and summaries
-- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock, and local Ollama
+- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock
 - **Standalone CLI**: Works completely offline with a clean Python/Poetry toolchain
 - **Editable Workspaces**: Export markdown wikis into `docs/wiki`, edit locally, and sync back to the cache
+- **Structured JSON Schemas**: Every LLM interaction (wiki structure, pages, and RAG context) is validated against `WikiStructureSchema`, `WikiPageSchema`, and `RAGContextSchema` in `src/deepwiki_cli/domain/schemas.py`, guaranteeing parseable output.
 
 ## Quick Start
 
@@ -54,8 +55,8 @@ GITHUB_TOKEN=your_github_personal_access_token
 
 # Optional
 OPENROUTER_API_KEY=your_openrouter_api_key
-DEEPWIKI_EMBEDDER_TYPE=google  # or 'openai' (default), 'ollama'
-OLLAMA_HOST=http://localhost:11434
+DEEPWIKI_EMBEDDER_TYPE=google  # or 'openai' (default), 'lmstudio'
+LMSTUDIO_BASE_URL=http://127.0.0.1:1234  # Optional, defaults to http://127.0.0.1:1234
 ```
 
 ### Getting a GitHub Personal Access Token
@@ -120,7 +121,7 @@ deepwiki generate
 You'll be prompted for:
 
 - Repository (GitHub URL, owner/repo shorthand, or local path)
-- Model provider (google, openai, openrouter, ollama, etc.)
+- Model provider (google, openai, openrouter, bedrock, etc.)
 - Model selection
 - Wiki type (comprehensive or concise)
 - Optional file filters
@@ -133,6 +134,16 @@ When a cache already exists, the CLI now performs change detection against the l
 4. **Cancel** – exit without changes
 
 Use `--force` to skip all prompts and overwrite the latest version in CI or scripted workflows.
+
+### Structured Output Schemas
+
+DeepWiki now instructs models to respond with compact JSON matching the Pydantic schemas in `src/deepwiki_cli/domain/schemas.py`. The three primary contracts are:
+
+- `WikiStructureSchema` – Drives structure generation (page lists, importance, relevant files, and diagram hints).
+- `WikiPageSchema` – Powers page generation with `metadata` (summaries, keywords, referenced files, diagram types) plus the Markdown `content`.
+- `RAGContextSchema` – Wraps retrieval results (query, documents, conversation history, markdown instructions) so providers can consume a single JSON payload.
+
+All prompts embed the schema definition and example output, and all providers that support JSON mode/function calling (OpenAI, Bedrock, OpenRouter, etc.) are invoked via their structured APIs with fallback streaming/parsing for legacy models. Editable workspaces and exports persist the structured metadata so downstream tooling can surface summaries, keywords, and file provenance.
 
 #### List Cached Wikis
 
@@ -290,8 +301,8 @@ DeepWiki now runs exclusively as a CLI tool. All caching, wiki generation, and e
 | `OPENAI_API_KEY` | OpenAI API key | For OpenAI models |
 | `OPENROUTER_API_KEY` | OpenRouter API key | For OpenRouter models |
 | `GITHUB_TOKEN` | GitHub Personal Access Token for private repositories | For private repos |
-| `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, or `ollama` | No (default: `openai`) |
-| `OLLAMA_HOST` | Ollama host URL | No (default: `http://localhost:11434`) |
+| `DEEPWIKI_EMBEDDER_TYPE` | Embedder type: `openai`, `google`, or `lmstudio` | No (default: `openai`) |
+| `LMSTUDIO_BASE_URL` | LM Studio server URL | No (default: `http://127.0.0.1:1234`) |
 
 ### Configuration Files
 

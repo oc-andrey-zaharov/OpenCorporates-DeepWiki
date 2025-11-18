@@ -12,9 +12,9 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
-from adalflow.components.model_client.ollama_client import OllamaClient
 from adalflow.core.types import ModelType
+from google.api_core import exceptions as google_exceptions
+from pydantic import BaseModel
 
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
@@ -156,6 +156,7 @@ def generate_wiki_content(
     provider: str,
     model: str,
     repo_type: str = "github",
+    structured_schema: type[BaseModel] | None = None,
     token: str | None = None,
     excluded_dirs: list[str] | None = None,
     excluded_files: list[str] | None = None,
@@ -173,9 +174,10 @@ def generate_wiki_content(
     Args:
         repo_url: Repository URL
         messages: List of message dicts with 'role' and 'content' keys
-        provider: Model provider (google, openai, openrouter, ollama, bedrock)
+        provider: Model provider (google, openai, openrouter, bedrock)
         model: Model name
         repo_type: Repository type (default: "github")
+        structured_schema: Optional Pydantic schema for structured responses
         token: Optional access token for private repositories
         excluded_dirs: Optional list of directories to exclude
         excluded_files: Optional list of file patterns to exclude
@@ -197,7 +199,7 @@ def generate_wiki_content(
         last_message = messages[-1]
         if isinstance(last_message, dict) and last_message.get("content"):
             # Map provider to embedder_type for token counting
-            embedder_type = "ollama" if provider == "ollama" else None
+            embedder_type = "lmstudio" if provider == "lmstudio" else None
             tokens = count_tokens(last_message["content"], embedder_type=embedder_type)
             logger.info(f"Request size: {tokens} tokens")
             if tokens > 8000:
@@ -260,6 +262,7 @@ def generate_wiki_content(
 
     # Only retrieve documents if input is not too large
     context_text = ""
+    context_json_payload: str | None = None
     retrieved_documents = None
 
     if not input_too_large:
@@ -280,6 +283,11 @@ def generate_wiki_content(
                     # Format context for the prompt in a more structured way
                     documents = retrieved_documents[0].documents
                     logger.info(f"Retrieved {len(documents)} documents")
+                    context_json_payload = getattr(
+                        retrieved_documents[0],
+                        "context_json",
+                        None,
+                    )
 
                     # Group documents by file path
                     docs_by_file: dict[str, list[Any]] = {}
@@ -340,105 +348,48 @@ def generate_wiki_content(
         # Add file content to the prompt
         prompt += f'<currentFileContent path="{file_path}">\n{file_content}\n</currentFileContent>\n\n'
 
-    # Only include context if it's not empty
-    CONTEXT_START = "<START_OF_CONTEXT>"
-    CONTEXT_END = "<END_OF_CONTEXT>"
-    if context_text.strip():
-        prompt += f"{CONTEXT_START}\n{context_text}\n{CONTEXT_END}\n\n"
+    if context_json_payload:
+        prompt += "RAG_CONTEXT_JSON:\n"
+        prompt += f"{context_json_payload}\n\n"
+    elif context_text.strip():
+        prompt += "RAG_CONTEXT_MARKDOWN:\n"
+        prompt += f"{context_text}\n\n"
     else:
-        # Add a note that we're skipping RAG due to size constraints or because it's the isolated API
         logger.info("No context available from RAG")
-        prompt += "<note>Answering without retrieval augmentation.</note>\n\n"
+        prompt += "RAG_CONTEXT_JSON: []\n\n"
 
     prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
 
     model_config = get_model_config(provider, model)["model_kwargs"]
 
-    # Create async generator function for streaming
+    # Create async generator function for streaming/structured responses
     async def _async_stream() -> AsyncGenerator[str]:
-        try:
-            if provider == "ollama":
-                logger.info(f"Using Ollama with model: {model_config['model']}")
-                prompt_with_no_think = prompt + " /no_think"
-                model_client = OllamaClient()
-                model_kwargs = {
-                    "model": model_config["model"],
-                    "stream": True,
-                    "options": {
-                        "temperature": model_config["temperature"],
-                        "top_p": model_config["top_p"],
-                        "num_ctx": model_config["num_ctx"],
-                    },
-                }
-                api_kwargs = model_client.convert_inputs_to_api_kwargs(
-                    input=prompt_with_no_think,
+        async def _maybe_structured_completion(
+            model_client: Any,
+            model_kwargs: dict[str, Any],
+        ) -> str | None:
+            """Attempt structured completion when supported."""
+            if structured_schema is None:
+                return None
+            if not hasattr(model_client, "call_structured"):
+                return None
+            try:
+                schema_obj = await asyncio.to_thread(
+                    model_client.call_structured,
+                    schema=structured_schema,
+                    messages=[{"role": "user", "content": prompt}],
                     model_kwargs=model_kwargs,
-                    model_type=ModelType.LLM,
                 )
-                logger.debug(f"Ollama API kwargs: {api_kwargs}")
-                response = await model_client.acall(
-                    api_kwargs=api_kwargs,
-                    model_type=ModelType.LLM,
+                return schema_obj.model_dump_json()
+            except Exception as exc:  # pragma: no cover - fallback only
+                logger.warning(
+                    "Structured completion failed; falling back to standard generation",
+                    extra={"error": str(exc)},
                 )
-                logger.debug("Ollama response received, starting to stream chunks")
-                chunk_count = 0
-                async for chunk in response:
-                    chunk_count += 1
-                    # Try multiple ways to extract text from chunk
-                    text = None
+                return None
 
-                    # Check for dict-like access first (most common)
-                    if isinstance(chunk, dict):
-                        if "message" in chunk:
-                            msg = chunk["message"]
-                            if isinstance(msg, dict) and "content" in msg:
-                                text = msg["content"]
-                            elif hasattr(msg, "content"):
-                                text = msg.content
-                        elif "response" in chunk:
-                            text = chunk["response"]
-                        elif "text" in chunk:
-                            text = chunk["text"]
-                    # Check for message.content attribute (Ollama Python library format)
-                    elif hasattr(chunk, "message"):
-                        msg = chunk.message
-                        if hasattr(msg, "content"):
-                            text = msg.content
-                        elif isinstance(msg, dict) and "content" in msg:
-                            text = msg["content"]
-                    # Check for direct attributes
-                    else:
-                        text = (
-                            getattr(chunk, "response", None)
-                            or getattr(chunk, "text", None)
-                            or (str(chunk) if chunk else None)
-                        )
-
-                    # Log first few chunks for debugging
-                    if chunk_count <= 3:
-                        logger.debug(
-                            f"Ollama chunk #{chunk_count}: type={type(chunk)}, text={text[:50] if text else None}",
-                        )
-
-                    # Filter out metadata and empty chunks
-                    if text and isinstance(text, str):
-                        # Skip metadata lines
-                        if text.startswith(("model=", "created_at=")):
-                            continue
-                        # Clean up reasoning tags
-                        text = text.replace("<think>", "").replace("</think>", "")
-                        if text.strip():  # Only yield non-empty text
-                            yield text
-                    elif text is None and chunk_count % 100 == 0:
-                        # Log periodically if we're getting None chunks
-                        logger.warning(
-                            f"Received None text chunk at count {chunk_count}, chunk type: {type(chunk)}",
-                        )
-
-                logger.info(
-                    f"Ollama streaming completed, processed {chunk_count} chunks",
-                )
-            elif provider == "openrouter":
+        try:
+            if provider == "openrouter":
                 try:
                     logger.info(f"Using OpenRouter with model: {model}")
                     model_client = OpenRouterClient()
@@ -449,6 +400,13 @@ def generate_wiki_content(
                     }
                     if "top_p" in model_config:
                         model_kwargs["top_p"] = model_config["top_p"]
+                    structured_payload = await _maybe_structured_completion(
+                        model_client,
+                        {**model_kwargs, "stream": False},
+                    )
+                    if structured_payload is not None:
+                        yield structured_payload
+                        return
                     api_kwargs = model_client.convert_inputs_to_api_kwargs(
                         input=prompt,
                         model_kwargs=model_kwargs,
@@ -476,6 +434,13 @@ def generate_wiki_content(
                     }
                     if "top_p" in model_config:
                         model_kwargs["top_p"] = model_config["top_p"]
+                    structured_payload = await _maybe_structured_completion(
+                        model_client,
+                        {**model_kwargs, "stream": False},
+                    )
+                    if structured_payload is not None:
+                        yield structured_payload
+                        return
                     api_kwargs = model_client.convert_inputs_to_api_kwargs(
                         input=prompt,
                         model_kwargs=model_kwargs,
@@ -568,6 +533,13 @@ def generate_wiki_content(
                         "temperature": model_config["temperature"],
                         "top_p": model_config["top_p"],
                     }
+                    structured_payload = await _maybe_structured_completion(
+                        model_client,
+                        model_kwargs.copy(),
+                    )
+                    if structured_payload is not None:
+                        yield structured_payload
+                        return
                     api_kwargs = model_client.convert_inputs_to_api_kwargs(
                         input=prompt,
                         model_kwargs=model_kwargs,

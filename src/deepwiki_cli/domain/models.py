@@ -4,7 +4,7 @@ This module contains all shared data models used across the application,
 including wiki structures, cache data, and repository information.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,7 @@ class WikiPage(BaseModel):
     filePaths: list[str]
     importance: str  # Should ideally be Literal['high', 'medium', 'low']
     relatedPages: list[str]
+    metadata: dict[str, Any] | None = None
 
 
 class ProcessedProjectEntry(BaseModel):
@@ -136,5 +137,3 @@ __all__ = [
     "WikiSection",
     "WikiStructureModel",
 ]
-
-

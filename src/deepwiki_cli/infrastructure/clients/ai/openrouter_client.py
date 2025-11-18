@@ -2,15 +2,21 @@
 
 import json
 import logging
-from collections.abc import AsyncGenerator, Generator
+import os
+from collections.abc import AsyncGenerator, Generator, Sequence
 from typing import Any
 
 import aiohttp
+import backoff
+import requests
 from adalflow.core.model_client import ModelClient
 from adalflow.core.types import (
     CompletionUsage,
+    EmbedderOutput,
+    Embedding,
     GeneratorOutput,
     ModelType,
+    Usage,
 )
 from requests.exceptions import RequestException
 
@@ -37,11 +43,15 @@ class OpenRouterClient(ModelClient):
         ```
     """
 
+    DEFAULT_MAX_EMBED_BATCH_SIZE = 8
+    PROVIDER_ERROR_RETRY = "No successful provider responses"
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the OpenRouter client."""
         super().__init__(*args, **kwargs)
         self.sync_client = self.init_sync_client()
         self.async_client = None  # Initialize async client only when needed
+        self.max_embed_batch_size = self._resolve_max_embed_batch_size()
 
     def init_sync_client(self):
         """Initialize the synchronous OpenRouter client."""
@@ -90,8 +100,18 @@ class OpenRouterClient(ModelClient):
                     f"Unsupported input format for OpenRouter: {type(input)}",
                 )
 
-            # For debugging
-            log.info(f"Messages for OpenRouter: {messages}")
+            if log.isEnabledFor(logging.DEBUG):
+                preview = ""
+                if messages:
+                    last_message = messages[-1]
+                    content = last_message.get("content")
+                    if isinstance(content, str):
+                        preview = content[:200]
+                log.debug(
+                    "Prepared %d messages for OpenRouter. Preview: %s",
+                    len(messages),
+                    preview,
+                )
 
             api_kwargs = {"messages": messages, **model_kwargs}
 
@@ -101,15 +121,352 @@ class OpenRouterClient(ModelClient):
 
             return api_kwargs
 
-        if model_type == ModelType.EMBEDDING:
-            # OpenRouter doesn't support embeddings directly
-            # We could potentially use a specific model through OpenRouter for embeddings
-            # but for now, we'll raise an error
-            raise NotImplementedError(
-                "OpenRouter client does not support embeddings yet",
-            )
+        if model_type == ModelType.EMBEDDER:
+            if isinstance(input, str):
+                inputs: list[str] = [input]
+            elif isinstance(input, Sequence):
+                inputs = list(input)
+            else:
+                raise TypeError(
+                    f"Unsupported embedding input format for OpenRouter: {type(input)}",
+                )
+
+            api_kwargs = {"input": inputs, **model_kwargs}
+            if "model" not in api_kwargs:
+                api_kwargs["model"] = "mistralai/codestral-embed-2505"
+
+            return api_kwargs
 
         raise ValueError(f"Unsupported model type: {model_type}")
+
+    def call(
+        self,
+        api_kwargs: dict | None = None,
+        model_type: ModelType = ModelType.UNDEFINED,
+    ):
+        """Make a synchronous call to the OpenRouter API."""
+        if api_kwargs is None:
+            api_kwargs = {}
+
+        if model_type == ModelType.EMBEDDER:
+            inputs = api_kwargs.get("input")
+            return self._call_embeddings_with_chunking(api_kwargs, inputs)
+
+        raise ValueError(
+            f"Synchronous call not supported for model type: {model_type}",
+        )
+
+    @backoff.on_exception(
+        backoff.expo,
+        (RequestException,),
+        max_tries=3,
+        max_time=30,
+    )
+    def _call_embeddings(self, api_kwargs: dict) -> requests.Response:
+        """Execute a synchronous embeddings request with retry logic."""
+        if not self.sync_client:
+            self.sync_client = self.init_sync_client()
+
+        if not self.sync_client.get("api_key"):
+            raise ValueError(
+                "OPENROUTER_API_KEY not configured. Please set it to use OpenRouter embeddings.",
+            )
+
+        inputs = api_kwargs.get("input")
+        if inputs is None:
+            raise ValueError("OpenRouter embeddings require 'input' data.")
+
+        # Filter out empty inputs
+        if isinstance(inputs, list):
+            filtered_inputs = [
+                inp for inp in inputs if inp and isinstance(inp, str) and inp.strip()
+            ]
+            if not filtered_inputs:
+                log.warning("All inputs were empty after filtering")
+                raise ValueError("All inputs are empty or invalid")
+            if len(filtered_inputs) != len(inputs):
+                log.warning(
+                    f"Filtered out {len(inputs) - len(filtered_inputs)} empty inputs",
+                    extra={
+                        "original_count": len(inputs),
+                        "filtered_count": len(filtered_inputs),
+                    },
+                )
+            inputs = filtered_inputs
+        elif isinstance(inputs, str):
+            if not inputs.strip():
+                raise ValueError("Input string is empty")
+        else:
+            raise TypeError(
+                f"Input must be a string or list of strings, got {type(inputs)}"
+            )
+
+        headers = {
+            "Authorization": f"Bearer {self.sync_client['api_key']}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/AsyncFuncAI/deepwiki-open",
+            "X-Title": "DeepWiki",
+        }
+
+        payload = {
+            "model": api_kwargs.get("model", "mistralai/codestral-embed-2505"),
+            "input": inputs,
+        }
+
+        if "encoding_format" in api_kwargs:
+            payload["encoding_format"] = api_kwargs["encoding_format"]
+
+        log.info(
+            "Calling OpenRouter embeddings API",
+            extra={
+                "model": payload["model"],
+                "input_count": (
+                    len(payload["input"]) if isinstance(payload["input"], list) else 1
+                ),
+            },
+        )
+
+        try:
+            response = requests.post(
+                f"{self.sync_client['base_url']}/embeddings",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            response.raise_for_status()
+
+            # Check for provider errors in successful HTTP responses
+            try:
+                response_data = response.json()
+                if "error" in response_data:
+                    error_msg = response_data["error"]
+                    if isinstance(error_msg, dict):
+                        error_msg = error_msg.get("message", str(error_msg))
+                    # Retry on provider errors like "No successful provider responses"
+                    if (
+                        "No successful provider responses" in str(error_msg)
+                        or "provider" in str(error_msg).lower()
+                    ):
+                        log.warning(f"Provider error detected, will retry: {error_msg}")
+                        raise RequestException(f"Provider error: {error_msg}")
+            except (json.JSONDecodeError, ValueError):
+                # If response isn't JSON or doesn't have error, continue
+                pass
+
+            return response
+        except RequestException as exc:
+            log.warning(f"OpenRouter embeddings API call failed (will retry): {exc!s}")
+            raise
+
+    def _call_embeddings_with_chunking(
+        self,
+        api_kwargs: dict,
+        inputs: Sequence[str] | str | None,
+    ) -> Any:
+        """Chunk large batches and gracefully retry on provider failures."""
+        if isinstance(inputs, list) and len(inputs) > self.max_embed_batch_size:
+            log.debug(
+                "Splitting OpenRouter embedding batch",
+                extra={
+                    "original_count": len(inputs),
+                    "batch_size": self.max_embed_batch_size,
+                },
+            )
+            payloads: list[dict[str, Any]] = []
+            for chunk in self._chunk_inputs(inputs, self.max_embed_batch_size):
+                chunk_kwargs = {**api_kwargs, "input": chunk}
+                response = self._call_embeddings_with_chunking(
+                    chunk_kwargs,
+                    chunk,
+                )
+                payloads.append(self._ensure_payload_dict(response))
+            return self._combine_embedding_payloads(payloads, api_kwargs.get("model"))
+
+        try:
+            return self._call_embeddings(api_kwargs)
+        except RequestException as exc:
+            if (
+                isinstance(inputs, list)
+                and len(inputs) > 1
+                and self.PROVIDER_ERROR_RETRY in str(exc)
+            ):
+                log.info(
+                    "Provider rejected batched embeddings, retrying sequentially",
+                    extra={"input_count": len(inputs)},
+                )
+                payloads = []
+                for chunk in self._chunk_inputs(inputs, 1):
+                    chunk_kwargs = {**api_kwargs, "input": chunk}
+                    response = self._call_embeddings_with_chunking(
+                        chunk_kwargs,
+                        chunk,
+                    )
+                    payloads.append(self._ensure_payload_dict(response))
+                return self._combine_embedding_payloads(
+                    payloads,
+                    api_kwargs.get("model"),
+                )
+            raise
+    def _ensure_payload_dict(self, response: Any) -> dict[str, Any]:
+        """Normalize various response types to a dictionary."""
+        if isinstance(response, requests.Response):
+            return response.json()
+        if isinstance(response, (str, bytes)):
+            return json.loads(response)
+        if isinstance(response, dict):
+            return response
+        raise TypeError(f"Unsupported response type: {type(response)}")
+
+    def _combine_embedding_payloads(
+        self,
+        payloads: list[dict[str, Any]],
+        default_model: str | None,
+    ) -> dict[str, Any]:
+        """Combine multiple embedding payloads into a single response."""
+        combined_data: list[dict[str, Any]] = []
+        prompt_tokens = 0
+        total_tokens = 0
+        model = default_model
+
+        for payload in payloads:
+            combined_data.extend(payload.get("data", []))
+            model = payload.get("model", model)
+            usage = payload.get("usage")
+            if isinstance(usage, dict):
+                prompt_tokens += int(usage.get("prompt_tokens") or 0)
+                total_tokens += int(usage.get("total_tokens") or 0)
+
+        result: dict[str, Any] = {"data": combined_data}
+        if model:
+            result["model"] = model
+        if prompt_tokens or total_tokens:
+            result["usage"] = {
+                "prompt_tokens": prompt_tokens,
+                "total_tokens": total_tokens or prompt_tokens,
+            }
+        return result
+
+    @staticmethod
+    def _chunk_inputs(
+        inputs: Sequence[str],
+        chunk_size: int,
+    ) -> Generator[list[str], None, None]:
+        """Yield list chunks without modifying the original input list."""
+        for start in range(0, len(inputs), chunk_size):
+            yield list(inputs[start : start + chunk_size])
+
+    def _resolve_max_embed_batch_size(self) -> int:
+        """Determine the maximum embed batch size from environment overrides."""
+        env_value = os.environ.get("OPENROUTER_EMBED_BATCH_SIZE")
+        if not env_value:
+            return self.DEFAULT_MAX_EMBED_BATCH_SIZE
+        try:
+            parsed = int(env_value)
+        except (TypeError, ValueError):
+            log.warning(
+                "Invalid OPENROUTER_EMBED_BATCH_SIZE value: %s. Using default.",
+                env_value,
+            )
+            return self.DEFAULT_MAX_EMBED_BATCH_SIZE
+        return parsed if parsed > 0 else self.DEFAULT_MAX_EMBED_BATCH_SIZE
+
+    def parse_embedding_response(self, response: Any) -> EmbedderOutput:
+        """Parse the OpenRouter embeddings API response."""
+        try:
+            if hasattr(response, "json"):
+                payload = response.json()
+            elif isinstance(response, (str, bytes)):
+                payload = json.loads(response)
+            elif isinstance(response, dict):
+                payload = response
+            else:
+                raise TypeError(
+                    f"Unsupported response type for embeddings: {type(response)}",
+                )
+
+            # Check for API errors in the response
+            if "error" in payload:
+                error_msg = payload["error"]
+                if isinstance(error_msg, dict):
+                    error_msg = error_msg.get("message", str(error_msg))
+                log.error(
+                    f"OpenRouter API error in response: {error_msg}",
+                    extra={"payload": payload},
+                )
+                return EmbedderOutput(
+                    data=[],
+                    error=f"OpenRouter API error: {error_msg}",
+                    raw_response=payload,
+                )
+
+            usage = None
+            usage_payload = payload.get("usage")
+            if isinstance(usage_payload, dict):
+                prompt_tokens = usage_payload.get("prompt_tokens")
+                total_tokens = usage_payload.get("total_tokens")
+                if prompt_tokens is not None and total_tokens is not None:
+                    usage = Usage(
+                        prompt_tokens=prompt_tokens,
+                        total_tokens=total_tokens,
+                    )
+
+            embeddings: list[Embedding] = []
+            data_items = payload.get("data", [])
+
+            if not data_items:
+                log.warning(
+                    "OpenRouter API returned empty data array",
+                    extra={"payload_keys": list(payload.keys())},
+                )
+                return EmbedderOutput(
+                    data=[],
+                    error="OpenRouter API returned empty data array",
+                    raw_response=payload,
+                )
+
+            for idx, item in enumerate(data_items):
+                vector = item.get("embedding")
+                if vector is None:
+                    log.warning(
+                        f"Missing embedding vector at index {idx}",
+                        extra={
+                            "item_keys": list(item.keys())
+                            if isinstance(item, dict)
+                            else None
+                        },
+                    )
+                    continue
+                embeddings.append(
+                    Embedding(
+                        embedding=vector,
+                        index=item.get("index", idx),
+                    ),
+                )
+
+            if not embeddings:
+                log.error(
+                    "No valid embeddings found in OpenRouter response",
+                    extra={"data_items_count": len(data_items), "payload": payload},
+                )
+                return EmbedderOutput(
+                    data=[],
+                    error="No valid embeddings found in OpenRouter response",
+                    raw_response=payload,
+                )
+
+            return EmbedderOutput(
+                data=embeddings,
+                model=payload.get("model"),
+                usage=usage,
+                raw_response=payload,
+            )
+        except Exception as exc:
+            log.exception(f"Failed to parse OpenRouter embedding response: {exc!s}")
+            return EmbedderOutput(
+                data=[],
+                error=str(exc),
+                raw_response=response,
+            )
 
     async def acall(  # noqa: PLR0911
         self,
@@ -151,10 +508,30 @@ class OpenRouterClient(ModelClient):
             # Make the API call
             try:
                 log.info(
-                    f"Making async OpenRouter API call to {self.async_client['base_url']}/chat/completions",
+                    "Calling OpenRouter chat completions API at %s",
+                    f"{self.async_client['base_url']}/chat/completions",
                 )
-                log.info(f"Request headers: {headers}")
-                log.info(f"Request body: {api_kwargs}")
+                log.debug("OpenRouter request headers: %s", headers)
+                if log.isEnabledFor(logging.DEBUG):
+                    debug_payload = api_kwargs.copy()
+                    if "messages" in debug_payload:
+                        debug_payload = debug_payload.copy()
+                        formatted_messages = []
+                        for msg in debug_payload["messages"]:
+                            if isinstance(msg, dict):
+                                content = msg.get("content")
+                                preview_content = (
+                                    content[:200]
+                                    if isinstance(content, str)
+                                    else content
+                                )
+                                formatted_messages.append(
+                                    {**msg, "content": preview_content},
+                                )
+                            else:
+                                formatted_messages.append(msg)
+                        debug_payload["messages"] = formatted_messages
+                    log.debug("OpenRouter request payload: %s", debug_payload)
 
                 async with aiohttp.ClientSession() as session:
                     from aiohttp import ClientTimeout
@@ -237,7 +614,9 @@ class OpenRouterClient(ModelClient):
                                                     ).replace("  >", ">")
 
                                                     # Try to parse the fixed XML
-                                                    from xml.minidom import parseString
+                                                    from xml.dom.minidom import (
+                                                        parseString,
+                                                    )
 
                                                     dom = parseString(fixed_xml)
 

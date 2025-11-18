@@ -57,6 +57,13 @@ MARKDOWN_LAYOUTS = ("single", "multi")
     help="Comma-separated page IDs or titles (default: interactive multi-select/all).",
 )
 @click.option(
+    "--all",
+    "export_all",
+    is_flag=True,
+    default=False,
+    help="Export all pages without prompting for selection.",
+)
+@click.option(
     "--docs-dir",
     type=click.Path(path_type=Path),
     help="Override editable workspace directory (default from config).",
@@ -78,6 +85,7 @@ def export(
     export_format: str | None,
     layout: str | None,
     pages_arg: str | None,
+    export_all: bool,
     docs_dir: Path | None,
     watch_enabled: bool | None,
     output: str | None,
@@ -118,7 +126,7 @@ def export(
 
     structure = WikiStructureModel(**cache_data["wiki_structure"])
     available_pages = _build_pages(structure, cache_data["generated_pages"])
-    pages_to_export = _filter_pages(available_pages, pages_arg)
+    pages_to_export = _filter_pages(available_pages, pages_arg, export_all)
 
     if not pages_to_export:
         click.echo("No matching pages to export.", err=True)
@@ -243,7 +251,12 @@ def _build_pages(
 def _filter_pages(
     available: list[WikiPage],
     pages_arg: str | None,
+    export_all: bool = False,
 ) -> list[WikiPage]:
+    # If --all flag is set, return all pages immediately
+    if export_all:
+        return available
+
     if pages_arg:
         tokens = {token.strip() for token in pages_arg.split(",") if token.strip()}
         if not tokens or "all" in {token.lower() for token in tokens}:
@@ -265,7 +278,7 @@ def _filter_pages(
 
     choices = [f"{page.title} [{page.id}]" for page in available]
     selection = select_multiple_from_list(
-        "Select pages to export (press enter for all)",
+        "Select pages to export",
         choices,
     )
     if len(selection) == len(choices):

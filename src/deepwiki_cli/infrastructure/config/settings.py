@@ -11,9 +11,6 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
-from deepwiki_cli.infrastructure.clients.ai.google_embedder_client import (
-    GoogleEmbedderClient,
-)
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 
@@ -68,7 +65,7 @@ def _load_env_files() -> None:
 
         if normalized.is_file():
             try:
-                load_dotenv(dotenv_path=normalized, override=False)
+                load_dotenv(dotenv_path=normalized, override=True)
                 loaded_paths.append(str(normalized))
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning(
@@ -108,7 +105,7 @@ class Config(BaseSettings):
         aws_region: AWS region for AWS services.
         aws_role_arn: AWS role ARN for assuming roles.
         github_token: GitHub token for repository access.
-        embedder_type: Type of embedder to use (openai, google, ollama).
+        embedder_type: Type of embedder to use (openai, ollama, openrouter).
         config_dir: Optional directory path for configuration files.
 
     Example:
@@ -168,7 +165,6 @@ class Config(BaseSettings):
 # Client class mapping
 CLIENT_CLASSES = {
     "GoogleGenAIClient": GoogleGenAIClient,
-    "GoogleEmbedderClient": GoogleEmbedderClient,
     "OpenAIClient": OpenAIClient,
     "OpenRouterClient": OpenRouterClient,
     "OllamaClient": OllamaClient,

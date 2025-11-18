@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from adalflow.components.model_client.ollama_client import OllamaClient
 from adalflow.core.types import ModelType
 
@@ -35,6 +36,42 @@ def _is_truthy(value: str | None) -> bool:
 
 
 OPENAI_STREAMING_ENABLED = _is_truthy(os.environ.get("OPENAI_STREAMING_ENABLED"))
+
+
+def _read_int_env(var_name: str, default: int) -> int:
+    value = os.environ.get(var_name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(
+            "Invalid integer value for %s: %s. Using default %s.",
+            var_name,
+            value,
+            default,
+        )
+        return default
+
+
+def _read_float_env(var_name: str, default: float) -> float:
+    value = os.environ.get(var_name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        logger.warning(
+            "Invalid float value for %s: %s. Using default %s.",
+            var_name,
+            value,
+            default,
+        )
+        return default
+
+
+GOOGLE_STREAM_MAX_RETRIES = _read_int_env("DEEPWIKI_GOOGLE_STREAM_RETRIES", 3)
+GOOGLE_STREAM_RETRY_DELAY = _read_float_env("DEEPWIKI_GOOGLE_STREAM_RETRY_DELAY", 3.0)
 
 
 def _extract_completion_text(completion: Any) -> str | None:
@@ -549,19 +586,34 @@ def generate_wiki_content(
                     logger.exception(f"Error with AWS Bedrock API: {e_bedrock!s}")
                     yield f"\nError with AWS Bedrock API: {e_bedrock!s}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
             else:
-                # Google Generative AI
-                model_client = genai.GenerativeModel(
-                    model_name=model_config["model"],
-                    generation_config={  # type: ignore[arg-type]
-                        "temperature": model_config["temperature"],
-                        "top_p": model_config["top_p"],
-                        "top_k": model_config["top_k"],
-                    },
-                )
-                response = model_client.generate_content(prompt, stream=True)
-                for chunk in response:
-                    if hasattr(chunk, "text"):
-                        yield chunk.text
+                # Google Generative AI with retry for overloads
+                attempt = 0
+                while attempt < GOOGLE_STREAM_MAX_RETRIES:
+                    attempt += 1
+                    try:
+                        model_client = genai.GenerativeModel(
+                            model_name=model_config["model"],
+                            generation_config={  # type: ignore[arg-type]
+                                "temperature": model_config["temperature"],
+                                "top_p": model_config["top_p"],
+                                "top_k": model_config["top_k"],
+                            },
+                        )
+                        response = model_client.generate_content(prompt, stream=True)
+                        for chunk in response:
+                            if hasattr(chunk, "text"):
+                                yield chunk.text
+                        break
+                    except google_exceptions.ServiceUnavailable as svc_error:
+                        logger.warning(
+                            "Google Generative AI overloaded (attempt %s/%s): %s",
+                            attempt,
+                            GOOGLE_STREAM_MAX_RETRIES,
+                            svc_error,
+                        )
+                        if attempt >= GOOGLE_STREAM_MAX_RETRIES:
+                            raise
+                        await asyncio.sleep(GOOGLE_STREAM_RETRY_DELAY * attempt)
 
         except Exception as e_outer:
             logger.exception(f"Error in streaming response: {e_outer!s}")

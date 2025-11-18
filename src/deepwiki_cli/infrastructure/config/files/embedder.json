@@ -1,25 +1,49 @@
 {
-  "embedder": {
+  "embedder_openai": {
     "client_class": "OpenAIClient",
     "batch_size": 500,
     "model_kwargs": {
       "model": "text-embedding-3-small",
       "dimensions": 256,
       "encoding_format": "float"
+    },
+    "text_splitter": {
+      "split_by": "token",
+      "chunk_size": 2000,
+      "chunk_overlap": 400
+    },
+    "retriever": {
+      "top_k": 20
     }
   },
   "embedder_ollama": {
     "client_class": "OllamaClient",
     "model_kwargs": {
-      "model": "embeddinggemma"
+      "model": "manutic/nomic-embed-code:7b-Q4_K_M"
+    },
+    "text_splitter": {
+      "split_by": "token",
+      "chunk_size": 3000,
+      "chunk_overlap": 1000
+    },
+    "retriever": {
+      "top_k": 20
     }
   },
-  "embedder_google": {
-    "client_class": "GoogleEmbedderClient",
-    "batch_size": 100,
+  "embedder_openrouter": {
+    "client_class": "OpenRouterClient",
+    "batch_size": 16,
     "model_kwargs": {
-      "model": "text-embedding-004",
-      "task_type": "SEMANTIC_SIMILARITY"
+      "model": "mistralai/codestral-embed-2505",
+      "encoding_format": "float"
+    },
+    "text_splitter": {
+      "split_by": "token",
+      "chunk_size": 1200,
+      "chunk_overlap": 300
+    },
+    "retriever": {
+      "top_k": 5
     }
   },
   "retriever": {
@@ -31,6 +55,3 @@
     "chunk_overlap": 100
   }
 }
-
-
-

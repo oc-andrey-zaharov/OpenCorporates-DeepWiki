@@ -1,4 +1,6 @@
+import math
 import weakref
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 from uuid import uuid4
@@ -54,6 +56,30 @@ logger = structlog.get_logger()
 
 # Maximum token limit for embedding models
 MAX_INPUT_TOKENS = 7500  # Safe threshold below 8192 token limit
+
+
+def _vector_norm(vector: Sequence[float]) -> float:
+    """Compute the Euclidean norm of a vector."""
+    return math.sqrt(sum(component * component for component in vector))
+
+
+def _is_normalized_vector(
+    vector: Sequence[float],
+    tolerance: float = 1e-3,
+) -> bool:
+    """Check whether a vector is unit length within a tolerance."""
+    length = _vector_norm(vector)
+    if length == 0:
+        return False
+    return abs(length - 1.0) <= tolerance
+
+
+def _normalize_vector(vector: Sequence[float]) -> list[float]:
+    """Normalize a vector to unit length."""
+    length = _vector_norm(vector)
+    if length == 0:
+        return list(vector)
+    return [component / length for component in vector]
 
 
 class Memory(adal.core.component.DataComponent):
@@ -582,6 +608,7 @@ IMPORTANT FORMATTING RULES:
         excluded_files: list[str] | None = None,
         included_dirs: list[str] | None = None,
         included_files: list[str] | None = None,
+        force_rebuild: bool = False,
     ) -> None:
         """Prepare the retriever for a repository.
         Will load database from local storage if available.
@@ -594,6 +621,7 @@ IMPORTANT FORMATTING RULES:
             excluded_files: Optional list of file patterns to exclude from processing
             included_dirs: Optional list of directories to include exclusively
             included_files: Optional list of file patterns to include exclusively
+            force_rebuild: Whether to force regeneration of the embeddings database.
         """
         from deepwiki_cli.infrastructure.config import GITHUB_TOKEN
 
@@ -602,22 +630,47 @@ IMPORTANT FORMATTING RULES:
 
         self.initialize_db_manager()
         self.repo_url_or_path = repo_url_or_path
-        self.transformed_docs = self.db_manager.prepare_database(
-            repo_url_or_path,
-            type,
-            token_to_use,
-            embedder_type=self.embedder_type,
-            excluded_dirs=excluded_dirs,
-            excluded_files=excluded_files,
-            included_dirs=included_dirs,
-            included_files=included_files,
-        )
+        forced_rebuild = force_rebuild
+        doc_kwargs = {
+            "repo_url_or_path": repo_url_or_path,
+            "repo_type": type,
+            "access_token": token_to_use,
+            "embedder_type": self.embedder_type,
+            "excluded_dirs": excluded_dirs,
+            "excluded_files": excluded_files,
+            "included_dirs": included_dirs,
+            "included_files": included_files,
+        }
+
+        def _load_documents(force: bool) -> list[Any]:
+            return self.db_manager.prepare_database(
+                force_rebuild=force,
+                **doc_kwargs,
+            )
+
+        self.transformed_docs = _load_documents(force_rebuild)
+        if not self.transformed_docs and not forced_rebuild:
+            logger.warning(
+                "Database returned no documents; forcing embeddings rebuild.",
+            )
+            self.transformed_docs = _load_documents(True)
+            forced_rebuild = True
         logger.info(f"Loaded {len(self.transformed_docs)} documents for retrieval")
 
         # Validate and filter embeddings to ensure consistent sizes
         self.transformed_docs = self._validate_and_filter_embeddings(
             self.transformed_docs,
         )
+
+        if not self.transformed_docs and not forced_rebuild:
+            logger.warning(
+                "Embedding validation removed all documents; attempting full rebuild.",
+            )
+            self.transformed_docs = _load_documents(True)
+            forced_rebuild = True
+            self.transformed_docs = self._validate_and_filter_embeddings(
+                self.transformed_docs,
+            )
 
         if not self.transformed_docs:
             raise ValueError(
@@ -731,7 +784,11 @@ IMPORTANT FORMATTING RULES:
 
         num_docs = len(self.transformed_docs)
 
-        retriever_config = configs["retriever"].copy()
+        # Get embedder-specific retriever config if available, otherwise use default
+        embedder_config = get_embedder_config()
+        retriever_config = embedder_config.get(
+            "retriever", configs.get("retriever", {"top_k": 20})
+        ).copy()
 
         # Log retriever config for debugging
         logger.info(f"Retriever config: {retriever_config}")
@@ -743,6 +800,20 @@ IMPORTANT FORMATTING RULES:
         # Vectors are already Python lists from the validation step above
         # Reference: adalflow docs show documents_embeddings = [x.embedding for x in output.data]
         document_vectors = [doc.vector for doc in self.transformed_docs]
+
+        if document_vectors and isinstance(document_vectors[0], Sequence):
+            sample_vector = document_vectors[0]
+            if not _is_normalized_vector(sample_vector):
+                logger.info(
+                    "Normalizing %d document embeddings for FAISS index",
+                    len(document_vectors),
+                )
+                document_vectors = [
+                    _normalize_vector(vector)
+                    if isinstance(vector, Sequence)
+                    else vector
+                    for vector in document_vectors
+                ]
 
         logger.info(
             f"Prepared {len(document_vectors)} vectors as Python lists for FAISS indexing",

@@ -115,6 +115,7 @@ class TestEmbedderConfiguration:
         assert "embedder" in configs, "OpenAI embedder config missing"
         assert "embedder_google" in configs, "Google embedder config missing"
         assert "embedder_ollama" in configs, "Ollama embedder config missing"
+        assert "embedder_openrouter" in configs, "OpenRouter embedder config missing"
 
         # Check client classes are available
         assert "OpenAIClient" in CLIENT_CLASSES, (
@@ -126,6 +127,9 @@ class TestEmbedderConfiguration:
         assert "OllamaClient" in CLIENT_CLASSES, (
             "OllamaClient missing from CLIENT_CLASSES"
         )
+        assert "OpenRouterClient" in CLIENT_CLASSES, (
+            "OpenRouterClient missing from CLIENT_CLASSES"
+        )
 
     def test_embedder_type_detection(self) -> None:
         """Test embedder type detection functions."""
@@ -133,30 +137,43 @@ class TestEmbedderConfiguration:
             get_embedder_type,
             is_google_embedder,
             is_ollama_embedder,
+            is_openrouter_embedder,
         )
 
         # Default type should be detected
         current_type = get_embedder_type()
-        assert current_type in ["openai", "google", "ollama"], (
+        assert current_type in ["openai", "google", "ollama", "openrouter"], (
             f"Invalid embedder type: {current_type}"
         )
 
         # Boolean functions should work
         is_ollama = is_ollama_embedder()
         is_google = is_google_embedder()
+        is_openrouter = is_openrouter_embedder()
         assert isinstance(is_ollama, bool), "is_ollama_embedder should return boolean"
         assert isinstance(is_google, bool), "is_google_embedder should return boolean"
+        assert isinstance(
+            is_openrouter,
+            bool,
+        ), "is_openrouter_embedder should return boolean"
 
         # Only one should be true at a time (unless using openai default)
         if current_type == "ollama":
             assert is_ollama
             assert not is_google
+            assert not is_openrouter
         elif current_type == "google":
             assert not is_ollama
             assert is_google
+            assert not is_openrouter
+        elif current_type == "openrouter":
+            assert not is_ollama
+            assert not is_google
+            assert is_openrouter
         else:  # openai
             assert not is_ollama
             assert not is_google
+            assert not is_openrouter
 
     def test_get_embedder_config(self) -> None:
         """Test getting embedder config for each type."""
@@ -191,6 +208,17 @@ class TestEmbedderFactory:
         except (ImportError, ValueError, RuntimeError) as e:
             logger.warning(
                 "Ollama embedder creation failed (expected if Ollama not available): %s",
+                e,
+            )
+        # Test OpenRouter embedder
+        try:
+            openrouter_embedder = get_embedder(embedder_type="openrouter")
+            assert (
+                openrouter_embedder is not None
+            ), "OpenRouter embedder should be created"
+        except (ImportError, ValueError, RuntimeError) as e:
+            logger.warning(
+                "OpenRouter embedder creation failed (likely missing OPENROUTER_API_KEY): %s",
                 e,
             )
 
@@ -338,7 +366,7 @@ class TestEnvironmentVariableHandling:
 
     def test_embedder_type_env_var(self) -> None:
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
-        for embedder_type in ["openai", "google", "ollama"]:
+        for embedder_type in ["openai", "google", "ollama", "openrouter"]:
             self._test_single_embedder_type(embedder_type)
 
     def _test_single_embedder_type(self, embedder_type: str) -> None:

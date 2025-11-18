@@ -104,7 +104,7 @@ def _get_expected_embedding_dimension(embedder_type: str | None) -> int | None:
     """Get the expected embedding dimension for a given embedder type.
 
     Args:
-        embedder_type: Embedder type ('openai', 'google', 'ollama').
+        embedder_type: Embedder type ('openai', 'ollama', 'openrouter').
 
     Returns:
         Expected embedding dimension, or None if unknown.
@@ -114,12 +114,11 @@ def _get_expected_embedding_dimension(embedder_type: str | None) -> int | None:
 
     # Known embedding dimensions for each embedder type
     # OpenAI text-embedding-3-small: 256 (default), can be configured
-    # Google text-embedding-004: 768 (fixed)
     # Ollama: varies by model
     dimension_map = {
         "openai": 256,  # Default for text-embedding-3-small
-        "google": 768,  # text-embedding-004 has fixed 768 dimensions
         "ollama": None,  # Varies by model
+        "openrouter": None,  # Depends on upstream provider/model configuration
     }
 
     return dimension_map.get(embedder_type.lower())
@@ -227,7 +226,7 @@ def _require_valid_embeddings(
 def _get_encoding(embedder_type: str) -> Any:
     """Get or create cached encoding object."""
     if embedder_type not in _encoding_cache:
-        if embedder_type in {"ollama", "google"}:
+        if embedder_type == "ollama":
             _encoding_cache[embedder_type] = tiktoken.get_encoding("cl100k_base")
         else:  # OpenAI or default
             _encoding_cache[embedder_type] = tiktoken.encoding_for_model(
@@ -245,7 +244,7 @@ def count_tokens(
 
     Args:
         text (str): The text to count tokens for.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -288,7 +287,7 @@ def count_tokens_batch(
 
     Args:
         texts (List[str]): List of texts to count tokens for.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
                                      If None, will be determined from configuration.
         num_threads (int, optional): Number of threads for parallel processing.
                                     If None, uses default (typically CPU count).
@@ -553,7 +552,7 @@ def read_all_documents(
 
     Args:
         path (str): The root directory path.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -895,7 +894,7 @@ def prepare_data_pipeline(
     """Creates and returns the data transformation pipeline.
 
     Args:
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -916,8 +915,12 @@ def prepare_data_pipeline(
     if embedder_type is None:
         embedder_type = get_embedder_type()
 
-    splitter = TextSplitter(**configs["text_splitter"])
+    # Get embedder-specific text splitter config if available, otherwise use default
     embedder_config = get_embedder_config()
+    text_splitter_config = embedder_config.get(
+        "text_splitter", configs.get("text_splitter", {})
+    )
+    splitter = TextSplitter(**text_splitter_config)
 
     embedder = get_embedder(embedder_type=embedder_type)
 
@@ -926,15 +929,16 @@ def prepare_data_pipeline(
         # Use Ollama document processor for single-document processing
         embedder_transformer = OllamaDocumentProcessor(embedder=embedder)
     else:
-        # Use batch processing for OpenAI and Google embedders
+        # Use batch processing for OpenAI and OpenRouter embedders
         # Increase batch size for better performance (OpenAI supports up to 2048)
         batch_size = embedder_config.get("batch_size", 500)
         # Optimize batch size: OpenAI supports up to 2048, but use 2000 for safety margin
-        # Google supports up to 100, so keep that limit
+        # OpenRouter defaults to a conservative cap
         if embedder_type == "openai":
             batch_size = min(batch_size, 2000) if batch_size < 2000 else batch_size
-        elif embedder_type == "google":
-            batch_size = min(batch_size, 100) if batch_size > 100 else batch_size
+        elif embedder_type == "openrouter":
+            # OpenRouter may have stricter limits, use smaller batches
+            batch_size = min(batch_size, 50) if batch_size > 50 else batch_size
 
         embedder_transformer = ToEmbeddings(embedder=embedder, batch_size=batch_size)
 
@@ -955,7 +959,7 @@ def transform_documents_and_save_to_db(
     Args:
         documents (list): A list of `Document` objects.
         db_path (str): The path to the local database file.
-        embedder_type (str, optional): The embedder type ('openai', 'google', 'ollama').
+        embedder_type (str, optional): The embedder type ('openai', 'ollama', 'openrouter').
                                      If None, will be determined from configuration.
         is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                            If None, will be determined from configuration.
@@ -1118,6 +1122,7 @@ class DatabaseManager:
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
         included_files: List[str] = None,
+        force_rebuild: bool = False,
     ) -> List[Document]:
         """Create a new database from the repository.
 
@@ -1125,7 +1130,7 @@ class DatabaseManager:
             repo_type(str): Type of repository
             repo_url_or_path (str): The URL or local path of the repository
             access_token (str, optional): Access token for private repositories
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'openrouter').
                                          If None, will be determined from configuration.
             is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
@@ -1133,6 +1138,7 @@ class DatabaseManager:
             excluded_files (List[str], optional): List of file patterns to exclude from processing
             included_dirs (List[str], optional): List of directories to include exclusively
             included_files (List[str], optional): List of file patterns to include exclusively
+            force_rebuild (bool, optional): Force a rebuild of the cached embeddings database.
 
         Returns:
             List[Document]: List of Document objects
@@ -1149,6 +1155,7 @@ class DatabaseManager:
             excluded_files=excluded_files,
             included_dirs=included_dirs,
             included_files=included_files,
+            force_rebuild=force_rebuild,
         )
 
     def reset_database(self) -> None:
@@ -1249,12 +1256,13 @@ class DatabaseManager:
         excluded_files: List[str] = None,
         included_dirs: List[str] = None,
         included_files: List[str] = None,
+        force_rebuild: bool = False,
     ) -> List[Document]:
         """Prepare the indexed database for the repository.
         Uses incremental updates when possible to speed up subsequent runs.
 
         Args:
-            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama').
+            embedder_type (str, optional): Embedder type to use ('openai', 'google', 'ollama', 'openrouter').
                                          If None, will be determined from configuration.
             is_ollama_embedder (bool, optional): DEPRECATED. Use embedder_type instead.
                                                If None, will be determined from configuration.
@@ -1262,6 +1270,7 @@ class DatabaseManager:
             excluded_files (List[str], optional): List of file patterns to exclude from processing
             included_dirs (List[str], optional): List of directories to include exclusively
             included_files (List[str], optional): List of file patterns to include exclusively
+            force_rebuild (bool, optional): If True, delete cached database and rebuild.
 
         Returns:
             List[Document]: List of Document objects
@@ -1271,9 +1280,20 @@ class DatabaseManager:
             embedder_type = "ollama" if is_ollama_embedder else None
 
         # Check the database
-        if self.repo_paths is not None and os.path.exists(
-            self.repo_paths["save_db_file"],
-        ):
+        cached_db_available = self.repo_paths is not None and os.path.exists(
+            self.repo_paths["save_db_file"]
+        )
+
+        if force_rebuild and cached_db_available:
+            cached_path = self.repo_paths["save_db_file"]
+            logger.info(
+                f"Force rebuild requested; removing cached database {cached_path}",
+            )
+            with contextlib.suppress(OSError):
+                os.remove(cached_path)
+            cached_db_available = False
+
+        if cached_db_available:
             logger.info("Loading existing database...")
             try:
                 self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
@@ -1528,6 +1548,7 @@ class DatabaseManager:
         repo_url_or_path: str,
         repo_type: str | None = None,
         access_token: str | None = None,
+        force_rebuild: bool = False,
     ):
         """Prepare the retriever for a repository.
         This is a compatibility method for the isolated API.
@@ -1540,4 +1561,9 @@ class DatabaseManager:
         Returns:
             List[Document]: List of Document objects
         """
-        return self.prepare_database(repo_url_or_path, repo_type, access_token)
+        return self.prepare_database(
+            repo_url_or_path,
+            repo_type,
+            access_token,
+            force_rebuild=force_rebuild,
+        )

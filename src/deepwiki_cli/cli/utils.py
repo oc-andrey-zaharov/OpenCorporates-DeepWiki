@@ -305,20 +305,23 @@ def select_multiple_from_list(
     if not choices:
         raise ValueError("No choices provided")
 
+    SELECT_ALL_OPTION = "✓ Select All Pages"
+
     if not SIMPLE_TERM_MENU_AVAILABLE:
         import click
 
         click.echo(f"\n{prompt_text}")
+        click.echo(f"  0. {SELECT_ALL_OPTION}")
         for idx, choice in enumerate(choices, start=1):
             click.echo(f"  {idx}. {choice}")
 
         while True:
             selection = click.prompt(
-                "Enter numbers (comma-separated) or press enter for all",
-                default="",
-                show_default=False,
+                "Enter numbers (comma-separated) or 0 for all",
+                default="0",
+                show_default=True,
             )
-            if not selection.strip():
+            if not selection.strip() or selection.strip() == "0":
                 return choices
 
             try:
@@ -329,11 +332,17 @@ def select_multiple_from_list(
                 click.echo("✗ Invalid input. Use comma-separated numbers like 1,3,4")
                 continue
 
+            if 0 in indexes:
+                return choices
+
             if any(idx < 1 or idx > len(choices) for idx in indexes):
-                click.echo(f"✗ Please choose values between 1 and {len(choices)}")
+                click.echo(f"✗ Please choose values between 0 and {len(choices)}")
                 continue
 
             return [choices[idx - 1] for idx in sorted(indexes)]
+
+    # Add "Select All" option at the top
+    display_choices = [SELECT_ALL_OPTION] + choices
 
     try:
         term_kwargs = {
@@ -354,7 +363,7 @@ def select_multiple_from_list(
         except (ValueError, TypeError):
             supported_kwargs = term_kwargs
 
-        terminal_menu = TerminalMenu(choices, **supported_kwargs)
+        terminal_menu = TerminalMenu(display_choices, **supported_kwargs)
         result = terminal_menu.show()
 
         if result is None:
@@ -375,7 +384,14 @@ def select_multiple_from_list(
         if not selected_indexes:
             return choices
 
-        unique_sorted = sorted({idx for idx in selected_indexes if idx is not None})
+        # Check if "Select All" (index 0) was selected
+        if 0 in selected_indexes:
+            return choices
+
+        # Filter out index 0 and adjust indices (subtract 1 since we added Select All)
+        unique_sorted = sorted(
+            {idx - 1 for idx in selected_indexes if idx is not None and idx > 0}
+        )
         return [choices[idx] for idx in unique_sorted if idx < len(choices)]
 
     except KeyboardInterrupt:

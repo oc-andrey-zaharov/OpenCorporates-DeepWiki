@@ -38,8 +38,14 @@ class WikiGenerationContext:
         excluded_files: list[str] | None = None,
         included_dirs: list[str] | None = None,
         included_files: list[str] | None = None,
+        force_rebuild_embeddings: bool = False,
     ) -> WikiGenerationContext:
-        """Build and prime a context for repeated completions."""
+        """Build and prime a context for repeated completions.
+
+        Args:
+            force_rebuild_embeddings: If True, discard any cached embedding database
+                and rebuild it before generating content.
+        """
         rag = RAG(provider=provider, model=model)
         rag.prepare_retriever(
             repo_url,
@@ -49,6 +55,7 @@ class WikiGenerationContext:
             excluded_files,
             included_dirs,
             included_files,
+            force_rebuild=force_rebuild_embeddings,
         )
         return cls(
             repo_url=repo_url,
@@ -89,5 +96,3 @@ class WikiGenerationContext:
 
 
 __all__ = ["WikiGenerationContext"]
-
-

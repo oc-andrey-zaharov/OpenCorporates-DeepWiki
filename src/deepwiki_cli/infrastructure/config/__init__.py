@@ -48,14 +48,17 @@ if generator_config:
 # Update embedder configuration
 if embedder_config:
     for key in [
-        "embedder",
+        "embedder_openai",
         "embedder_ollama",
-        "embedder_google",
+        "embedder_openrouter",
         "retriever",
         "text_splitter",
     ]:
         if key in embedder_config:
             configs[key] = embedder_config[key]
+    # Backward compatibility: map embedder_openai to embedder
+    if "embedder_openai" in embedder_config:
+        configs["embedder"] = embedder_config["embedder_openai"]
 
 # Update repository configuration
 if repo_config:
@@ -82,10 +85,12 @@ def get_embedder_config() -> dict[str, Any]:
 
     # Read from config instance to get current value (supports module reload)
     embedder_type = _config_instance[0].embedder_type.lower()
-    if embedder_type == "google" and "embedder_google" in configs:
-        return cast("dict[str, Any]", configs.get("embedder_google", {}))
     if embedder_type == "ollama" and "embedder_ollama" in configs:
         return cast("dict[str, Any]", configs.get("embedder_ollama", {}))
+    if embedder_type == "openrouter" and "embedder_openrouter" in configs:
+        return cast("dict[str, Any]", configs.get("embedder_openrouter", {}))
+    if embedder_type == "openai" and "embedder_openai" in configs:
+        return cast("dict[str, Any]", configs.get("embedder_openai", {}))
     return cast("dict[str, Any]", configs.get("embedder", {}))
 
 
@@ -114,27 +119,24 @@ def is_ollama_embedder() -> bool:
     return False
 
 
-def is_google_embedder() -> bool:
-    """Check if the current embedder configuration uses GoogleEmbedderClient.
+def is_openrouter_embedder() -> bool:
+    """Check if the current embedder configuration uses OpenRouterClient.
 
     Returns:
-        bool: True if using GoogleEmbedderClient, False otherwise
+        bool: True if using OpenRouterClient, False otherwise.
     """
     embedder_config = get_embedder_config()
     if not embedder_config:
         return False
 
-    # First check client_class string (more reliable)
     client_class = embedder_config.get("client_class", "")
-    if client_class == "GoogleEmbedderClient":
+    if client_class == "OpenRouterClient":
         return True
 
-    # Fallback: check if model_client is GoogleEmbedderClient
     model_client = embedder_config.get("model_client")
     if model_client:
-        # Safely access __name__ attribute (handles MagicMock and other cases)
         client_name = getattr(model_client, "__name__", None)
-        return client_name == "GoogleEmbedderClient"
+        return client_name == "OpenRouterClient"
 
     return False
 
@@ -143,22 +145,22 @@ def get_embedder_type() -> str:
     """Get the current embedder type based on configuration.
 
     Returns:
-        str: 'ollama', 'google', or 'openai' (default)
+        str: 'ollama', 'openrouter', or 'openai' (default)
     """
     # Read from config instance to get current value (supports module reload)
     current_type = _config_instance[0].embedder_type.lower()
     # Prioritize the explicit embedder_type from config over embedder detection
     if current_type == "ollama":
         return "ollama"
-    if current_type == "google":
-        return "google"
     if current_type == "openai":
         return "openai"
+    if current_type == "openrouter":
+        return "openrouter"
     # Fallback to embedder detection if type is not explicitly set
     if is_ollama_embedder():
         return "ollama"
-    if is_google_embedder():
-        return "google"
+    if is_openrouter_embedder():
+        return "openrouter"
     return "openai"
 
 
@@ -268,8 +270,8 @@ __all__ = [
     "get_embedder_config",
     "get_embedder_type",
     "get_model_config",
-    "is_google_embedder",
     "is_ollama_embedder",
+    "is_openrouter_embedder",
     "load_embedder_config",
     "load_generator_config",
     # Loaders

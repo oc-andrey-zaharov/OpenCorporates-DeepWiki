@@ -55,6 +55,22 @@ from deepwiki_cli.infrastructure.storage.cache import (
 
 logger = logging.getLogger(__name__)
 
+try:
+    WIKI_STRUCTURE_MAX_ATTEMPTS = int(os.environ.get("DEEPWIKI_STRUCTURE_RETRIES", "3"))
+except ValueError:
+    WIKI_STRUCTURE_MAX_ATTEMPTS = 3
+
+try:
+    WIKI_STRUCTURE_RETRY_DELAY = float(
+        os.environ.get("DEEPWIKI_STRUCTURE_RETRY_DELAY", "2.0"),
+    )
+except ValueError:
+    WIKI_STRUCTURE_RETRY_DELAY = 2.0
+
+
+class WikiStructureParseError(ValueError):
+    """Raised when the wiki structure XML cannot be parsed."""
+
 
 @dataclass
 class RepositoryState:
@@ -315,6 +331,16 @@ def _display_change_summary(
         click.echo(f"  • {page.title} ({page_changes} files changed)")
 
 
+def _has_repo_changes(change_summary: dict[str, list[str]] | None) -> bool:
+    """Return True when snapshot comparison detected any file-level change."""
+    if not change_summary:
+        return True
+    return any(
+        change_summary.get(key)
+        for key in ("changed_files", "new_files", "deleted_files")
+    )
+
+
 def _prompt_generation_action(
     allow_new: bool,
     can_update_pages: bool,
@@ -517,6 +543,142 @@ def generate_page_content_sync(
         return None
 
 
+def _dump_failed_structure_response(xml_content: str) -> None:
+    """Persist raw XML to a temp file for debugging."""
+    import tempfile
+
+    debug_file = os.path.join(
+        tempfile.gettempdir(),
+        f"deepwiki_debug_response_{os.getpid()}.txt",
+    )
+    try:
+        with open(debug_file, "w", encoding="utf-8") as handle:
+            handle.write(xml_content)
+        logger.error("Full response saved to: %s", debug_file)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to save debug file: %s", exc)
+
+
+def _parse_wiki_structure_xml(xml_content: str) -> WikiStructureModel:
+    """Parse XML returned by the LLM into a WikiStructureModel."""
+    import html
+    import re
+    import xml.etree.ElementTree as ET
+
+    xml_content = xml_content.strip()
+    logger.debug("Raw response length: %s", len(xml_content))
+    logger.debug("First 500 chars: %s", xml_content[:500])
+    logger.debug("Last 500 chars: %s", xml_content[-500:])
+
+    if xml_content.startswith(("```xml", "```")):
+        xml_content = xml_content.split("\n", 1)[1] if "\n" in xml_content else ""
+    if xml_content.endswith("```"):
+        xml_content = xml_content.rsplit("\n", 1)[0] if "\n" in xml_content else ""
+
+    xml_match = re.search(
+        r"<wiki_structure>.*?</wiki_structure>",
+        xml_content,
+        re.DOTALL,
+    )
+    if not xml_match:
+        xml_match = re.search(
+            r"<wiki_structure>.*",
+            xml_content,
+            re.DOTALL,
+        )
+        if xml_match:
+            logger.warning(
+                "Found opening <wiki_structure> tag but no closing tag - response may be incomplete",
+            )
+    if not xml_match:
+        xml_match = re.search(
+            r"<wiki_structure>.*?</wiki_structure>",
+            xml_content,
+            re.DOTALL | re.IGNORECASE,
+        )
+    if not xml_match:
+        raise WikiStructureParseError("No <wiki_structure> block found in response")
+
+    xml_text = xml_match.group(0)
+    if not xml_text.strip().endswith("</wiki_structure>"):
+        logger.warning("XML structure appears incomplete, attempting to close it")
+        xml_text += "\n</wiki_structure>"
+
+    xml_text = html.unescape(xml_text)
+    xml_text = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", xml_text)
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise WikiStructureParseError(f"XML parsing failed: {exc}") from exc
+
+    title_el = root.find("title")
+    title = title_el.text if title_el is not None and title_el.text else "Wiki"
+    description_el = root.find("description")
+    description = (
+        description_el.text if description_el is not None and description_el.text else ""
+    )
+    pages: list[WikiPage] = []
+    pages_el = root.find("pages")
+    if pages_el is not None:
+        for page_el in pages_el.findall("page"):
+            page_id = page_el.get("id", f"page-{len(pages) + 1}")
+            page_title_el = page_el.find("title")
+            page_title = (
+                page_title_el.text
+                if page_title_el is not None and page_title_el.text
+                else "Untitled"
+            )
+            importance_el = page_el.find("importance")
+            importance_text = (
+                importance_el.text
+                if importance_el is not None and importance_el.text
+                else "medium"
+            )
+            importance_lower = (
+                importance_text.lower() if importance_text else "medium"
+            )
+            importance = (
+                importance_lower
+                if importance_lower in ["high", "medium", "low"]
+                else "medium"
+            )
+            file_paths: list[str] = []
+            relevant_files_el = page_el.find("relevant_files")
+            if relevant_files_el is not None:
+                for fp in relevant_files_el.findall("file_path"):
+                    if fp.text:
+                        file_paths.append(fp.text.strip())
+            related_pages: list[str] = []
+            related_pages_el = page_el.find("related_pages")
+            if related_pages_el is not None:
+                for rel in related_pages_el.findall("related"):
+                    if rel.text:
+                        related_pages.append(rel.text.strip())
+            pages.append(
+                WikiPage(
+                    id=page_id,
+                    title=page_title,
+                    content="",
+                    filePaths=file_paths,
+                    importance=importance,
+                    relatedPages=related_pages,
+                ),
+            )
+
+    if not pages:
+        raise WikiStructureParseError("No pages found in wiki structure")
+
+    return WikiStructureModel(
+        id="wiki",
+        title=title,
+        description=description,
+        pages=pages,
+        sections=[],
+        rootSections=[],
+    )
+
+
 def generate_wiki_structure(
     repo_url: str,
     repo_type: str,
@@ -562,223 +724,63 @@ def generate_wiki_structure(
         file_count=file_count,
     )
 
-    try:
-        # Collect response from streaming generator
+    max_attempts = max(1, WIKI_STRUCTURE_MAX_ATTEMPTS)
+    for attempt in range(1, max_attempts + 1):
         xml_content = ""
-        if generation_context:
-            stream = generation_context.stream_completion(
-                messages=[{"role": "user", "content": prompt}],
-            )
-        else:
-            from deepwiki_cli.application.wiki.generate_content import (
-                generate_wiki_content,
-            )
-
-            stream = generate_wiki_content(
-                repo_url=repo_url,
-                messages=[{"role": "user", "content": prompt}],
-                provider=provider,
-                model=model,
-                repo_type=repo_type,
-            )
-
-        for chunk in stream:
-            if chunk:
-                xml_content += chunk if isinstance(chunk, str) else str(chunk)
-
-        # Parse XML
-        import xml.etree.ElementTree as ET
-
-        # Clean up response
-        xml_content = xml_content.strip()
-
-        # Log first and last 500 chars for debugging
-        logger.debug(f"Raw response length: {len(xml_content)}")
-        logger.debug(f"First 500 chars: {xml_content[:500]}")
-        logger.debug(f"Last 500 chars: {xml_content[-500:]}")
-
-        if xml_content.startswith(("```xml", "```")):
-            xml_content = (
-                xml_content.split("\n", 1)[1] if "\n" in xml_content else xml_content
-            )
-        if xml_content.endswith("```"):
-            xml_content = (
-                xml_content.rsplit("\n", 1)[0] if "\n" in xml_content else xml_content
-            )
-
-        # Extract XML - try multiple patterns
-        import re
-
-        # Try exact match first
-        xml_match = re.search(
-            r"<wiki_structure>.*?</wiki_structure>",
-            xml_content,
-            re.DOTALL,
-        )
-
-        # If not found, try without the closing tag (in case it's incomplete)
-        if not xml_match:
-            xml_match = re.search(
-                r"<wiki_structure>.*",
-                xml_content,
-                re.DOTALL,
-            )
-            if xml_match:
-                logger.warning(
-                    "Found opening <wiki_structure> tag but no closing tag - response may be incomplete",
-                )
-
-        # If still not found, try case-insensitive
-        if not xml_match:
-            xml_match = re.search(
-                r"<wiki_structure>.*?</wiki_structure>",
-                xml_content,
-                re.DOTALL | re.IGNORECASE,
-            )
-
-        if not xml_match:
-            logger.error("No valid XML structure found in response")
-            logger.error(f"Response length: {len(xml_content)} characters")
-            logger.error(f"Response preview (first 1000 chars):\n{xml_content[:1000]}")
-            logger.error(f"Response preview (last 1000 chars):\n{xml_content[-1000:]}")
-
-            # Check if response contains any XML-like content
-            if "<" in xml_content and ">" in xml_content:
-                logger.error(
-                    "Response contains XML-like content but no <wiki_structure> tag found",
-                )
-                # Try to find any XML tags to help debug
-                xml_tags = re.findall(r"<[^>]+>", xml_content[:500])
-                if xml_tags:
-                    logger.error(f"Found XML tags in response: {xml_tags[:10]}")
-            else:
-                logger.error("Response does not appear to contain XML at all")
-                # Check if it's just plain text
-                if len(xml_content) > 0:
-                    logger.error(
-                        f"Response appears to be plain text. First 200 chars: {xml_content[:200]}",
-                    )
-
-            # Save full response to a file for debugging
-            import os
-            import tempfile
-
-            debug_file = os.path.join(
-                tempfile.gettempdir(),
-                f"deepwiki_debug_response_{os.getpid()}.txt",
-            )
-            try:
-                with open(debug_file, "w", encoding="utf-8") as f:
-                    f.write(xml_content)
-                logger.error(f"Full response saved to: {debug_file}")
-            except Exception as e:
-                logger.exception(f"Failed to save debug file: {e}")
-
-            return None
-
-        xml_text = xml_match.group(0)
-
-        # If we found an incomplete match (no closing tag), try to complete it
-        if not xml_text.strip().endswith("</wiki_structure>"):
-            logger.warning("XML structure appears incomplete, attempting to close it")
-            xml_text += "\n</wiki_structure>"
-
-        # Clean XML: escape common problematic characters
-        import html
-
-        # First unescape any HTML entities
-        xml_text = html.unescape(xml_text)
-
-        # Escape ampersands that aren't part of entities
-        xml_text = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", xml_text)
-
-        # Parse XML
         try:
-            root = ET.fromstring(xml_text)
-        except ET.ParseError as e:
-            logger.exception(f"XML parsing failed: {e}")
-            logger.debug(f"Failed XML content:\n{xml_text[:500]}...")
-            return None
-
-        title_el = root.find("title")
-        title = title_el.text if title_el is not None and title_el.text else "Wiki"
-        description_el = root.find("description")
-        description = (
-            description_el.text
-            if description_el is not None and description_el.text
-            else ""
-        )
-
-        # Parse pages
-        pages: list[WikiPage] = []
-        pages_el = root.find("pages")
-        if pages_el is not None:
-            for page_el in pages_el.findall("page"):
-                page_id = page_el.get("id", f"page-{len(pages) + 1}")
-                page_title_el = page_el.find("title")
-                page_title = (
-                    page_title_el.text
-                    if page_title_el is not None and page_title_el.text
-                    else "Untitled"
+            if generation_context:
+                stream = generation_context.stream_completion(
+                    messages=[{"role": "user", "content": prompt}],
                 )
-                importance_el = page_el.find("importance")
-                importance_text = (
-                    importance_el.text
-                    if importance_el is not None and importance_el.text
-                    else "medium"
-                )
-                importance_lower = (
-                    importance_text.lower() if importance_text else "medium"
-                )
-                importance = (
-                    importance_lower
-                    if importance_lower in ["high", "medium", "low"]
-                    else "medium"
+            else:
+                from deepwiki_cli.application.wiki.generate_content import (
+                    generate_wiki_content,
                 )
 
-                # File paths
-                file_paths = []
-                relevant_files_el = page_el.find("relevant_files")
-                if relevant_files_el is not None:
-                    for fp in relevant_files_el.findall("file_path"):
-                        if fp.text:
-                            file_paths.append(fp.text.strip())
-
-                # Related pages
-                related_pages = []
-                related_pages_el = page_el.find("related_pages")
-                if related_pages_el is not None:
-                    for rel in related_pages_el.findall("related"):
-                        if rel.text:
-                            related_pages.append(rel.text.strip())
-
-                pages.append(
-                    WikiPage(
-                        id=page_id,
-                        title=page_title,
-                        content="",
-                        filePaths=file_paths,
-                        importance=importance,
-                        relatedPages=related_pages,
-                    ),
+                stream = generate_wiki_content(
+                    repo_url=repo_url,
+                    messages=[{"role": "user", "content": prompt}],
+                    provider=provider,
+                    model=model,
+                    repo_type=repo_type,
                 )
 
-        if not pages:
-            logger.error("No pages found in wiki structure")
-            return None
+            for chunk in stream:
+                if chunk:
+                    xml_content += chunk if isinstance(chunk, str) else str(chunk)
 
-        return WikiStructureModel(
-            id="wiki",
-            title=title,
-            description=description,
-            pages=pages,
-            sections=[],
-            rootSections=[],
-        )
+            structure = _parse_wiki_structure_xml(xml_content)
+            return structure
+        except WikiStructureParseError as parse_error:
+            is_last = attempt >= max_attempts
+            log_fn = logger.error if is_last else logger.warning
+            log_fn(
+                "Wiki structure parsing failed on attempt %s/%s: %s",
+                attempt,
+                max_attempts,
+                parse_error,
+            )
+            if is_last:
+                _dump_failed_structure_response(xml_content)
+                return None
+        except Exception as exc:
+            is_last = attempt >= max_attempts
+            logger.exception(
+                "Error generating wiki structure on attempt %s/%s: %s",
+                attempt,
+                max_attempts,
+                exc,
+            )
+            if is_last:
+                return None
 
-    except Exception as e:
-        logger.exception(f"Error parsing wiki structure: {e}")
-        return None
+        if attempt < max_attempts:
+            time.sleep(WIKI_STRUCTURE_RETRY_DELAY)
+            logger.info(
+                "Retrying wiki structure generation (%s/%s)",
+                attempt + 1,
+                max_attempts,
+            )
 
 
 def _read_local_readme(repo_path: str) -> str:
@@ -929,6 +931,22 @@ def generate(force: bool) -> None:
                     existing_cache.wiki_structure,
                     affected_pages,
                 )
+                if not force and not _has_repo_changes(
+                    cast("dict[str, list[str]] | None", change_summary),
+                ):
+                    click.echo(
+                        "\nNo repository changes detected since the last wiki build.",
+                    )
+                    regenerate_anyway = confirm_action(
+                        "Regenerate anyway?",
+                        default=False,
+                    )
+                    if not regenerate_anyway:
+                        click.echo(
+                            "✓ Wiki is already up to date. Skipping regeneration.",
+                        )
+                        progress.close()
+                        return
                 can_update = bool(update_candidate_page_ids)
                 action = _prompt_generation_action(
                     allow_new=True,
@@ -984,6 +1002,9 @@ def generate(force: bool) -> None:
 
         progress.set_status("Preparing repository context")
         click.echo("Preparing repository analysis...")
+        force_embedding_rebuild = (
+            action in {"overwrite", "new_version"} or not existing_cache
+        )
         try:
             generation_context = WikiGenerationContext.prepare(
                 repo_url=repo_url_or_path,
@@ -995,6 +1016,7 @@ def generate(force: bool) -> None:
                 excluded_files=excluded_files,
                 included_dirs=included_dirs,
                 included_files=included_files,
+                force_rebuild_embeddings=force_embedding_rebuild,
             )
             click.echo("✓ Repository prepared")
         except Exception as e:

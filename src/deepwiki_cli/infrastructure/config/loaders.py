@@ -207,7 +207,11 @@ def load_embedder_config() -> dict[str, Any]:
     embedder_config = result.value_or({})
 
     # Process client classes
-    for key in ["embedder", "embedder_ollama", "embedder_google"]:
+    for key in [
+        "embedder_openai",
+        "embedder_ollama",
+        "embedder_openrouter",
+    ]:
         if key in embedder_config and "client_class" in embedder_config[key]:
             class_name = embedder_config[key]["client_class"]
             if class_name in CLIENT_CLASSES:

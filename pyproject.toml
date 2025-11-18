@@ -206,7 +206,6 @@ module = [
     "requests.*",
     "tqdm.*",
     "deepwiki_cli.infrastructure.embedding.ollama_patch",
-    "xml.minidom",
 ]
 ignore_missing_imports = true
 

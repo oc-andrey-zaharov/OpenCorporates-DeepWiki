@@ -14,8 +14,8 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # Default configuration values
 DEFAULT_CONFIG = {
-    "default_provider": "google",
-    "default_model": "gemini-2.0-flash-exp",
+    "default_provider": "cursor",
+    "default_model": "grok-code-fast-1",
     "wiki_type": "comprehensive",
     "file_filters": {
         "excluded_dirs": [],

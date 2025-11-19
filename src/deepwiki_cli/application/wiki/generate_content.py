@@ -19,6 +19,7 @@ from langfuse import observe
 from pydantic import BaseModel
 
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
+from deepwiki_cli.infrastructure.clients.ai.cursor_agent_client import CursorAgentClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 from deepwiki_cli.infrastructure.config import (
@@ -656,6 +657,44 @@ def generate_wiki_content(
                 except Exception as e_bedrock:
                     logger.exception(f"Error with AWS Bedrock API: {e_bedrock!s}")
                     yield f"\nError with AWS Bedrock API: {e_bedrock!s}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
+            elif provider == "cursor":
+                try:
+                    logger.info(f"Using Cursor Agent with model: {model}")
+                    model_client = CursorAgentClient(model=model)
+                    model_kwargs = {
+                        "model": model,
+                    }
+                    
+                    # Try structured first if schema exists
+                    structured_payload = await _maybe_structured_completion(
+                        model_client,
+                        model_kwargs,
+                    )
+                    if structured_payload is not None:
+                        yield structured_payload
+                        return
+
+                    # Fallback to standard call
+                    api_kwargs = {
+                        "messages": [{"role": "user", "content": prompt}],
+                        **model_kwargs
+                    }
+                    
+                    logger.info("Making Cursor Agent CLI call")
+                    response = await model_client.acall(
+                        api_kwargs=api_kwargs,
+                        model_type=ModelType.LLM,
+                    )
+                    
+                    completion_text = _extract_completion_text(response)
+                    if completion_text:
+                        yield completion_text
+                    else:
+                        yield str(response)
+
+                except Exception as e_cursor:
+                     logger.exception(f"Error with Cursor Agent: {e_cursor!s}")
+                     yield f"\nError with Cursor Agent: {e_cursor!s}"
             else:
                 # Google Generative AI with retry for overloads
                 attempt = 0

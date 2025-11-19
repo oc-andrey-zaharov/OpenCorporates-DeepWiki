@@ -59,7 +59,7 @@ def _load_configs() -> dict[str, Any]:
 
     # Update configuration
     if generator_config:
-        configs["default_provider"] = generator_config.get("default_provider", "google")
+        configs["default_provider"] = generator_config.get("default_provider", "cursor")
         configs["providers"] = generator_config.get("providers", {})
 
     # Update embedder configuration

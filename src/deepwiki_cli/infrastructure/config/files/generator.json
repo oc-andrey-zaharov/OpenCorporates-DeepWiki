@@ -1,5 +1,5 @@
 {
-  "default_provider": "google",
+  "default_provider": "cursor",
   "providers": {
     "google": {
       "default_model": "gemini-2.5-flash",
@@ -87,6 +87,38 @@
         "ai21.j2-ultra-v1": {
           "temperature": 0.7,
           "top_p": 0.8
+        }
+      }
+    },
+    "cursor": {
+      "client_class": "CursorAgentClient",
+      "default_model": "gpt-4o",
+      "supportsCustomModel": true,
+      "models": {
+        "claude-4.5-sonnet": {
+          "temperature": 0.7,
+          "top_p": 0.9
+        },
+        "claude-4.5-haiku": {
+          "temperature": 0.7,
+          "top_p": 0.9
+        },
+        "gpt-5-mini": {
+          "temperature": 1.0
+        },
+        "gpt-5-nano": {
+          "temperature": 1.0
+        },
+        "gpt-5.1": {
+          "temperature": 1.0
+        },
+        "grok-code-fast-1": {
+          "temperature": 0.7,
+          "top_p": 0.9
+        },
+        "grok-4-fast": {
+          "temperature": 1.0,
+          "top_p": 0.9
         }
       }
     }

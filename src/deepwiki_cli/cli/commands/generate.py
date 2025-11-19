@@ -135,7 +135,12 @@ def prompt_model_config(config: dict) -> tuple:
 
     # Prompt for provider
     default_provider = config.get("default_provider", "google")
-    providers = list(provider_models.keys())
+    providers = sorted(provider_models.keys())
+
+    # Move default provider to the top if it exists
+    if default_provider in providers:
+        providers.remove(default_provider)
+        providers.insert(0, default_provider)
 
     provider = select_from_list(
         "Select provider",
@@ -144,7 +149,7 @@ def prompt_model_config(config: dict) -> tuple:
     )
 
     # Prompt for model
-    available_models = provider_models.get(provider, [])
+    available_models = sorted(provider_models.get(provider, []))
 
     default_model = config.get("default_model")
     if default_model and default_model in available_models:
@@ -153,6 +158,11 @@ def prompt_model_config(config: dict) -> tuple:
         default_value = available_models[0]
     else:
         default_value = None
+
+    # Move default model to the top if it exists
+    if default_value and default_value in available_models:
+        available_models.remove(default_value)
+        available_models.insert(0, default_value)
 
     if available_models:
         # Use interactive selection with custom option

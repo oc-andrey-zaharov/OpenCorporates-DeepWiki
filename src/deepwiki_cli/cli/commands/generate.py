@@ -284,6 +284,32 @@ def prompt_file_filters() -> tuple:
     )
 
     return excluded_dirs, excluded_files, included_dirs, included_files
+    
+    
+def prompt_additional_context() -> str | None:
+    """Prompt user for optional additional context.
+
+    Returns:
+        Additional context string or None
+    """
+    click.echo("\n" + "=" * 60)
+    click.echo("Additional Context (Optional)")
+    click.echo("=" * 60)
+
+    if not confirm_action("\nInject additional context?", default=False):
+        return None
+
+    click.echo("\nEnter additional context (press Enter twice to finish):")
+    
+    lines = []
+    while True:
+        line = input()
+        if not line and (not lines or not lines[-1]):
+            break
+        lines.append(line)
+        
+    context = "\n".join(lines).strip()
+    return context if context else None
 
 
 def _format_cache_choice(entry: CacheFileInfo) -> str:
@@ -830,7 +856,12 @@ def generate_wiki_structure(
     )
 
     max_attempts = max(1, WIKI_STRUCTURE_MAX_ATTEMPTS)
-    messages = [{"role": "user", "content": prompt}]
+    
+    prompt_content = prompt
+    if generation_context and generation_context.additional_context:
+        prompt_content += f"\n\n<additional_context>\n{generation_context.additional_context}\n</additional_context>"
+        
+    messages = [{"role": "user", "content": prompt_content}]
     for attempt in range(1, max_attempts + 1):
         raw_content = ""
         try:
@@ -947,6 +978,7 @@ def generate(force: bool) -> None:
         excluded_dirs, excluded_files, included_dirs, included_files = (
             prompt_file_filters()
         )
+        additional_context = prompt_additional_context()
 
         ensure_cache_dir()
         cache_path = get_cache_path()
@@ -1115,6 +1147,7 @@ def generate(force: bool) -> None:
                 excluded_files=excluded_files,
                 included_dirs=included_dirs,
                 included_files=included_files,
+                additional_context=additional_context,
                 force_rebuild_embeddings=force_embedding_rebuild,
             )
             click.echo("✓ Repository prepared")

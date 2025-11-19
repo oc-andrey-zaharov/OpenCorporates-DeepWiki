@@ -170,6 +170,7 @@ def generate_wiki_content(
     excluded_files: list[str] | None = None,
     included_dirs: list[str] | None = None,
     included_files: list[str] | None = None,
+    additional_context: str | None = None,
     file_path: str | None = None,
     prepared_rag: RAG | None = None,
 ) -> Generator[str]:
@@ -191,6 +192,7 @@ def generate_wiki_content(
         excluded_files: Optional list of file patterns to exclude
         included_dirs: Optional list of directories to include exclusively
         included_files: Optional list of file patterns to include exclusively
+        additional_context: Optional additional text context to inject into the prompt
         file_path: Optional path to a file in the repository to include in the prompt
         prepared_rag: Optional pre-initialized RAG instance for reuse
 
@@ -426,7 +428,12 @@ def generate_wiki_content(
         logger.info("No context available from RAG")
         prompt += "RAG_CONTEXT_JSON: []\n\n"
 
-    prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
+    prompt += f"<query>\n{query}\n</query>\n\n"
+
+    if additional_context:
+        prompt += f"<additional_context>\n{additional_context}\n</additional_context>\n\n"
+
+    prompt += "Assistant: "
 
     model_config = get_model_config(provider, model)["model_kwargs"]
 

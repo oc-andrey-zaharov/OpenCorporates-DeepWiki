@@ -27,6 +27,7 @@ class WikiGenerationContext:
     excluded_files: list[str] | None = None
     included_dirs: list[str] | None = None
     included_files: list[str] | None = None
+    additional_context: str | None = None
 
     @classmethod
     def prepare(
@@ -40,6 +41,7 @@ class WikiGenerationContext:
         excluded_files: list[str] | None = None,
         included_dirs: list[str] | None = None,
         included_files: list[str] | None = None,
+        additional_context: str | None = None,
         force_rebuild_embeddings: bool = False,
     ) -> WikiGenerationContext:
         """Build and prime a context for repeated completions.
@@ -69,6 +71,7 @@ class WikiGenerationContext:
             excluded_files=list(excluded_files) if excluded_files else None,
             included_dirs=list(included_dirs) if included_dirs else None,
             included_files=list(included_files) if included_files else None,
+            additional_context=additional_context,
             _rag=rag,
         )
 
@@ -94,6 +97,7 @@ class WikiGenerationContext:
             excluded_files=self.excluded_files,
             included_dirs=self.included_dirs,
             included_files=self.included_files,
+            additional_context=self.additional_context,
             file_path=file_path,
             prepared_rag=self._rag,
         )

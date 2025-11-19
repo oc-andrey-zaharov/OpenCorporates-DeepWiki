@@ -51,3 +51,4 @@ $example_response
 - `metadata.diagram_types`: Mermaid diagram types used in `content`.
 
 Produce the JSON now, with no surrounding markdown fences or commentary.
+

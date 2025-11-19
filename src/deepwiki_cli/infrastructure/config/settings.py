@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from deepwiki_cli.shared.structlog import structlog
-from adalflow import GoogleGenAIClient
 from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -14,6 +12,7 @@ from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
 from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
+from deepwiki_cli.shared.structlog import structlog
 
 logger = structlog.get_logger()
 
@@ -66,7 +65,7 @@ def _load_env_files() -> None:
 
         if normalized.is_file():
             try:
-                load_dotenv(dotenv_path=normalized, override=True)
+                load_dotenv(dotenv_path=normalized, override=False)
                 loaded_paths.append(str(normalized))
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning(
@@ -149,6 +148,22 @@ class Config(BaseSettings):
         default="json-compact",
         env="FORMAT_PREFERENCE",
     )  # type: ignore[call-overload]
+    langfuse_public_key: str | None = Field(
+        default=None,
+        env="LANGFUSE_PUBLIC_KEY",
+    )  # type: ignore[call-overload]
+    langfuse_secret_key: str | None = Field(
+        default=None,
+        env="LANGFUSE_SECRET_KEY",
+    )  # type: ignore[call-overload]
+    langfuse_base_url: str | None = Field(
+        default=None,
+        env="LANGFUSE_BASE_URL",
+    )  # type: ignore[call-overload]
+    langfuse_enabled: bool = Field(
+        default=True,
+        env="LANGFUSE_ENABLED",
+    )  # type: ignore[call-overload]
 
     class Config:
         """Pydantic configuration."""
@@ -183,16 +198,47 @@ class Config(BaseSettings):
             os.environ["AWS_ROLE_ARN"] = self.aws_role_arn
         if self.toon_cli_path:
             os.environ["TOON_CLI_PATH"] = self.toon_cli_path
+        if self.langfuse_public_key:
+            os.environ["LANGFUSE_PUBLIC_KEY"] = self.langfuse_public_key
+        if self.langfuse_secret_key:
+            os.environ["LANGFUSE_SECRET_KEY"] = self.langfuse_secret_key
+        if self.langfuse_base_url:
+            os.environ["LANGFUSE_BASE_URL"] = self.langfuse_base_url
 
 
-# Client class mapping
-CLIENT_CLASSES = {
-    "GoogleGenAIClient": GoogleGenAIClient,
-    "OpenAIClient": OpenAIClient,
-    "OpenRouterClient": OpenRouterClient,
-    "LMStudioClient": LMStudioClient,
-    "BedrockClient": BedrockClient,
-}
+# Client class mapping (lazy-loaded to avoid early adalflow import)
+_client_classes_cache: dict[str, Any] | None = None
+
+
+def get_client_classes() -> dict[str, Any]:
+    """Get client class mapping with lazy import of adalflow.
+
+    Returns:
+        Dictionary mapping client class names to their actual classes.
+
+    Note:
+        GoogleGenAIClient is lazily imported to avoid triggering adalflow's
+        MLflow warning before logging filters are configured.
+    """
+    global _client_classes_cache  # noqa: PLW0603
+    if _client_classes_cache is not None:
+        return _client_classes_cache
+
+    from adalflow import GoogleGenAIClient
+
+    _client_classes_cache = {
+        "GoogleGenAIClient": GoogleGenAIClient,
+        "OpenAIClient": OpenAIClient,
+        "OpenRouterClient": OpenRouterClient,
+        "LMStudioClient": LMStudioClient,
+        "BedrockClient": BedrockClient,
+    }
+    return _client_classes_cache
+
+
+# Note: Use get_client_classes() function to access client classes
+# This ensures adalflow is only imported after logging is configured
+CLIENT_CLASSES: dict[str, Any] = {}  # Populated lazily by get_client_classes()
 
 # Initialize global config instance
 # Read embedder_type directly from env to ensure it's current
@@ -228,6 +274,10 @@ TOON_CLI_PATH = _config_instance[0].toon_cli_path
 TOON_ENABLED = _config_instance[0].toon_enabled
 USE_JSON_COMPACT = _config_instance[0].use_json_compact
 FORMAT_PREFERENCE = _config_instance[0].format_preference
+LANGFUSE_PUBLIC_KEY = _config_instance[0].langfuse_public_key
+LANGFUSE_SECRET_KEY = _config_instance[0].langfuse_secret_key
+LANGFUSE_BASE_URL = _config_instance[0].langfuse_base_url
+LANGFUSE_ENABLED = _config_instance[0].langfuse_enabled
 
 
 # Use __getattr__ to make EMBEDDER_TYPE read dynamically from _config

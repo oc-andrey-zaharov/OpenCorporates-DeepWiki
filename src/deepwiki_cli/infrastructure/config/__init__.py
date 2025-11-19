@@ -21,7 +21,6 @@ from deepwiki_cli.infrastructure.config.settings import (
     AWS_REGION,
     AWS_ROLE_ARN,
     AWS_SECRET_ACCESS_KEY,
-    CLIENT_CLASSES,
     CONFIG_DIR,
     GITHUB_TOKEN,
     GOOGLE_API_KEY,
@@ -30,44 +29,69 @@ from deepwiki_cli.infrastructure.config.settings import (
     Config,
     _config_instance,
     _refresh_config,
+    get_client_classes,
 )
 
-# Initialize empty configuration
-configs: dict[str, Any] = {}
+# Initialize empty configuration (loaded lazily)
+_configs_cache: dict[str, Any] | None = None
 
-# Load all configuration files
-generator_config = load_generator_config()
-embedder_config = load_embedder_config()
-repo_config = load_repo_config()
 
-# Update configuration
-if generator_config:
-    configs["default_provider"] = generator_config.get("default_provider", "google")
-    configs["providers"] = generator_config.get("providers", {})
+def _load_configs() -> dict[str, Any]:
+    """Lazy load all configuration files.
 
-# Update embedder configuration
-if embedder_config:
-    for key in [
-        "embedder_openai",
-        "embedder_lmstudio",
-        "embedder_openrouter",
-        "retriever",
-        "text_splitter",
-    ]:
-        if key in embedder_config:
-            configs[key] = embedder_config[key]
-    # Backward compatibility: map embedder_openai to embedder
-    if "embedder_openai" in embedder_config:
-        configs["embedder"] = embedder_config["embedder_openai"]
+    Returns:
+        Dictionary containing all loaded configurations.
 
-# Update repository configuration
-if repo_config:
-    for key in ["file_filters", "repository"]:
-        if key in repo_config:
-            configs[key] = repo_config[key]
+    Note:
+        This is lazily loaded to avoid triggering adalflow imports before
+        logging is configured.
+    """
+    global _configs_cache
+    if _configs_cache is not None:
+        return _configs_cache
 
-# Language is hardcoded to English
-configs["lang_config"] = {"supported_languages": {"en": "English"}, "default": "en"}
+    configs: dict[str, Any] = {}
+
+    # Load all configuration files
+    generator_config = load_generator_config()
+    embedder_config = load_embedder_config()
+    repo_config = load_repo_config()
+
+    # Update configuration
+    if generator_config:
+        configs["default_provider"] = generator_config.get("default_provider", "google")
+        configs["providers"] = generator_config.get("providers", {})
+
+    # Update embedder configuration
+    if embedder_config:
+        for key in [
+            "embedder_openai",
+            "embedder_lmstudio",
+            "embedder_openrouter",
+            "retriever",
+            "text_splitter",
+        ]:
+            if key in embedder_config:
+                configs[key] = embedder_config[key]
+        # Backward compatibility: map embedder_openai to embedder
+        if "embedder_openai" in embedder_config:
+            configs["embedder"] = embedder_config["embedder_openai"]
+
+    # Update repository configuration
+    if repo_config:
+        for key in ["file_filters", "repository"]:
+            if key in repo_config:
+                configs[key] = repo_config[key]
+
+    # Language is hardcoded to English
+    configs["lang_config"] = {"supported_languages": {"en": "English"}, "default": "en"}
+
+    _configs_cache = configs
+    return configs
+
+
+# Note: configs is loaded lazily via __getattr__ to avoid early adalflow imports
+# It will be populated on first access
 
 
 def get_embedder_config() -> dict[str, Any]:
@@ -83,15 +107,18 @@ def get_embedder_config() -> dict[str, Any]:
     """
     from typing import cast
 
+    # Load configs lazily
+    configs_dict = _load_configs()
+
     # Read from config instance to get current value (supports module reload)
     embedder_type = _config_instance[0].embedder_type.lower()
-    if embedder_type == "lmstudio" and "embedder_lmstudio" in configs:
-        return cast("dict[str, Any]", configs.get("embedder_lmstudio", {}))
-    if embedder_type == "openrouter" and "embedder_openrouter" in configs:
-        return cast("dict[str, Any]", configs.get("embedder_openrouter", {}))
-    if embedder_type == "openai" and "embedder_openai" in configs:
-        return cast("dict[str, Any]", configs.get("embedder_openai", {}))
-    return cast("dict[str, Any]", configs.get("embedder", {}))
+    if embedder_type == "lmstudio" and "embedder_lmstudio" in configs_dict:
+        return cast("dict[str, Any]", configs_dict.get("embedder_lmstudio", {}))
+    if embedder_type == "openrouter" and "embedder_openrouter" in configs_dict:
+        return cast("dict[str, Any]", configs_dict.get("embedder_openrouter", {}))
+    if embedder_type == "openai" and "embedder_openai" in configs_dict:
+        return cast("dict[str, Any]", configs_dict.get("embedder_openai", {}))
+    return cast("dict[str, Any]", configs_dict.get("embedder", {}))
 
 
 def is_lmstudio_embedder() -> bool:
@@ -188,11 +215,14 @@ def get_model_config(
         >>> "model_kwargs" in config
         True
     """
+    # Load configs lazily
+    configs_dict = _load_configs()
+
     # Get provider configuration
-    if "providers" not in configs:
+    if "providers" not in configs_dict:
         raise ValueError("Provider configuration not loaded")
 
-    provider_config = configs["providers"].get(provider)
+    provider_config = configs_dict["providers"].get(provider)
     if not provider_config:
         raise ValueError(f"Configuration for provider '{provider}' not found")
 
@@ -230,14 +260,20 @@ def get_model_config(
     return result
 
 
-# Export EMBEDDER_TYPE for backward compatibility
-# Access via __getattr__ in settings module
+# Export EMBEDDER_TYPE, CLIENT_CLASSES, and configs for backward compatibility
+# Access via __getattr__ for lazy loading
 def __getattr__(name: str) -> Any:
-    """Dynamic attribute access for backward compatibility."""
+    """Dynamic attribute access for backward compatibility and lazy loading."""
     if name == "EMBEDDER_TYPE":
         from deepwiki_cli.infrastructure.config.settings import _config_instance
 
         return _config_instance[0].embedder_type.lower()
+    if name == "CLIENT_CLASSES":
+        # Lazy load client classes to avoid early adalflow import
+        return get_client_classes()
+    if name == "configs":
+        # Lazy load configs to avoid early adalflow import
+        return _load_configs()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -264,6 +300,7 @@ __all__ = [
     "_refresh_config",
     # Config accessors
     "configs",
+    "get_client_classes",
     "get_embedder_config",
     "get_embedder_type",
     "get_model_config",

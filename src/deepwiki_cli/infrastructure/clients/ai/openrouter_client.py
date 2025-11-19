@@ -18,8 +18,10 @@ from adalflow.core.types import (
     ModelType,
     Usage,
 )
-from requests.exceptions import RequestException
 from pydantic import BaseModel, ValidationError
+from requests.exceptions import RequestException
+
+from deepwiki_cli.shared.json_utils import extract_json_object
 
 log = logging.getLogger(__name__)
 
@@ -212,7 +214,8 @@ class OpenRouterClient(ModelClient):
             content = str(content)
 
         try:
-            return schema.model_validate_json(content)
+            sanitized_payload = extract_json_object(content)
+            return schema.model_validate_json(sanitized_payload)
         except ValidationError as exc:
             log.error("OpenRouter structured response validation failed: %s", exc)
             raise

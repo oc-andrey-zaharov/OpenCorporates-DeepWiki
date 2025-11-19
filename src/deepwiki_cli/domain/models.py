@@ -39,16 +39,6 @@ class WikiPage(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
-class ProcessedProjectEntry(BaseModel):
-    """Model for a processed project entry in the cache."""
-
-    id: str  # Filename
-    owner: str
-    repo: str
-    name: str  # owner/repo
-    repo_type: str  # Renamed from type to repo_type for clarity with existing models
-    submittedAt: int  # Timestamp
-    language: str  # Extracted from filename
 
 
 class RepoInfo(BaseModel):
@@ -98,42 +88,17 @@ class WikiCacheData(BaseModel):
     comprehensive: bool | None = None  # True for comprehensive, False for concise
 
 
-class WikiCacheRequest(BaseModel):
-    """Model for the request body when saving wiki cache."""
-
-    repo: RepoInfo
-    language: str = "en"  # Always English
-    wiki_structure: WikiStructureModel
-    generated_pages: dict[str, WikiPage]
-    provider: str
-    model: str
-    version: int | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
-    repo_snapshot: RepoSnapshot | None = None
-    comprehensive: bool | None = None  # True for comprehensive, False for concise
 
 
-class WikiExportRequest(BaseModel):
-    """Model for requesting a wiki export."""
-
-    repo_url: str = Field(..., description="URL of the repository")
-    pages: list[WikiPage] = Field(..., description="List of wiki pages to export")
-    format: Literal["markdown", "json"] = Field(
-        ...,
-        description="Export format (markdown or json)",
-    )
 
 
 __all__ = [
-    "ProcessedProjectEntry",
     "RepoInfo",
     "RepoSnapshot",
     "RepoSnapshotFile",
     "WikiCacheData",
-    "WikiCacheRequest",
-    "WikiExportRequest",
     "WikiPage",
     "WikiSection",
     "WikiStructureModel",
 ]
+

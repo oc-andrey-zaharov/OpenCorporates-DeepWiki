@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 from deepwiki_cli.domain.models import (
@@ -17,7 +17,7 @@ from deepwiki_cli.domain.models import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    pass
 
 
 class ChangeSummary(TypedDict):
@@ -31,11 +31,11 @@ class ChangeSummary(TypedDict):
 logger = logging.getLogger(__name__)
 
 
-def _hash_file(path: str, chunk_size: int = 65536) -> str | None:
+def _hash_file(path: str | Path, chunk_size: int = 65536) -> str | None:
     """Compute a sha256 hash for a file, handling errors gracefully."""
     try:
         digest = hashlib.sha256()
-        with open(path, "rb") as handle:
+        with Path(path).open("rb") as handle:
             while True:
                 chunk = handle.read(chunk_size)
                 if not chunk:
@@ -50,14 +50,17 @@ def _hash_file(path: str, chunk_size: int = 65536) -> str | None:
 def build_snapshot_from_local(repo_path: str, files: list[str]) -> RepoSnapshot:
     """Create a repository snapshot from local files."""
     snapshot_files: dict[str, RepoSnapshotFile] = {}
+    repo_path_obj = Path(repo_path)
+    
     for absolute_path in files:
+        path_obj = Path(absolute_path)
         try:
-            rel_path = os.path.relpath(absolute_path, repo_path)
+            rel_path = str(path_obj.relative_to(repo_path_obj))
         except ValueError:
             rel_path = absolute_path
 
         try:
-            stats = os.stat(absolute_path)
+            stats = path_obj.stat()
         except OSError as exc:
             logger.debug(f"Unable to stat {absolute_path}: {exc}")
             continue
@@ -66,7 +69,7 @@ def build_snapshot_from_local(repo_path: str, files: list[str]) -> RepoSnapshot:
             path=rel_path,
             size=stats.st_size,
             modified_at=stats.st_mtime,
-            hash=_hash_file(absolute_path),
+            hash=_hash_file(path_obj),
         )
 
     return RepoSnapshot(
@@ -200,3 +203,4 @@ __all__ = [
     "find_affected_pages",
     "load_existing_cache",
 ]
+

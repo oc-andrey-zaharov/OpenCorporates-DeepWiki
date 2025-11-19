@@ -9,6 +9,7 @@ import click
 from dotenv import load_dotenv
 
 from deepwiki_cli import __version__
+from deepwiki_cli.infrastructure.observability import flush_langfuse
 
 if TYPE_CHECKING:
     from click import Context
@@ -145,6 +146,9 @@ def main() -> None:
 
             traceback.print_exc()
         sys.exit(1)
+    finally:
+        # Ensure Langfuse events are flushed before exit
+        flush_langfuse()
 
 
 if __name__ == "__main__":

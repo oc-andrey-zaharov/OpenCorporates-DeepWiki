@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any, Literal, Self, TypeVar
 
 import backoff
@@ -46,6 +47,8 @@ from openai.types import (
 )
 from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessage
 from pydantic import BaseModel, ValidationError
+
+from deepwiki_cli.shared.json_utils import extract_json_object
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -339,11 +342,11 @@ class OpenAIClient(ModelClient):
 
             # Handle image edits and variations
             image = final_model_kwargs.get("image")
-            if isinstance(image, str) and os.path.isfile(image):
+            if isinstance(image, str) and Path(image).is_file():
                 final_model_kwargs["image"] = self._encode_image(image)
 
             mask = final_model_kwargs.get("mask")
-            if isinstance(mask, str) and os.path.isfile(mask):
+            if isinstance(mask, str) and Path(mask).is_file():
                 final_model_kwargs["mask"] = self._encode_image(mask)
         else:
             raise ValueError(f"model_type {model_type} is not supported")
@@ -419,7 +422,8 @@ class OpenAIClient(ModelClient):
             raise ValueError("Structured response was empty")
 
         try:
-            return schema.model_validate_json(raw_payload)
+            sanitized_payload = extract_json_object(raw_payload)
+            return schema.model_validate_json(sanitized_payload)
         except ValidationError as exc:  # pragma: no cover - defensive guard
             log.error("Failed to validate structured response: %s", exc)
             raise
@@ -605,7 +609,7 @@ class OpenAIClient(ModelClient):
             ValueError: If the file cannot be read or doesn't exist.
         """
         try:
-            with open(image_path, "rb") as image_file:
+            with Path(image_path).open("rb") as image_file:
                 return base64.b64encode(image_file.read()).decode("utf-8")
         except FileNotFoundError:
             raise ValueError(f"Image file not found: {image_path}")

@@ -11,6 +11,8 @@ from adalflow.core.model_client import ModelClient
 from adalflow.core.types import ModelType
 from pydantic import BaseModel, ValidationError
 
+from deepwiki_cli.shared.json_utils import extract_json_object
+
 # Configure logging
 from deepwiki_cli.infrastructure.logging.setup import setup_logging
 
@@ -394,7 +396,8 @@ class BedrockClient(ModelClient):
             response_text = str(response_text)
 
         try:
-            return schema.model_validate_json(response_text)
+            sanitized_payload = extract_json_object(response_text)
+            return schema.model_validate_json(sanitized_payload)
         except ValidationError as exc:
             log.error("Bedrock structured response validation failed: %s", exc)
             raise

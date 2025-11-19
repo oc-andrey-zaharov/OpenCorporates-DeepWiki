@@ -8,12 +8,14 @@ to provide context-aware content generation.
 import asyncio
 import logging
 import os
+import time
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import google.generativeai as genai
 from adalflow.core.types import ModelType
 from google.api_core import exceptions as google_exceptions
+from langfuse import observe
 from pydantic import BaseModel
 
 from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
@@ -21,6 +23,10 @@ from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 from deepwiki_cli.infrastructure.config import (
     get_model_config,
+)
+from deepwiki_cli.infrastructure.observability import (
+    get_langfuse_client,
+    is_langfuse_enabled,
 )
 from deepwiki_cli.infrastructure.prompts import SIMPLE_CHAT_SYSTEM_PROMPT
 from deepwiki_cli.services.data_pipeline import count_tokens, get_file_content
@@ -150,6 +156,7 @@ def _async_to_sync_generator(
             continue
 
 
+@observe(name="wiki-generation", capture_input=False)
 def generate_wiki_content(
     repo_url: str,
     messages: list[dict[str, str]],
@@ -193,6 +200,9 @@ def generate_wiki_content(
         ValueError: If RAG preparation fails
         Exception: For other errors during processing
     """
+    # Initialize Langfuse client for inner spans if enabled
+    langfuse = get_langfuse_client() if is_langfuse_enabled() else None
+
     # Check if request contains very large input
     input_too_large = False
     if messages and len(messages) > 0:
@@ -276,42 +286,99 @@ def generate_wiki_content(
 
             # Try to perform RAG retrieval
             try:
-                # This will use the actual RAG implementation
-                retrieved_documents = request_rag(rag_query)
-
-                if retrieved_documents and retrieved_documents[0].documents:
-                    # Format context for the prompt in a more structured way
-                    documents = retrieved_documents[0].documents
-                    logger.info(f"Retrieved {len(documents)} documents")
-                    context_json_payload = getattr(
-                        retrieved_documents[0],
-                        "context_json",
-                        None,
+                # Start RAG retrieval span for Langfuse (v3 API)
+                rag_start_time = time.time()
+                # Use context manager for RAG span
+                rag_ctx = (
+                    langfuse.start_as_current_observation(
+                        as_type="retriever",
+                        name="rag-retrieval",
+                        input={"query": rag_query},
+                        metadata={"file_path": file_path},
                     )
+                    if langfuse
+                    else None
+                )
 
-                    # Group documents by file path
-                    docs_by_file: dict[str, list[Any]] = {}
-                    for doc in documents:
-                        doc_file_path = doc.meta_data.get("file_path", "unknown")
-                        if doc_file_path not in docs_by_file:
-                            docs_by_file[doc_file_path] = []
-                        docs_by_file[doc_file_path].append(doc)
+                # We need to manually enter/exit if we want to capture the span object for updates
+                # But since we just want to wrap the call, we can use a try/finally or just use the context manager
+                # However, the original code updated the span with results.
 
-                    # Format context text with file path grouping
-                    context_parts = []
-                    for doc_file_path, docs in docs_by_file.items():
-                        # Add file header with metadata
-                        header = f"## File Path: {doc_file_path}\n\n"
-                        # Add document content
-                        content = "\n\n".join([doc.text for doc in docs])
-
-                        context_parts.append(f"{header}{content}")
-
-                    # Join all parts with clear separation
-                    separator = "\n\n" + "-" * 10 + "\n\n"
-                    context_text = separator.join(context_parts)
+                if rag_ctx:
+                    rag_span = rag_ctx.__enter__()
                 else:
-                    logger.warning("No documents retrieved from RAG")
+                    rag_span = None
+
+                try:
+                    # This will use the actual RAG implementation
+                    retrieved_documents = request_rag(rag_query)
+
+                    rag_duration = time.time() - rag_start_time
+
+                    if retrieved_documents and retrieved_documents[0].documents:
+                        # Format context for the prompt in a more structured way
+                        documents = retrieved_documents[0].documents
+                        logger.info(f"Retrieved {len(documents)} documents")
+                        context_json_payload = getattr(
+                            retrieved_documents[0],
+                            "context_json",
+                            None,
+                        )
+
+                        # Update RAG span with results (v3 API)
+                        if rag_span:
+                            try:
+                                rag_span.update(
+                                    output={
+                                        "document_count": len(documents),
+                                        "has_context_json": context_json_payload
+                                        is not None,
+                                    },
+                                    metadata={
+                                        "retrieval_duration_seconds": rag_duration,
+                                        "documents_retrieved": len(documents),
+                                    },
+                                )
+                            except Exception as e:
+                                logger.debug(f"Failed to update RAG span: {e!s}")
+
+                        # Group documents by file path
+                        docs_by_file: dict[str, list[Any]] = {}
+                        for doc in documents:
+                            doc_file_path = doc.meta_data.get("file_path", "unknown")
+                            if doc_file_path not in docs_by_file:
+                                docs_by_file[doc_file_path] = []
+                            docs_by_file[doc_file_path].append(doc)
+
+                        # Format context text with file path grouping
+                        context_parts = []
+                        for doc_file_path, docs in docs_by_file.items():
+                            # Add file header with metadata
+                            header = f"## File Path: {doc_file_path}\n\n"
+                            # Add document content
+                            content = "\n\n".join([doc.text for doc in docs])
+
+                            context_parts.append(f"{header}{content}")
+
+                        # Join all parts with clear separation
+                        separator = "\n\n" + "-" * 10 + "\n\n"
+                        context_text = separator.join(context_parts)
+                    else:
+                        logger.warning("No documents retrieved from RAG")
+                        if rag_span:
+                            try:
+                                rag_span.update(
+                                    output={"document_count": 0},
+                                    metadata={
+                                        "retrieval_duration_seconds": rag_duration
+                                    },
+                                )
+                            except Exception as e:
+                                logger.debug(f"Failed to update RAG span: {e!s}")
+                finally:
+                    if rag_ctx:
+                        rag_ctx.__exit__(None, None, None)
+
             except Exception as e:
                 logger.exception(f"Error in RAG retrieval: {e!s}")
                 # Continue without RAG if there's an error
@@ -362,6 +429,37 @@ def generate_wiki_content(
 
     model_config = get_model_config(provider, model)["model_kwargs"]
 
+    # Start generation span for Langfuse (v3 API)
+    generation_start_time = time.time()
+    generation_ctx = None
+    generation_span = None
+
+    if langfuse:
+        try:
+            generation_ctx = langfuse.start_as_current_observation(
+                as_type="generation",
+                name="llm-generation",
+                model=model,
+                model_parameters={
+                    "temperature": model_config.get("temperature"),
+                    "top_p": model_config.get("top_p"),
+                    "top_k": model_config.get("top_k"),
+                },
+                input=messages,
+                metadata={
+                    "provider": provider,
+                    "repo_url": repo_url,
+                    "has_rag_context": bool(context_text or context_json_payload),
+                    "has_file_content": bool(file_content),
+                    "structured_schema": structured_schema.__name__
+                    if structured_schema
+                    else None,
+                },
+            )
+            generation_span = generation_ctx.__enter__()
+        except Exception as e:
+            logger.debug(f"Failed to create generation span: {e!s}")
+
     # Create async generator function for streaming/structured responses
     async def _async_stream() -> AsyncGenerator[str]:
         async def _maybe_structured_completion(
@@ -380,7 +478,8 @@ def generate_wiki_content(
                     messages=[{"role": "user", "content": prompt}],
                     model_kwargs=model_kwargs,
                 )
-                return schema_obj.model_dump_json()
+                result = schema_obj.model_dump_json()
+                return result if isinstance(result, str) else None
             except Exception as exc:  # pragma: no cover - fallback only
                 logger.warning(
                     "Structured completion failed; falling back to standard generation",
@@ -563,7 +662,7 @@ def generate_wiki_content(
                 while attempt < GOOGLE_STREAM_MAX_RETRIES:
                     attempt += 1
                     try:
-                        model_client = genai.GenerativeModel(
+                        google_model = genai.GenerativeModel(
                             model_name=model_config["model"],
                             generation_config={  # type: ignore[arg-type]
                                 "temperature": model_config["temperature"],
@@ -571,7 +670,7 @@ def generate_wiki_content(
                                 "top_k": model_config["top_k"],
                             },
                         )
-                        response = model_client.generate_content(prompt, stream=True)
+                        response = google_model.generate_content(prompt, stream=True)
                         for chunk in response:
                             if hasattr(chunk, "text"):
                                 yield chunk.text
@@ -637,4 +736,44 @@ def generate_wiki_content(
                 yield f"\nError: {error_message}"
 
     # Convert async generator to sync generator
-    yield from _async_to_sync_generator(_async_stream())
+    # @observe will automatically capture the output from the generator
+
+    input_tokens = count_tokens(prompt, embedder_type=None)
+    output_tokens = 0
+    collected_output = []
+
+    try:
+        for chunk in _async_to_sync_generator(_async_stream()):
+            collected_output.append(chunk)
+            yield chunk
+
+        # Update generation span with usage details if possible
+        if generation_span:
+            try:
+                full_output = "".join(collected_output)
+                output_tokens = count_tokens(full_output, embedder_type=None)
+
+                generation_span.update(
+                    usage_details={
+                        "prompt_tokens": input_tokens,
+                        "completion_tokens": output_tokens,
+                        "total_tokens": input_tokens + output_tokens,
+                    }
+                )
+            except Exception as e:
+                logger.debug(f"Failed to update generation stats: {e}")
+
+    except Exception as e:
+        logger.exception(f"Error during wiki generation: {e!s}")
+        raise
+    finally:
+        # End generation span
+        if generation_ctx:
+            generation_ctx.__exit__(None, None, None)
+
+        # Flush Langfuse events
+        if langfuse:
+            try:
+                langfuse.flush()
+            except Exception as e:
+                logger.debug(f"Failed to flush Langfuse: {e!s}")

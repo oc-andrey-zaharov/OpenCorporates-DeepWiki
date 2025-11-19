@@ -57,6 +57,9 @@ def _get_cached_wikis() -> list[dict]:
         except (OSError, ValueError, KeyError):
             continue
 
+    # Sort by name (repo), then by version (descending)
+    wikis.sort(key=lambda x: (x["name"], -int(str(x["version"]))))
+
     return wikis
 
 

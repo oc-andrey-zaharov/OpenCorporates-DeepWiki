@@ -207,3 +207,4 @@ def build_wiki_structure_prompt(
         schema_definition=schema_definition,
         example_response=example_response,
     )
+

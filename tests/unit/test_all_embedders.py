@@ -113,16 +113,11 @@ class TestEmbedderConfiguration:
 
         # Check all embedder configurations exist
         assert "embedder" in configs, "OpenAI embedder config missing"
-        assert "embedder_google" in configs, "Google embedder config missing"
         assert "embedder_lmstudio" in configs, "LM Studio embedder config missing"
         assert "embedder_openrouter" in configs, "OpenRouter embedder config missing"
 
-        # Check client classes are available
         assert "OpenAIClient" in CLIENT_CLASSES, (
             "OpenAIClient missing from CLIENT_CLASSES"
-        )
-        assert "GoogleEmbedderClient" in CLIENT_CLASSES, (
-            "GoogleEmbedderClient missing from CLIENT_CLASSES"
         )
         assert "LMStudioClient" in CLIENT_CLASSES, (
             "LMStudioClient missing from CLIENT_CLASSES"
@@ -135,24 +130,22 @@ class TestEmbedderConfiguration:
         """Test embedder type detection functions."""
         from deepwiki_cli.infrastructure.config import (
             get_embedder_type,
-            is_google_embedder,
+            is_lmstudio_embedder,
             is_openrouter_embedder,
         )
 
         # Default type should be detected
         current_type = get_embedder_type()
-        assert current_type in ["openai", "google", "lmstudio", "openrouter"], (
+        assert current_type in ["openai", "lmstudio", "openrouter"], (
             f"Invalid embedder type: {current_type}"
         )
 
         # Boolean functions should work
         is_lmstudio = is_lmstudio_embedder()
-        is_google = is_google_embedder()
         is_openrouter = is_openrouter_embedder()
         assert isinstance(is_lmstudio, bool), (
             "is_lmstudio_embedder should return boolean"
         )
-        assert isinstance(is_google, bool), "is_google_embedder should return boolean"
         assert isinstance(
             is_openrouter,
             bool,
@@ -161,19 +154,12 @@ class TestEmbedderConfiguration:
         # Only one should be true at a time (unless using openai default)
         if current_type == "lmstudio":
             assert is_lmstudio
-            assert not is_google
-            assert not is_openrouter
-        elif current_type == "google":
-            assert not is_lmstudio
-            assert is_google
             assert not is_openrouter
         elif current_type == "openrouter":
             assert not is_lmstudio
-            assert not is_google
             assert is_openrouter
         else:  # openai
             assert not is_lmstudio
-            assert not is_google
             assert not is_openrouter
 
     def test_get_embedder_config(self) -> None:
@@ -193,10 +179,6 @@ class TestEmbedderFactory:
     def test_get_embedder_with_explicit_type(self) -> None:
         """Test get_embedder with explicit embedder_type parameter."""
         from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
-
-        # Test Google embedder
-        google_embedder = get_embedder(embedder_type="google")
-        assert google_embedder is not None, "Google embedder should be created"
 
         # Test OpenAI embedder
         openai_embedder = get_embedder(embedder_type="openai")
@@ -227,12 +209,6 @@ class TestEmbedderFactory:
         """Test get_embedder with legacy boolean parameters."""
         from deepwiki_cli.infrastructure.embedding.embedder import get_embedder
 
-        # Test with use_google_embedder=True
-        google_embedder = get_embedder(use_google_embedder=True)
-        assert google_embedder is not None, (
-            "Google embedder should be created with use_google_embedder=True"
-        )
-
         # Test with is_local_lmstudio=True
         try:
             lmstudio_embedder = get_embedder(is_local_lmstudio=True)
@@ -257,40 +233,6 @@ class TestEmbedderFactory:
 class TestEmbedderClients:
     """Test individual embedder clients."""
 
-    def test_google_embedder_client(self) -> None:
-        """Test Google embedder client directly."""
-        if not os.getenv("GOOGLE_API_KEY"):
-            logger.warning(
-                "Skipping Google embedder test - GOOGLE_API_KEY not available",
-            )
-            return
-
-        from adalflow.core.types import ModelType
-
-        from deepwiki_cli.infrastructure.clients.ai.google_embedder_client import (
-            GoogleEmbedderClient,
-        )
-
-        client = GoogleEmbedderClient()
-
-        # Test single embedding
-        api_kwargs = client.convert_inputs_to_api_kwargs(
-            input="Hello world",
-            model_kwargs={
-                "model": "text-embedding-004",
-                "task_type": "SEMANTIC_SIMILARITY",
-            },
-            model_type=ModelType.EMBEDDER,
-        )
-
-        response = client.call(api_kwargs, ModelType.EMBEDDER)
-        assert response is not None, "Google embedder should return response"
-
-        # Parse the response
-        parsed = client.parse_embedding_response(response)
-        assert parsed.data is not None, "Parsed response should have data"
-        assert len(parsed.data) > 0, "Should have at least one embedding"
-        assert parsed.error is None, "Should not have errors"
 
 
 class TestDataPipelineFunctions:
@@ -335,7 +277,7 @@ class TestRAGIntegration:
 
         # Test with default configuration
         try:
-            rag = RAG(provider="google", model="gemini-1.5-flash")
+            rag = RAG(provider="openai", model="gpt-4o")
             assert rag is not None, "RAG should be initialized"
             assert hasattr(rag, "embedder"), "RAG should have embedder"
             assert hasattr(rag, "is_lmstudio_embedder"), (
@@ -369,7 +311,7 @@ class TestEnvironmentVariableHandling:
 
     def test_embedder_type_env_var(self) -> None:
         """Test embedder selection via DEEPWIKI_EMBEDDER_TYPE environment variable."""
-        for embedder_type in ["openai", "google", "lmstudio", "openrouter"]:
+        for embedder_type in ["openai", "lmstudio", "openrouter"]:
             self._test_single_embedder_type(embedder_type)
 
     def _test_single_embedder_type(self, embedder_type: str) -> None:
@@ -380,17 +322,24 @@ class TestEnvironmentVariableHandling:
         try:
             # Set environment variable
             os.environ["DEEPWIKI_EMBEDDER_TYPE"] = embedder_type
+            
+            # Ensure no other interfering env vars
+            if "OPENAI_API_KEY" in os.environ:
+                 del os.environ["OPENAI_API_KEY"]
 
             # Reload settings module first to ensure _config is refreshed
             import deepwiki_cli.infrastructure.config.settings
+            from unittest.mock import patch
 
-            importlib.reload(deepwiki_cli.infrastructure.config.settings)
-            # Reload config to pick up new env var
-            importlib.reload(deepwiki_cli.infrastructure.config)
-            # Refresh config to ensure it picks up the new environment variable
-            from deepwiki_cli.infrastructure.config import _refresh_config
+            # Patch load_dotenv to prevent reloading real env vars during module reload
+            with patch("deepwiki_cli.infrastructure.config.settings.load_dotenv"):
+                importlib.reload(deepwiki_cli.infrastructure.config.settings)
+                # Reload config to pick up new env var
+                importlib.reload(deepwiki_cli.infrastructure.config)
+                # Refresh config to ensure it picks up the new environment variable
+                from deepwiki_cli.infrastructure.config import _refresh_config
 
-            _refresh_config()
+                _refresh_config()
 
             from deepwiki_cli.infrastructure.config import (
                 EMBEDDER_TYPE,
@@ -412,8 +361,10 @@ class TestEnvironmentVariableHandling:
                 del os.environ["DEEPWIKI_EMBEDDER_TYPE"]
 
             # Reload config to restore original state
-            importlib.reload(deepwiki_cli.infrastructure.config.settings)
-            importlib.reload(deepwiki_cli.infrastructure.config)
+            from unittest.mock import patch
+            with patch("deepwiki_cli.infrastructure.config.settings.load_dotenv"):
+                importlib.reload(deepwiki_cli.infrastructure.config.settings)
+                importlib.reload(deepwiki_cli.infrastructure.config)
 
 
 class TestIssuesIdentified:
@@ -494,7 +445,7 @@ def run_all_tests() -> bool:
 
     # Test embedder config with different types
     config_test = TestEmbedderConfiguration()
-    for embedder_type in ["openai", "google", "lmstudio"]:
+    for embedder_type in ["openai", "lmstudio"]:
         runner.run_test(
             lambda et=embedder_type: config_test.test_get_embedder_config(et),
             f"TestEmbedderConfiguration.test_get_embedder_config[{embedder_type}]",
@@ -517,7 +468,7 @@ def run_all_tests() -> bool:
 
     # Test environment variable handling
     env_test = TestEnvironmentVariableHandling()
-    for embedder_type in ["openai", "google", "lmstudio"]:
+    for embedder_type in ["openai", "lmstudio"]:
         runner.run_test(
             lambda et=embedder_type: env_test.test_embedder_type_env_var(et),
             f"TestEnvironmentVariableHandling.test_embedder_type_env_var[{embedder_type}]",

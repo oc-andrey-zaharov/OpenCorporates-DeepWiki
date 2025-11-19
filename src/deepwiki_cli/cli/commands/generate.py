@@ -5,9 +5,10 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import click
 from pydantic import ValidationError
@@ -43,8 +44,8 @@ from deepwiki_cli.domain.schemas import WikiPageSchema, WikiStructureSchema
 from deepwiki_cli.infrastructure.clients.github.client import (
     get_github_repo_structure_standalone as get_github_repo_structure,
 )
-from deepwiki_cli.infrastructure.config import get_model_config
-from deepwiki_cli.infrastructure.config.settings import CLIENT_CLASSES, GITHUB_TOKEN
+from deepwiki_cli.infrastructure.config import get_client_classes, get_model_config
+from deepwiki_cli.infrastructure.config.settings import GITHUB_TOKEN
 from deepwiki_cli.infrastructure.prompts.builders import (
     build_wiki_page_prompt,
     build_wiki_structure_prompt,
@@ -714,7 +715,8 @@ def _structured_client_for(provider: str, model: str):
     """Instantiate a provider client when structured calls are supported."""
     model_config = get_model_config(provider, model)
     client_name = model_config.get("model_client")
-    client_cls = CLIENT_CLASSES.get(client_name)
+    client_classes = get_client_classes()
+    client_cls = client_classes.get(client_name)
     if not client_cls:
         return None, model_config
     client = client_cls()
@@ -732,7 +734,7 @@ def _call_structured_wiki_schema(
     client, model_config = _structured_client_for(provider, model)
     if client is None:
         return None
-    call_fn: Callable[..., WikiStructureSchema] = getattr(client, "call_structured")
+    call_fn: Callable[..., WikiStructureSchema] = client.call_structured
     return call_fn(
         schema=WikiStructureSchema,
         messages=messages,

@@ -470,7 +470,9 @@ class TestSelectMultipleFromList:
     ) -> None:
         """Test select_multiple_from_list with terminal menu."""
         mock_menu_instance = MagicMock()
-        mock_menu_instance.show.return_value = [0, 2]
+        # Return indices 1 and 3 (corresponding to option1 and option3)
+        # Index 0 is "Select All", so we skip it to test specific selection
+        mock_menu_instance.show.return_value = [1, 3]
         mock_terminal_menu.return_value = mock_menu_instance
 
         result = utils.select_multiple_from_list(

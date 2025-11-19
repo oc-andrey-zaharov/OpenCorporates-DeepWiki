@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from adalflow import GoogleGenAIClient
 from returns.result import Failure, Result, Success
 
 # Import client classes for mapping
@@ -15,8 +14,8 @@ from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClien
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
 from deepwiki_cli.infrastructure.config.settings import (
-    CLIENT_CLASSES,
     CONFIG_DIR,
+    get_client_classes,
     logger,
 )
 
@@ -160,9 +159,12 @@ def load_generator_config() -> dict[str, Any]:
     # Add client classes to each provider
     if "providers" in generator_config:
         for provider_id, provider_config in generator_config["providers"].items():
+            # Get client classes lazily
+            client_classes = get_client_classes()
+
             # Try to set client class from client_class
-            if provider_config.get("client_class") in CLIENT_CLASSES:
-                provider_config["model_client"] = CLIENT_CLASSES[
+            if provider_config.get("client_class") in client_classes:
+                provider_config["model_client"] = client_classes[
                     provider_config["client_class"]
                 ]
             # Fall back to default mapping based on provider_id
@@ -174,7 +176,7 @@ def load_generator_config() -> dict[str, Any]:
                 "bedrock",
             ]:
                 default_map = {
-                    "google": GoogleGenAIClient,
+                    "google": client_classes.get("GoogleGenAIClient"),
                     "openai": OpenAIClient,
                     "openrouter": OpenRouterClient,
                     "lmstudio": LMStudioClient,
@@ -208,6 +210,9 @@ def load_embedder_config() -> dict[str, Any]:
     embedder_config = result.value_or({})
 
     # Process client classes
+    # Get client classes lazily
+    client_classes = get_client_classes()
+
     for key in [
         "embedder_openai",
         "embedder_lmstudio",
@@ -215,8 +220,8 @@ def load_embedder_config() -> dict[str, Any]:
     ]:
         if key in embedder_config and "client_class" in embedder_config[key]:
             class_name = embedder_config[key]["client_class"]
-            if class_name in CLIENT_CLASSES:
-                embedder_config[key]["model_client"] = CLIENT_CLASSES[class_name]
+            if class_name in client_classes:
+                embedder_config[key]["model_client"] = client_classes[class_name]
 
     return embedder_config
 

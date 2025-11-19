@@ -8,9 +8,6 @@ from typing import TYPE_CHECKING
 import click
 from dotenv import load_dotenv
 
-from deepwiki_cli import __version__
-from deepwiki_cli.infrastructure.observability import flush_langfuse
-
 if TYPE_CHECKING:
     from click import Context
 else:
@@ -38,6 +35,10 @@ from deepwiki_cli.infrastructure.logging.setup import setup_logging
 os.environ["LOG_LEVEL"] = os.environ.get("LOG_LEVEL", "WARNING")
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+from deepwiki_cli import __version__
+from deepwiki_cli.infrastructure.observability import flush_langfuse
 
 
 @click.group()

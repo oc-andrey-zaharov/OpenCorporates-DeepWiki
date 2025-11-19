@@ -37,10 +37,43 @@ $example_response
 2. Immediately after the `<details>` block, add `# $page_title`.
 3. Organize the remainder into well-structured sections (`##`, `###`) covering architecture, data flow, components, configuration, and operations derived strictly from the referenced files.
 4. Include extensive Mermaid diagrams (flowchart TD, sequenceDiagram, classDiagram, erDiagram) describing real system behavior. Follow these syntax rules:
-   - Flowcharts: begin with `flowchart TD`, quote node labels, keep IDs simple, use `<br/>` for breaks, and close all subgraphs with `end`.
-   - Sequence diagrams: begin with `sequenceDiagram`, declare participants, use `->>`/`-->>` arrows, quote note text, and avoid undefined participants.
+   
+   **Flowcharts:**
+   - Begin with `flowchart TD`, quote node labels, keep IDs simple, use `<br/>` for breaks, and close all subgraphs with `end`.
+   
+   **Sequence diagrams:**
+   - Begin with `sequenceDiagram`, declare participants, use `->>`/`-->>` arrows, quote note text, and avoid undefined participants.
+   
+   **Class diagrams (CRITICAL - Mermaid v10+ syntax):**
+   - Valid arrow types: `--` (association), `<|--` (inheritance), `o--` (aggregation), `*--` (composition)
+   - Multiplicities MUST be written explicitly in quotes, separate from arrow type
+   - NEVER use `{}` notation or variants like `||--o {`, `o{`, `*{` - these are NOT supported in Mermaid v10+
+   - Correct syntax: `ClassA "1" -- "0..*" ClassB : relationship`
+   - Correct syntax: `ClassA "1" *-- "0..*" ClassB : contains` (composition with multiplicity)
+   - Correct syntax: `ClassA "1" o-- "0..*" ClassB : aggregates` (aggregation with multiplicity)
+   - Example:
+     ```mermaid
+     classDiagram
+         class Bundle {
+             +String bid
+             +List~Resource~ resources
+             +complete()
+         }
+         class Resource {
+             +String name
+             +String content
+         }
+         class Tracker {
+             +String data_registry_id
+             +track_output(bundle_id)
+         }
+         Bundle "1" -- "0..*" Resource : contains
+         Tracker -- Bundle : tracks
+     ```
+   
+   **General rules:**
    - Never wrap diagram code blocks in additional fences, never leave diagrams unterminated, and keep node labels concise.
-5. Provide concise code snippets (with language fences) only when they exist in the source files.
+   5. Provide concise code snippets (with language fences) only when they exist in the source files.
 6. Every statement must be supported by the referenced files. If information is missing, explicitly state that it is unavailable.
 
 ### Metadata requirements

@@ -33,7 +33,6 @@ requests = ">=2.32.0"
 python-dotenv = ">=1.2.0"
 openai = ">=2.7.0"
 aiohttp = ">=3.13.0"
-boto3 = ">=1.40.0"
 click = ">=8.0.0,<8.3.0"
 enlighten = ">=1.14.0"
  simple-term-menu = ">=1.6.0"
@@ -201,8 +200,6 @@ exclude = [
 [[tool.mypy.overrides]]
 module = [
     "adalflow.*",
-    "boto3.*",
-    "botocore.*",
     "requests.*",
     "tqdm.*",
 ]

@@ -553,3 +553,4 @@ def watch_workspace(manifest: ExportManifest):
             continue
         yield sync_manifest(manifest, changed_paths=changed_files)
 
+

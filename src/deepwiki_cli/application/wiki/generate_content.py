@@ -18,7 +18,6 @@ from google.api_core import exceptions as google_exceptions
 from langfuse import observe
 from pydantic import BaseModel
 
-from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
 from deepwiki_cli.infrastructure.clients.ai.cursor_agent_client import CursorAgentClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
 from deepwiki_cli.infrastructure.clients.ai.openrouter_client import OpenRouterClient
@@ -183,7 +182,7 @@ def generate_wiki_content(
     Args:
         repo_url: Repository URL
         messages: List of message dicts with 'role' and 'content' keys
-        provider: Model provider (google, openai, openrouter, bedrock)
+        provider: Model provider (google, openai, openrouter, cursor)
         model: Model name
         repo_type: Repository type (default: "github")
         structured_schema: Optional Pydantic schema for structured responses
@@ -431,7 +430,9 @@ def generate_wiki_content(
     prompt += f"<query>\n{query}\n</query>\n\n"
 
     if additional_context:
-        prompt += f"<additional_context>\n{additional_context}\n</additional_context>\n\n"
+        prompt += (
+            f"<additional_context>\n{additional_context}\n</additional_context>\n\n"
+        )
 
     prompt += "Assistant: "
 
@@ -631,39 +632,6 @@ def generate_wiki_content(
                             return
                     logger.exception(f"Error with Openai API: {error_text}")
                     yield f"\nError with Openai API: {error_text}\n\nPlease check that you have set the OPENAI_API_KEY environment variable with a valid API key."
-            elif provider == "bedrock":
-                try:
-                    logger.info(f"Using AWS Bedrock with model: {model}")
-                    model_client = BedrockClient()
-                    model_kwargs = {
-                        "model": model,
-                        "temperature": model_config["temperature"],
-                        "top_p": model_config["top_p"],
-                    }
-                    structured_payload = await _maybe_structured_completion(
-                        model_client,
-                        model_kwargs.copy(),
-                    )
-                    if structured_payload is not None:
-                        yield structured_payload
-                        return
-                    api_kwargs = model_client.convert_inputs_to_api_kwargs(
-                        input=prompt,
-                        model_kwargs=model_kwargs,
-                        model_type=ModelType.LLM,
-                    )
-                    logger.info("Making AWS Bedrock API call")
-                    response = await model_client.acall(
-                        api_kwargs=api_kwargs,
-                        model_type=ModelType.LLM,
-                    )
-                    if isinstance(response, str):
-                        yield response
-                    else:
-                        yield str(response)
-                except Exception as e_bedrock:
-                    logger.exception(f"Error with AWS Bedrock API: {e_bedrock!s}")
-                    yield f"\nError with AWS Bedrock API: {e_bedrock!s}\n\nPlease check that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables with valid credentials."
             elif provider == "cursor":
                 try:
                     logger.info(f"Using Cursor Agent with model: {model}")
@@ -671,7 +639,7 @@ def generate_wiki_content(
                     model_kwargs = {
                         "model": model,
                     }
-                    
+
                     # Try structured first if schema exists
                     structured_payload = await _maybe_structured_completion(
                         model_client,
@@ -684,15 +652,15 @@ def generate_wiki_content(
                     # Fallback to standard call
                     api_kwargs = {
                         "messages": [{"role": "user", "content": prompt}],
-                        **model_kwargs
+                        **model_kwargs,
                     }
-                    
+
                     logger.info("Making Cursor Agent CLI call")
                     response = await model_client.acall(
                         api_kwargs=api_kwargs,
                         model_type=ModelType.LLM,
                     )
-                    
+
                     completion_text = _extract_completion_text(response)
                     if completion_text:
                         yield completion_text
@@ -700,8 +668,8 @@ def generate_wiki_content(
                         yield str(response)
 
                 except Exception as e_cursor:
-                     logger.exception(f"Error with Cursor Agent: {e_cursor!s}")
-                     yield f"\nError with Cursor Agent: {e_cursor!s}"
+                    logger.exception(f"Error with Cursor Agent: {e_cursor!s}")
+                    yield f"\nError with Cursor Agent: {e_cursor!s}"
             else:
                 # Google Generative AI with retry for overloads
                 attempt = 0

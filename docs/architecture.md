@@ -9,7 +9,7 @@ This document gives a quick overview of the technologies in use and how the main
 | CLI | Python Click | Command-line interface for wiki generation |
 | Background Processing | Custom RAG pipeline | Embedding + generation orchestrated in `src/deepwiki_cli/services/rag.py` |
 | Prompt Schemas | Pydantic (`src/deepwiki_cli/domain/schemas.py`) | `WikiStructureSchema`, `WikiPageSchema`, and `RAGContextSchema` enforce structured LLM IO |
-| AI Providers | Google Gemini, OpenAI, OpenRouter, AWS Bedrock | Configurable via `src/deepwiki_cli/config` and environment variables |
+| AI Providers | Google Gemini, OpenAI, OpenRouter, Cursor Agent | Configurable via `src/deepwiki_cli/config` and environment variables |
 | Persistence | Local cache (filesystem) | Stores generated wiki artifacts and repo snapshots for reuse/versioning |
 | Authentication | GitHub Token (via .env) | Simple token-based authentication for private repositories |
 | Tooling | Poetry + Makefile | Simplifies local development and testing |
@@ -63,7 +63,7 @@ sequenceDiagram
 DeepWiki now operates solely as a CLI-first application. All repository scanning, wiki generation, caching, and editable workspace features run locally. The only outbound calls are to:
 
 - Git hosting providers (GitHub REST API)
-- LLM providers (Google, OpenAI, OpenRouter, Bedrock)
+- LLM providers (Google, OpenAI, OpenRouter, Cursor Agent)
 
 There is no FastAPI or WebSocket server to deploy or configure.
 
@@ -108,8 +108,8 @@ The RAG (Retrieval-Augmented Generation) pipeline:
 Support for multiple AI providers:
 
 - `openai_client.py` - OpenAI API client
-- `bedrock_client.py` - AWS Bedrock client
 - `openrouter_client.py` - OpenRouter client
+- `cursor_agent_client.py` - Cursor Agent client
 - `google_embedder_client.py` - Google embedding client
 - `dashscope_client.py` - Alibaba Cloud DashScope client
 
@@ -133,7 +133,7 @@ All prompts embed the Pydantic schemas in `src/deepwiki_cli/domain/schemas.py` t
 - `WikiPageSchema`: captures page metadata (summary, keywords, referenced files, diagram types) alongside Markdown content.
 - `RAGContextSchema`: bundles the query, retrieved documents, and conversation history so downstream providers consume a single JSON payload.
 
-Model clients attempt JSON-mode/function-calling first (OpenAI, Bedrock, OpenRouter, etc.) and automatically fall back to streaming text parsing if a provider lacks structured support. Editable workspaces and exports persist the structured metadata block so the information is available during manual updates.
+Model clients attempt JSON-mode/function-calling first (OpenAI, OpenRouter, etc.) and automatically fall back to streaming text parsing if a provider lacks structured support. Editable workspaces and exports persist the structured metadata block so the information is available during manual updates.
 
 ## Configuration
 

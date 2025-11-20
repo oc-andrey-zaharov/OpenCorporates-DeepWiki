@@ -198,7 +198,7 @@ def get_model_config(
     """Get configuration for the specified provider and model.
 
     Args:
-        provider: Model provider ('google', 'openai', 'openrouter', 'lmstudio', 'bedrock').
+        provider: Model provider ('google', 'openai', 'openrouter', 'lmstudio', 'cursor').
         model: Model name, or None to use default model.
 
     Returns:

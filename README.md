@@ -11,7 +11,7 @@ Automatically create beautiful, interactive wikis for any GitHub repository. Ana
 - **DeepResearch**: Multi-turn research process for complex topics
 - **Incremental Regeneration**: Detects repo changes, updates only affected pages, and preserves untouched content
 - **Versioned Cache Management**: Maintain multiple wiki snapshots per repo with clear version numbering and summaries
-- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, AWS Bedrock
+- **Multiple Model Providers**: Google Gemini, OpenAI, OpenRouter, Cursor Agent
 - **Standalone CLI**: Works completely offline with a clean Python/Poetry toolchain
 - **Editable Workspaces**: Export markdown wikis into `docs/wiki`, edit locally, and sync back to the cache
 - **Structured JSON Schemas**: Every LLM interaction (wiki structure, pages, and RAG context) is validated against `WikiStructureSchema`, `WikiPageSchema`, and `RAGContextSchema` in `src/deepwiki_cli/domain/schemas.py`, guaranteeing parseable output.
@@ -121,7 +121,7 @@ deepwiki generate
 You'll be prompted for:
 
 - Repository (GitHub URL, owner/repo shorthand, or local path)
-- Model provider (google, openai, openrouter, bedrock, etc.)
+- Model provider (google, openai, openrouter, cursor, etc.)
 - Model selection
 - Wiki type (comprehensive or concise)
 - Optional file filters
@@ -143,7 +143,7 @@ DeepWiki now instructs models to respond with compact JSON matching the Pydantic
 - `WikiPageSchema` – Powers page generation with `metadata` (summaries, keywords, referenced files, diagram types) plus the Markdown `content`.
 - `RAGContextSchema` – Wraps retrieval results (query, documents, conversation history, markdown instructions) so providers can consume a single JSON payload.
 
-All prompts embed the schema definition and example output, and all providers that support JSON mode/function calling (OpenAI, Bedrock, OpenRouter, etc.) are invoked via their structured APIs with fallback streaming/parsing for legacy models. Editable workspaces and exports persist the structured metadata so downstream tooling can surface summaries, keywords, and file provenance.
+All prompts embed the schema definition and example output, and all providers that support JSON mode/function calling (OpenAI, OpenRouter, etc.) are invoked via their structured APIs with fallback streaming/parsing for legacy models. Editable workspaces and exports persist the structured metadata so downstream tooling can surface summaries, keywords, and file provenance.
 
 #### List Cached Wikis
 
@@ -345,7 +345,7 @@ make clean             # Clean caches/artifacts
 opencorporates-deepwiki/
 ├── src/deepwiki_cli/    # Pure Python CLI package
 │   ├── cli/             # CLI commands and entry point
-│   ├── clients/         # Model client implementations (OpenAI, Bedrock, etc.)
+│   ├── clients/         # Model client implementations (OpenAI, OpenRouter, etc.)
 │   ├── core/            # Core completion helpers
 │   ├── services/        # RAG + data pipeline logic
 │   ├── utils/           # Shared utilities

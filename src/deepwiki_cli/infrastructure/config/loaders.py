@@ -9,7 +9,6 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 # Import client classes for mapping
-from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
 from deepwiki_cli.infrastructure.clients.ai.cursor_agent_client import CursorAgentClient
 from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
@@ -174,7 +173,6 @@ def load_generator_config() -> dict[str, Any]:
                 "openai",
                 "openrouter",
                 "lmstudio",
-                "bedrock",
                 "cursor",
             ]:
                 default_map = {
@@ -182,7 +180,6 @@ def load_generator_config() -> dict[str, Any]:
                     "openai": OpenAIClient,
                     "openrouter": OpenRouterClient,
                     "lmstudio": LMStudioClient,
-                    "bedrock": BedrockClient,
                     "cursor": CursorAgentClient,
                 }
                 provider_config["model_client"] = default_map[provider_id]

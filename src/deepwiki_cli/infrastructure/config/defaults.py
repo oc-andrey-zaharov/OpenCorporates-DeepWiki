@@ -156,3 +156,4 @@ DEFAULT_EXCLUDED_FILES: list[str] = [
     ".cursor",
 ]
 
+

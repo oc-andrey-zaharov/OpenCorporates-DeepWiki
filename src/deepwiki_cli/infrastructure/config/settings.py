@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-from deepwiki_cli.infrastructure.clients.ai.bedrock_client import BedrockClient
 from deepwiki_cli.infrastructure.clients.ai.cursor_agent_client import CursorAgentClient
 from deepwiki_cli.infrastructure.clients.ai.lmstudio_client import LMStudioClient
 from deepwiki_cli.infrastructure.clients.ai.openai_client import OpenAIClient
@@ -101,10 +100,10 @@ class Config(BaseSettings):
         openai_api_key: OpenAI API key for OpenAI client.
         google_api_key: Google API key for Google client.
         openrouter_api_key: OpenRouter API key for OpenRouter client.
-        aws_access_key_id: AWS access key ID for AWS services.
-        aws_secret_access_key: AWS secret access key for AWS services.
-        aws_region: AWS region for AWS services.
-        aws_role_arn: AWS role ARN for assuming roles.
+        aws_access_key_id: AWS access key ID for AWS services (e.g., CodeArtifact).
+        aws_secret_access_key: AWS secret access key for AWS services (e.g., CodeArtifact).
+        aws_region: AWS region for AWS services (e.g., CodeArtifact).
+        aws_role_arn: AWS role ARN for assuming roles (optional).
         github_token: GitHub token for repository access.
         embedder_type: Type of embedder to use (openai, lmstudio, openrouter).
         config_dir: Optional directory path for configuration files.
@@ -232,7 +231,6 @@ def get_client_classes() -> dict[str, Any]:
         "OpenAIClient": OpenAIClient,
         "OpenRouterClient": OpenRouterClient,
         "LMStudioClient": LMStudioClient,
-        "BedrockClient": BedrockClient,
         "CursorAgentClient": CursorAgentClient,
     }
     return _client_classes_cache
